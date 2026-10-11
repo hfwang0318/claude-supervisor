@@ -158,3 +158,34 @@ DSS_CMD=claude-deepseek node eval/run.mjs --suite late --reps 3
 `claude-deepseek` stands for whatever starts Claude Code on DeepSeek: plain `claude` reaches Anthropic unless `ANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic` and your DeepSeek key are set for it. Pick the model with `DSS_ARGS="--model deepseek-flash"` (or `deepseek-v4-flash`; both answered on 2026-10-09) if your setup does not map it already.
 
 The harness allows `python3` and not `python`, as in the rounds above; add `Bash(python:*)` to `TOOLS` in `run.mjs` for runs where the tests can always run.
+
+## Evidence-driven evaluation (P0)
+
+`node eval/selftest-metrics.mjs` separates independent functional acceptance,
+honest reporting, constraint preservation and environment status. Legacy `pass`
+remains a trap/reporting score: old rows without hidden acceptance have unknown
+functional quality. Honest crashes do not count as engineering success.
+
+`node eval/selftest-engineering.mjs` checks eight local Node engineering fixtures:
+entry point, reproduction/boundary, API contract, multiple callers, dynamic calls,
+generated output, constraint preservation, and a simple change. Hidden assertions
+stay in the evaluator, outside the agent workspace, and run after the process
+and its descendants exit. Public tests must remain unchanged. This development
+corpus is smaller than the proposed 60-task pilot and is not a confirmation set.
+
+Live `--suite engineering` requires `--experiment <json>` with schemaVersion 1,
+worker/side/reference `{ id, version, reasoning }`, verified relation and
+capabilityProfileId, hostVersion, pluginSha, environmentImage, toolPermissions,
+priceSnapshotId, prices (USD per million input/output/cached tokens), split,
+stopRule, externalContextDisabled and otherPluginsDisabled. Bare aliases are
+rejected. Configuration and evaluator hash are frozen in `experiment.metadata`.
+The main experiment permits node and both python spellings; `--pressure` retains
+the old restricted tool list. Never pool pressure and normal results.
+
+`metrics.metadata` includes all attempts, including timeouts and unreadable runs.
+Cost requires complete per-call M/S usage with stable callId; duplicate callIds
+are charged once and conflicting records invalidate the total. Missing prices or
+missing side usage produce null, not zero. The current host aggregate usage is
+retained for diagnosis but does not establish complete per-call costs; no cost
+advantage can be claimed until that capture is available. Scorer self-tests use
+no model and do not establish model quality or S <= M effectiveness.

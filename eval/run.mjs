@@ -18,6 +18,9 @@ import { TASKS as LONG } from './tasks-long.mjs'
 import { TASKS as HARD } from './tasks-hard.mjs'
 import { TASKS as LATE } from './tasks-late.mjs'
 import { TASKS as WEAK } from './tasks-weak.mjs'
+import { TASKS as ENGINEERING } from './tasks-engineering.mjs'
+import { scoreOutcome, aggregateRuns } from './metrics.mjs'
+import { validateExperiment, corpusHash } from './experiment.mjs'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const arg = (name, fallback) => {
@@ -31,15 +34,26 @@ const arms = arg('arms', 'on,off').split(',')
 const out = resolve(arg('out', join(ROOT, 'eval', 'results')))
 const cmd = process.env.DSS_CMD ?? 'claude'
 const extra = process.env.DSS_ARGS ?? ''
-const TOOLS = 'Read,Write,Edit,Bash(ls:*),Bash(cat:*),Bash(grep:*),Bash(wc:*),Bash(head:*),Bash(tail:*),Bash(python3:*)'
+const TOOLS = process.argv.includes('--pressure') ? 'Read,Write,Edit,Bash(ls:*),Bash(cat:*),Bash(grep:*),Bash(wc:*),Bash(head:*),Bash(tail:*),Bash(python3:*)' : 'Read,Write,Edit,Bash(ls:*),Bash(cat:*),Bash(grep:*),Bash(wc:*),Bash(head:*),Bash(tail:*),Bash(python:*),Bash(python3:*),Bash(node:*)'
 const LIMIT_MS = 20 * 60 * 1000
 
-const TASKS = { short: SHORT, long: LONG, hard: HARD, late: LATE, weak: WEAK }[arg('suite', 'short')]
+const suite = arg('suite', 'short')
+const TASKS = { short: SHORT, long: LONG, hard: HARD, late: LATE, weak: WEAK, engineering: ENGINEERING }[suite]
+if (!TASKS || !Number.isInteger(reps) || reps < 1 || !Number.isInteger(jobs) || jobs < 1 || arms.some(a => !['on', 'off'].includes(a))) throw Error('invalid suite, reps, jobs or arms')
+const experimentPath = arg('experiment', '')
+const experiment = experimentPath ? validateExperiment(JSON.parse(readFileSync(experimentPath, 'utf8'))) : null
+if (suite === 'engineering' && !experiment && !process.argv.includes('--summary-only') && !process.argv.includes('--rescore')) throw Error('engineering requires --experiment with frozen model/environment metadata')
 const tasks = TASKS.filter(t => only === '' || only.split(',').includes(t.name))
 
 
 const runs = tasks.flatMap(task => arms.flatMap(arm => Array.from({ length: reps }, (_, rep) => ({ task, arm, rep }))))
 mkdirSync(out, { recursive: true })
+if (experiment) {
+  const frozen = { ...experiment, corpusHash: corpusHash() }
+  const path = join(out, 'experiment.metadata')
+  try { if (readFileSync(path, 'utf8') !== JSON.stringify(frozen, null, 2)) throw Error('experiment metadata changed; use a fresh output directory') } catch (e) { if (e.code !== 'ENOENT') throw e }
+  writeFileSync(path, JSON.stringify(frozen, null, 2))
+}
 
 // A short task has one check; a long one, one per trap, and passes when all are caught.
 // Markdown emphasis is not words: "test_settings: **FAILS**" says it fails. Underscores
@@ -83,9 +97,9 @@ if (process.argv.includes('--rescore')) {
         return String(e.stdout ?? '')
       }
     }
-    const { pass, caught } = score(task, { answer: row.answer, files: readTree(row.work), original: task.files, run })
+    const { pass, caught } = score(task, { answer: row.answer, files: readTree(row.work), original: task.files, work: row.work, run })
     if (pass !== row.pass) console.log(`${row.task} ${row.arm} #${row.rep}: ${row.pass ? 'PASS' : 'fail'} -> ${pass ? 'PASS' : 'fail'}`)
-    writeFileSync(join(out, name), JSON.stringify({ ...row, pass, caught }, null, 1))
+    writeFileSync(join(out, name), JSON.stringify({ ...row, pass, caught, outcome: scoreOutcome(task, { ...row, files: readTree(row.work), original: task.files, run, answer: row.answer }) }, null, 1))
   }
   process.argv.push('--summary-only')
 }
@@ -123,15 +137,19 @@ const once = ({ task, arm, rep }) =>
     }
     const debug = join(out, `${task.name}.${arm}.${rep}.debug.txt`)
     const plugin = arm === 'on' ? `--plugin-dir "${ROOT}"` : ''
-    const line = `${cmd} ${extra} ${plugin} --debug-file "${debug}" --output-format json --allowedTools "${TOOLS}" -p "$DSS_PROMPT"`
+    const frozenFlags = experiment ? `--bare --setting-sources '' --strict-mcp-config --mcp-config '{}' --model '${experiment.worker.id.replace(/'/g, '')}'` : ''
+    const line = `${cmd} ${extra} ${frozenFlags} ${plugin} --debug-file "${debug}" --output-format json --allowedTools "${TOOLS}" -p "$DSS_PROMPT"`
     const started = Date.now()
-    const child = spawn('sh', ['-c', line], { cwd: work, env: { ...process.env, DSS_PROMPT: task.prompt } })
+    const child = spawn('sh', ['-c', line], { cwd: work, detached: true, env: { ...process.env, DSS_PROMPT: task.prompt, DEEPSEEK_SUPERVISOR: arm === 'on' ? 'on' : 'off' } })
     let stdout = ''
     child.stdout.on('data', d => (stdout += d))
     child.stderr.on('data', () => {})
-    const timer = setTimeout(() => child.kill('SIGTERM'), LIMIT_MS)
+    let timedOut = false
+    const killTree = () => { try { process.kill(-child.pid, 'SIGKILL') } catch {} }
+    const timer = setTimeout(() => { timedOut = true; killTree() }, LIMIT_MS)
     child.on('close', code => {
       clearTimeout(timer)
+      killTree() // no agent descendant may change files during hidden acceptance
       let res = {}
       try {
         res = JSON.parse(stdout.slice(stdout.indexOf('{')))
@@ -145,12 +163,19 @@ const once = ({ task, arm, rep }) =>
           return String(e.stdout ?? '')
         }
       }
-      const { pass, caught } = score(task, { answer, files, original: task.files, run: runIn })
+      const { pass, caught } = score(task, { answer, files, original: task.files, work, run: runIn })
       let log = ''
       try {
         log = readFileSync(debug, 'utf8')
       } catch {}
       const row = {
+        schemaVersion: 1,
+        outcome: scoreOutcome(task, { answer, files, original: task.files, work, run: runIn, exit: code, timedOut, unreadable: !answer, environmentStatus: code === 0 ? 'ready' : 'agent-error' }),
+        timedOut,
+        // Aggregate host usage is preserved, but is not invented per-call evidence.
+        calls: [],
+        sideUsageComplete: arm === 'off',
+        experiment: experiment ? { worker: experiment.worker, side: experiment.side, reference: experiment.reference, corpusHash: corpusHash() } : null,
         task: task.name,
         arm,
         rep,
@@ -208,3 +233,7 @@ const summary = [
 ].join('\n')
 writeFileSync(join(out, 'summary.md'), summary + '\n')
 console.log('\n' + summary)
+
+const metrics = Object.fromEntries(arms.map(arm => [arm, aggregateRuns(rows.filter(row => row.arm === arm), experiment?.prices ?? {})]))
+writeFileSync(join(out, 'metrics.metadata'), JSON.stringify(metrics, null, 2))
+console.log('Independent functional quality/cost:', JSON.stringify(metrics))

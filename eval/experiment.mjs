@@ -1,0 +1,26 @@
+import { createHash } from 'node:crypto'
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+
+export const validateExperiment = config => {
+  if (config?.schemaVersion !== 1) throw Error('experiment schemaVersion must be 1')
+  for (const key of ['hostVersion', 'pluginSha', 'environmentImage', 'toolPermissions', 'priceSnapshotId', 'split', 'stopRule']) {
+    if (typeof config[key] !== 'string' || !config[key].trim()) throw Error(`experiment requires ${key}`)
+  }
+  for (const role of ['worker', 'side', 'reference']) {
+    const model = config[role]
+    for (const key of ['id', 'version', 'reasoning']) if (typeof model?.[key] !== 'string' || !model[key].trim()) throw Error(`${role} requires ${key}`)
+    if (/^(opus|sonnet|haiku|auto|default)$/.test(model.id)) throw Error(`${role} must identify a real model, not an alias`)
+  }
+  if (!['same', 'side-no-stronger'].includes(config.relation) || !config.capabilityProfileId) throw Error('verified model relationship and profile required')
+  if (config.relation === 'same' && JSON.stringify(config.worker) !== JSON.stringify(config.side)) throw Error('same model pair must use identical version and reasoning')
+  if (config.externalContextDisabled !== true || config.otherPluginsDisabled !== true) throw Error('disable external context and other plugins for frozen experiments')
+  if (!config.prices || typeof config.prices !== 'object') throw Error('price snapshot required; unknown prices remain unknown')
+  return config
+}
+
+export const corpusHash = () => {
+  const hash = createHash('sha256')
+  for (const name of ['tasks-engineering.mjs', 'metrics.mjs']) hash.update(readFileSync(fileURLToPath(new URL(name, import.meta.url))))
+  return hash.digest('hex')
+}
