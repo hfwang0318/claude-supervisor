@@ -8,7 +8,7 @@
 // ls, cat, grep, wc, head, tail and python3 there.
 
 import { execSync, spawn } from 'node:child_process'
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, statSync, writeFileSync, cpSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -35,6 +35,24 @@ const out = resolve(arg('out', join(ROOT, 'eval', 'results')))
 const cmd = process.env.DSS_CMD ?? 'claude'
 const extra = process.env.DSS_ARGS ?? ''
 const TOOLS = process.argv.includes('--pressure') ? 'Read,Write,Edit,Bash(ls:*),Bash(cat:*),Bash(grep:*),Bash(wc:*),Bash(head:*),Bash(tail:*),Bash(python3:*)' : 'Read,Write,Edit,Bash(ls:*),Bash(cat:*),Bash(grep:*),Bash(wc:*),Bash(head:*),Bash(tail:*),Bash(python:*),Bash(python3:*),Bash(node:*)'
+// Environment arguments are data, never shell code. DSS_ARGV is unambiguous JSON.
+const splitArgs = text => {
+  const args = []
+  let word = '', quote = '', escaped = false, begun = false
+  for (const char of text) {
+    if (escaped) { word += char; escaped = false; begun = true; continue }
+    if (char === '\\' && quote !== "'") { escaped = true; begun = true; continue }
+    if (quote) { if (char === quote) quote = ''; else word += char; begun = true; continue }
+    if (char === '"' || char === "'") { quote = char; begun = true; continue }
+    if (/\s/.test(char)) { if (begun) { args.push(word); word = ''; begun = false } }
+    else { word += char; begun = true }
+  }
+  if (quote || escaped) throw Error('unclosed DSS_ARGS quoting; use DSS_ARGV JSON')
+  if (begun) args.push(word)
+  return args
+}
+const extraArgs = process.env.DSS_ARGV ? JSON.parse(process.env.DSS_ARGV) : splitArgs(extra)
+if (!Array.isArray(extraArgs) || extraArgs.some(a => typeof a !== 'string')) throw Error('DSS_ARGV must be an array of strings')
 const LIMIT_MS = 20 * 60 * 1000
 
 const suite = arg('suite', 'short')
@@ -43,6 +61,16 @@ if (!TASKS || !Number.isInteger(reps) || reps < 1 || !Number.isInteger(jobs) || 
 const experimentPath = arg('experiment', '')
 const experiment = experimentPath ? validateExperiment(JSON.parse(readFileSync(experimentPath, 'utf8'))) : null
 if (suite === 'engineering' && !experiment && !process.argv.includes('--summary-only') && !process.argv.includes('--rescore')) throw Error('engineering requires --experiment with frozen model/environment metadata')
+let frozenPlugin
+if (experiment && arms.includes('on') && !process.argv.includes('--summary-only') && !process.argv.includes('--rescore')) {
+  frozenPlugin = mkdtempSync(join(tmpdir(), 'dss-eval-plugin-'))
+  for (const path of ['hooks', 'supervisor', 'types', 'scripts', '.claude-plugin']) cpSync(join(ROOT, path), join(frozenPlugin, path), { recursive: true, filter: path => !path.includes('/.claude-plugin/types') })
+  const manifestPath = join(frozenPlugin, '.claude-plugin/plugin.json')
+  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
+  for (const [key, value] of Object.entries({ worker_model: experiment.worker.id, verifier_model: experiment.side.id, model_relation: experiment.relation, capability_profile: experiment.capabilityProfileId, execution_mode: experiment.executionMode ?? 'off' })) manifest.userConfig[key].default = value
+  writeFileSync(manifestPath, JSON.stringify(manifest, null, 2))
+  process.on('exit', () => rmSync(frozenPlugin, { recursive: true, force: true }))
+}
 const tasks = TASKS.filter(t => only === '' || only.split(',').includes(t.name))
 
 
@@ -136,19 +164,24 @@ const once = ({ task, arm, rep }) =>
       writeFileSync(join(work, name), text)
     }
     const debug = join(out, `${task.name}.${arm}.${rep}.debug.txt`)
-    const plugin = arm === 'on' ? `--plugin-dir "${ROOT}"` : ''
-    const frozenFlags = experiment ? `--bare --setting-sources '' --strict-mcp-config --mcp-config '{}' --model '${experiment.worker.id.replace(/'/g, '')}'` : ''
-    const line = `${cmd} ${extra} ${frozenFlags} ${plugin} --debug-file "${debug}" --output-format json --allowedTools "${TOOLS}" -p "$DSS_PROMPT"`
+    const pluginRoot = frozenPlugin ?? ROOT
+    const pluginArgs = arm === 'on' ? ['--plugin-dir', pluginRoot] : []
+    // Bare mode skips function hooks, including the supervisor under evaluation.
+    const frozenFlags = experiment ? ['--setting-sources', '', '--strict-mcp-config', '--mcp-config', '{}', '--model', experiment.worker.id, '--effort', experiment.worker.reasoning] : []
     const started = Date.now()
-    const child = spawn('sh', ['-c', line], { cwd: work, detached: true, env: { ...process.env, DSS_PROMPT: task.prompt, DEEPSEEK_SUPERVISOR: arm === 'on' ? 'on' : 'off' } })
+    const isolated = experiment ? mkdtempSync(join(tmpdir(), 'dss-eval-context-')) : null
+    const env = { ...process.env, DSS_PROMPT: task.prompt, DEEPSEEK_SUPERVISOR: arm === 'on' ? 'on' : 'off', ...(isolated ? { HOME: isolated, CLAUDE_CONFIG_DIR: join(isolated, '.claude') } : {}) }
+    const child = spawn(cmd, [...extraArgs, ...frozenFlags, ...pluginArgs, '--debug-file', debug, '--output-format', 'json', '--allowedTools', TOOLS, '-p', task.prompt], { cwd: work, detached: true, env })
     let stdout = ''
     child.stdout.on('data', d => (stdout += d))
     child.stderr.on('data', () => {})
     let timedOut = false
     const killTree = () => { try { process.kill(-child.pid, 'SIGKILL') } catch {} }
     const timer = setTimeout(() => { timedOut = true; killTree() }, LIMIT_MS)
+    child.on('error', () => {}) // close follows spawn failure and is scored as an attempt
     child.on('close', code => {
       clearTimeout(timer)
+      if (isolated) rmSync(isolated, { recursive: true, force: true })
       killTree() // no agent descendant may change files during hidden acceptance
       let res = {}
       try {
@@ -175,7 +208,7 @@ const once = ({ task, arm, rep }) =>
         // Aggregate host usage is preserved, but is not invented per-call evidence.
         calls: [],
         sideUsageComplete: arm === 'off',
-        experiment: experiment ? { worker: experiment.worker, side: experiment.side, reference: experiment.reference, corpusHash: corpusHash() } : null,
+        experiment: experiment ? { worker: experiment.worker, side: experiment.side, reference: experiment.reference, corpusHash: corpusHash(), executionMode: experiment.executionMode ?? 'off' } : null,
         task: task.name,
         arm,
         rep,

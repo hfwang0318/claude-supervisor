@@ -910,3 +910,15 @@ test('shadow records observations but creates no model finding or feedback', { o
   expect(w.notes.length).toBe(0)
   expect(await issues($)).not.toContain('One test fails')
 })
+
+test('disclosed check failures can later become fixed from matching evidence without losing disclosure', { options: { model_relation: 'unverified' } }, async ($, on) => {
+  const w = world(on, [{ role: 'user', text: 'fix total()', toolUses: [] }, failingRun('a')])
+  await start($)
+  await prompt($, 'fix total()')
+  await stop($, 'All tests pass.')
+  await stop($, 'The tests still fail. [ysk#1 told]')
+  w.state.rows.push(RAN_OK)
+  await batch($)
+  const text = await issues($)
+  expect(text).toContain('resolution=fixed disclosed=true')
+})

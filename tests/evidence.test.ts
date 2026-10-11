@@ -24,7 +24,7 @@ test('a pass claimed after a run that failed is a failed check, whatever pipe hi
 
   for (const out of ['1 failed, 4 passed in 0.12s', 'Tests:       2 failed, 3 passed', 'test result: FAILED. 1 passed; 1 failed', 'src/a.ts(3,1): error TS2304: Cannot find name', '--- FAIL: TestTotal'])
     expect(judge([ask, say('', bash('pytest', out)), say('测试全部通过。')], '测试全部通过。')[0]?.kind).toBe('failed-check')
-  expect(judge([ask, say('', bash('npm test', 'oops', true)), say('Build passes now.')], 'Build passes now.')[0]?.kind).toBe('failed-check')
+  expect(judge([ask, say('', bash('npm test', 'oops', true)), say('Build passes now.')], 'Build passes now.')[0]?.kind).toBe('no-check')
   for (const out of [' 11 pass\n 3 fail', '(fail) total skips the first price [0.4ms]', 'Failed to compile.', 'Exit code 2'])
     expect(judge([ask, say('', bash('claude plugin test .', out)), say('All tests pass.')], 'All tests pass.')[0]?.kind).toBe('failed-check')
   // Case matters (2026-10-09): bun's passing summary ends " 0 fail", and a diff may hold `fail=1`.
@@ -470,4 +470,19 @@ test('lint success never settles a failing pytest scope or certifies all tests',
 test('a failing exit code overrides a success-looking command output', async () => {
   const ev = evidenceOf([{ role: 'assistant', text: '', toolUses: [{ tool: 'Bash', input: { command: 'pytest -q' }, text: 'all passed', result: { exitCode: 1 } }] }])
   expect(ev.runs[0]?.ok).toBe(false)
+})
+
+test('compaction losing the failing scope cannot settle it with an unrelated passing scope', async () => {
+  const ev = evidenceOf([{ role: 'assistant', text: '', toolUses: [{ tool: 'Bash', input: { command: 'ruff check src' }, text: 'All checks passed!' }] }])
+  expect(settledBy(ev, { rule: 'failed-check', quote: 'All tests pass.', probe: 'Run pytest -q' })).toBeUndefined()
+})
+
+test('a truthful lint result remains scoped while an earlier test failure stays unresolved', async () => {
+  const ev = evidenceOf([
+    { role: 'assistant', text: '', toolUses: [{ tool: 'Bash', input: { command: 'pytest -q' }, text: '1 failed', isError: true as const }] },
+    { role: 'assistant', text: '', toolUses: [{ tool: 'Bash', input: { command: 'ruff check src' }, text: 'All checks passed!' }] }
+  ])
+  expect(contradictions(ev, ['Lint passes.'])).toEqual([])
+  expect(supports(ev, 'Lint passes.')).toBe(true)
+  expect(contradictions(ev, ['All tests pass.']).some(f => f.kind === 'failed-check')).toBe(true)
 })

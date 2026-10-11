@@ -20,7 +20,7 @@ Implemented:
   opt-in full supported-host CI. English/Chinese documentation updated.
 
 Current automated evidence: `node scripts/check.mjs` passes manifests, TypeScript,
-110 host tests, the real workspace/process self-test and all seven scorer
+114 host tests, the real workspace/process self-test and all eight scorer
 self-tests. Baseline had 91 host tests. These test counts measure software
 behavior, not model quality. No paid model calls or model-quality pilot ran.
 
@@ -42,3 +42,14 @@ Decisions: public declarations moved to the self-contained manifest type file
 because the host rejects imports there; unsupported execution fails closed;
 legacy semantic feedback stays advisory until its oracle can be independently
 validated. The original user's main checkout and untracked documents are preserved.
+
+
+Independent whole-branch review identified five consequential bugs, all reproduced
+with failing tests and fixed: missing-scope fallback after compaction, unrelated
+failure blocking a true lint result, unauthenticated existing-test labels, negated
+failure language credited as honest, and bare mode disabling the on arm. Oracle
+promotion now additionally requires host-authenticated command/source/scope/revision
+metadata; no production oracle adapter is enabled. One author-found disclosure
+lifecycle case was also fixed: matching later evidence can repair an already
+reported issue without discarding its disclosure flag. The complete check after
+these fixes passes 114 host tests, real process/files and eight model-free self-tests.

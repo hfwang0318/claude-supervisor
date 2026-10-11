@@ -293,6 +293,16 @@ export type Finding = {
 }
 
 export const scopeOf = (command: string) => pieces(keyOf(command)).filter(p => CHECK.test(p)).map(p => p.replace(/^\S+\s+plugin (?=test|validate)/, 'claude plugin ')).join(' && ') || keyOf(command)
+const relevantRuns = (runs: CheckRun[], claim: string) => {
+  // An explicit local result is held to that kind of check. Broad statements
+  // still retain every unresolved scope; inclusion is never guessed.
+  const lint = /\blint\w*\b|\b(?:ruff|eslint|flake8|pylint)\b|代码检查/i.test(claim)
+  const build = /\bbuild\w*\b|\bcompil\w*\b|构建|编译/i.test(claim)
+  const type = /\btype ?check\w*\b|\btsc\b|类型检查/i.test(claim)
+  const tests = /\btest\w*\b|测试|单测/i.test(claim)
+  if ([lint, build, type, tests].filter(Boolean).length !== 1 || tests) return runs
+  return runs.filter(r => lint ? /\b(?:ruff|eslint|flake8|pylint|lint)\b/.test(r.command) : type ? /\b(?:tsc|mypy|pyright|typecheck)\b/.test(r.command) : /\b(?:build|tsc|make|compile)\b/.test(r.command))
+}
 const latestChecks = (runs: CheckRun[]) => [...new Map(runs.map(r => [scopeOf(r.command), r])).values()]
 const lastRelevant = (runs: CheckRun[]) => latestChecks(runs).find(r => !r.ok) ?? runs.at(-1)
 
@@ -315,15 +325,15 @@ export const contradictions = (ev: Evidence, claims: readonly string[]): Finding
     const isBlind = ev.blind.some(b => b < at)
 
     if (claimsPass(quote) && !isBlind) {
-      const last = lastRelevant(ev.runs.filter(r => r.at < at))
+      const last = lastRelevant(relevantRuns(ev.runs.filter(r => r.at < at), quote))
       const lastEdit = ev.edits.filter(e => e.at < at && isCode(e.path)).at(-1)
       if (last === undefined) {
         // A command named for tests or checks ran: the project's own runner, maybe. Say nothing.
-        if (ev.mentioned) continue
+        if (ev.mentioned && !ev.runs.some(r => r.at < at)) continue
         // "Checks pass" in a session with no test file in sight, after code ran: the model's
         // own check (a JSON load, a count). Where tests are around, "checks" means them.
         if (!NAMES_TESTS.test(quote) && ev.coded.some(c => c < at) && ![...ev.named].some(n => TEST_FILE.test(n))) continue
-        found.push({ kind: 'no-check', what: 'No test, build or check command has run in this session, yet you report how they came out.', quote, probe: 'Run the project\'s tests', recheck: '' })
+        found.push({ kind: 'no-check', what: ev.runs.some(r => r.at < at) ? 'No matching check scope has run for this claim, yet you report a pass.' : 'No test, build or check command has run in this session, yet you report how they came out.', quote, probe: 'Run the project\'s tests', recheck: '' })
         continue
       }
       if (!last.ok) {
@@ -360,7 +370,7 @@ export const supports = (ev: Evidence, claim: string) => {
   if (NOT_A_CLAIM.test(claim) || !claimsPass(claim)) return false
   const at = ev.saidAt.get(claim) ?? Number.MAX_SAFE_INTEGER
   if (ev.blind.some(b => b < at)) return false
-  const last = lastRelevant(ev.runs.filter(r => r.at < at))
+  const last = lastRelevant(relevantRuns(ev.runs.filter(r => r.at < at), claim))
   const lastEdit = ev.edits.filter(e => e.at < at && isCode(e.path)).at(-1)
   return last !== undefined && last.ok && (lastEdit === undefined || lastEdit.at < last.at)
 }
@@ -502,7 +512,7 @@ export const unreported = (ev: Evidence, answer: string): Finding[] => {
  * Whether the record now settles an item a rule raised. The record, never the
  * model's say-so; on a machine with no sandbox this is how such an item closes.
  */
-export const settledBy = (ev: Evidence, item: { rule?: Kind; quote: string; probe: string; saw?: string; pos?: number }): string | undefined => {
+export const settledBy = (ev: Evidence, item: { rule?: Kind; quote: string; probe: string; saw?: string; pos?: number; recheck?: string }): string | undefined => {
   switch (item.rule) {
     case 'untouched': {
       const name = base(item.probe.replace(/^Read /, '')).toLowerCase()
@@ -529,9 +539,9 @@ export const settledBy = (ev: Evidence, item: { rule?: Kind; quote: string; prob
     case 'failed-check':
     case 'stale-check':
     case 'unreported-failure': {
-      const scope = scopeOf(item.probe.replace(/^Run /, ''))
-      const relevant = ev.runs.filter(r => scopeOf(r.command) === scope)
-      const last = relevant.length > 0 ? relevant.at(-1) : lastRelevant(ev.runs)
+      const command = item.rule === 'no-check' ? undefined : item.recheck || /^Run (.+)$/.exec(item.probe)?.[1]
+      const relevant = command ? ev.runs.filter(r => scopeOf(r.command) === scopeOf(command)) : ev.runs
+      const last = command ? relevant.at(-1) : lastRelevant(relevant)
       const lastEdit = ev.edits.filter(e => isCode(e.path)).at(-1)
       if (last === undefined || !last.ok) return undefined
       if (lastEdit !== undefined && lastEdit.at > last.at) return undefined

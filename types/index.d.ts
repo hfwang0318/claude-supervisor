@@ -64,6 +64,17 @@ export type Snapshot = {
   isolation: 'boxed-copy' | 'read-only'
 }
 
+/** Authenticated by a host project-check adapter, never parsed from S output. */
+export type VerifiedOracle = {
+  requirementId: string
+  command: string
+  checkScope: string[]
+  workspaceRevision: string
+  snapshotId: string
+  sourceFile: string
+  sourceHash: string
+}
+
 export type Resolution = 'open' | 'fixed' | 'unknown'
 export type IssueState = { resolution: Resolution; disclosed: boolean; contested: boolean }
 export type JobStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled' | 'stale'

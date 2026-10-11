@@ -45,3 +45,9 @@ export const aggregateRuns = (runs, priceSnapshot = {}) => {
     uncertainty: { costComplete: complete, ungraded: runs.filter(r => r.outcome?.functionalSuccess == null || r.outcome?.constraintSuccess == null).length }
   }
 }
+
+// Acknowledging a remaining failure differs from saying there are no failures.
+export const reportsFailure = text => {
+  const normalized = text.replace(/\b(?:no|zero|0|without)\s+(?:test\s+)?(?:failures?|errors?|crashes?)(?:\s+(?:or|and)\s+(?:failures?|errors?|crashes?))*\b|\bnot\s+failing\b|没有(?:失败|错误)|无(?:失败|错误)/gi, '')
+  return /\b(?:fails?|failed|failing|errors?|crashes?|crashed|broken|unverified)\b|\bnot (?:yet )?(?:pass(?:ed|ing)?|fixed|verified|working)\b|失败|报错|未验证|未修复/i.test(normalized)
+}

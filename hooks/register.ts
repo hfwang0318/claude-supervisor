@@ -303,7 +303,7 @@ const verify = async ($: EngineInterface, input: VerifyInput): Promise<VerifyRes
           const e = observed.get(p.command.trim())
           return p.verdict !== 'false' || e !== undefined && validateObservation(p.command, p.saw, e, snapshot?.binding ?? e.binding)
         })
-        
+
         const changed = squash(input.changes ?? '')
         for (const d of turn.defects) {
           // The line must be one the assistant changed: a defect elsewhere is not this turn's.
@@ -447,7 +447,7 @@ const check = async ($: EngineInterface, list: Rows, o: CheckOptions): Promise<I
   // where no command may run. Only what the record still contradicts now is raised:
   // a claim since made good is left alone.
   const ruled = [...contradictions(record, o.claims), ...(o.rules === false ? [] : recordFindings(record)), ...(o.answer === undefined ? [] : [...unreported(record, o.answer), ...skipped(record, o.answer)])].filter(
-    f => settledBy(record, { rule: f.kind, quote: f.quote, probe: f.probe, saw: f.saw }) === undefined,
+    f => settledBy(record, { rule: f.kind, quote: f.quote, probe: f.probe, saw: f.saw, recheck: f.recheck }) === undefined,
   )
   // The verifier runs whenever a check hands it a claim. A claim the record already contradicts, or
   // already bears out, is not handed to it: no model is needed for those.
@@ -484,7 +484,7 @@ const check = async ($: EngineInterface, list: Rows, o: CheckOptions): Promise<I
     if (!sameBinding(binding, s.coordinator.binding)) return t
     let issues = t.issues.map((i): Issue => {
       const f = s.cfg.executionMode === 'shadow' ? undefined : v?.fixed.find(x => x.id === i.id)
-      if (i.status !== 'open') return i
+      if (i.status !== 'open' && i.resolution !== 'open') return i
       if (f !== undefined) return { ...i, status: 'fixed', resolution: 'fixed', settledAt: done, why: f.saw }
       if (i.rule !== undefined) {
         const why = settledBy(record, i)
@@ -519,7 +519,7 @@ const check = async ($: EngineInterface, list: Rows, o: CheckOptions): Promise<I
         quote: d.line,
         probe: d.command,
         saw: d.saw,
-        
+
         defect: { expect: d.expect, demonstrated: d.demonstrated },
         cost: 'the person gets code that does the wrong thing for an input they will meet',
         status: 'open',
@@ -598,7 +598,7 @@ const settleTags = async ($: EngineInterface, answer: string) => {
     ...t,
     issues: t.issues.map(i => {
       const m = tags.find(x => Number(x[1]) === i.id)
-      return m === undefined || i.status !== 'open' ? i : { ...i, disclosed: i.disclosed === true || m[2] === 'told', contested: i.contested === true || m[2] === 'refuted', resolution: i.resolution ?? (i.from === 'verify' ? 'unknown' : 'open'), status: m[2] === 'refuted' ? ('refuted' as const) : ('told' as const), settledAt: at, why: m[0] }
+      return m === undefined || i.resolution === 'fixed' || i.status === 'fixed' ? i : { ...i, disclosed: i.disclosed === true || m[2] === 'told', contested: i.contested === true || m[2] === 'refuted', resolution: i.resolution ?? (i.from === 'verify' ? 'unknown' : 'open'), status: m[2] === 'refuted' ? ('refuted' as const) : ('told' as const), settledAt: at, why: m[0] }
     }),
   }))
 }

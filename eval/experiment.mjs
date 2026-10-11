@@ -10,12 +10,14 @@ export const validateExperiment = config => {
   for (const role of ['worker', 'side', 'reference']) {
     const model = config[role]
     for (const key of ['id', 'version', 'reasoning']) if (typeof model?.[key] !== 'string' || !model[key].trim()) throw Error(`${role} requires ${key}`)
+    if (!/^[A-Za-z0-9_.:@/-]+$/.test(model.id)) throw Error(`${role} model ID has invalid characters`)
     if (/^(opus|sonnet|haiku|auto|default)$/.test(model.id)) throw Error(`${role} must identify a real model, not an alias`)
   }
   if (!['same', 'side-no-stronger'].includes(config.relation) || !config.capabilityProfileId) throw Error('verified model relationship and profile required')
   if (config.relation === 'same' && JSON.stringify(config.worker) !== JSON.stringify(config.side)) throw Error('same model pair must use identical version and reasoning')
   if (config.externalContextDisabled !== true || config.otherPluginsDisabled !== true) throw Error('disable external context and other plugins for frozen experiments')
   if (!config.prices || typeof config.prices !== 'object') throw Error('price snapshot required; unknown prices remain unknown')
+  if (config.executionMode !== undefined && !['off', 'shadow', 'enabled'].includes(config.executionMode)) throw Error('invalid experimental execution mode')
   return config
 }
 

@@ -215,7 +215,7 @@ Claude Code 第一次加载插件时，会把类型声明写进 `.claude-plugin/
 | `hooks/prompt.ts` | 结论检测、验证者的提示词和对它答复的解析、什么命令能在哪里跑、脱敏、给模型的提示 |
 | `hooks/band.tsx` | 提示框上方那一栏 |
 | `types/index.d.ts` | 条目的结构和插件状态的约定 |
-| `tests/*.test.ts` | 110 个宿主测试（当前分支），跑在 Claude Code 的插件测试工具上；标着 `live:` 的，是真实运行里出现过的误报 |
+| `tests/*.test.ts` | 114 个宿主测试（当前分支），跑在 Claude Code 的插件测试工具上；标着 `live:` 的，是真实运行里出现过的误报 |
 | `eval/` | 同一批任务开插件和不开插件各跑一遍，由代码打分；见 [eval/README.md](eval/README.md) |
 
 ## 许可证
@@ -224,6 +224,6 @@ MIT
 
 ## 工程验证
 
-`npm ci --ignore-scripts` 后运行 `node scripts/check.mjs`，依次验证宿主清单、types、TypeScript、无模型测试、真实进程隔离和七组评分器自检。缺少 types 时本地 `/deepseek-supervisor issues` 命令负责生成，不提交模型提示。公共 CI 的 `--pure` 是部分检查；macOS/Claude Code 自托管完整检查状态单列。发布需完整支持环境结果。
+`npm ci --ignore-scripts` 后运行 `node scripts/check.mjs`，依次验证宿主清单、types、TypeScript、无模型测试、真实进程隔离和八组评分器自检。缺少 types 时本地 `/deepseek-supervisor issues` 命令负责生成，不提交模型提示。公共 CI 的 `--pure` 是部分检查；macOS/Claude Code 自托管完整检查状态单列。发布需完整支持环境结果。
 
 [当前实施结果与未通过门槛](docs/evals/2026-10-11-p0-implementation.md)。尚未完成付费 S=M/S<M pilot，未声明质量收益或 P0/E0 发布验收通过。

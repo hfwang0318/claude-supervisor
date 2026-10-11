@@ -189,3 +189,14 @@ missing side usage produce null, not zero. The current host aggregate usage is
 retained for diagnosis but does not establish complete per-call costs; no cost
 advantage can be claimed until that capture is available. Scorer self-tests use
 no model and do not establish model quality or S <= M effectiveness.
+
+
+`node eval/selftest-launch.mjs` checks launch arguments and the actual temporary
+plugin configuration using a fake local executable (no API calls). Frozen runs
+use an isolated HOME/config directory, explicit model/effort, and a plugin copy
+whose defaults match the configured pair; they do not use `--bare`, which skips
+function hooks. Environment authentication is required for these runs. `DSS_CMD`
+is an executable and `DSS_ARGS` is parsed as quoted arguments; `DSS_ARGV` accepts
+an explicit JSON string array. Neither is executed as shell code. Full launch,
+host-context isolation and complete usage still need live validation before
+reporting model quality/cost or admission to confirmation experiments.

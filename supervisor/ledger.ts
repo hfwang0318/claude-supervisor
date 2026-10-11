@@ -1,13 +1,14 @@
-import type { Binding, ExecutionEvidence, IssueState, ProbeCandidate, RequirementRef } from './contracts'
+import type { Binding, ExecutionEvidence, IssueState, ProbeCandidate, RequirementRef, VerifiedOracle } from './contracts'
 import { sameBinding } from './coordinator'
 
 export const validateObservation = (command: string, saw: string, evidence: ExecutionEvidence, current: Binding) =>
   sameBinding(evidence.binding, current) && evidence.command.trim() === command.trim() && saw.trim() !== '' && !evidence.truncated && evidence.exitCode !== null && evidence.outcome !== 'unknown' && evidence.outcome !== 'environment-error' && `${evidence.stdout}\n${evidence.stderr}`.includes(saw)
 
-export const validateVerdict = (candidate: ProbeCandidate, evidence: ExecutionEvidence, current: Binding, requirements: RequirementRef[]): { status: 'demonstrated' | 'hypothesis' | 'unknown'; reason: string } => {
+export const validateVerdict = (candidate: ProbeCandidate, evidence: ExecutionEvidence, current: Binding, requirements: RequirementRef[], oracles: VerifiedOracle[] = []): { status: 'demonstrated' | 'hypothesis' | 'unknown'; reason: string } => {
   if (!sameBinding(candidate.binding, current) || !sameBinding(evidence.binding, current) || candidate.command.trim() !== evidence.command.trim() || evidence.truncated || evidence.exitCode === null || !evidence.checkScope.length || ['environment-error', 'unknown'].includes(evidence.outcome)) return { status: 'unknown', reason: 'execution identity, scope or completeness is unknown' }
   const sourced = candidate.requirementIds.length > 0 && candidate.oracleSourceIds.length > 0 && [...candidate.requirementIds, ...candidate.oracleSourceIds].every(id => requirements.some(r => r.id === id && r.status !== 'inferred' && r.sourceMessageId && r.quote && r.text.includes(r.quote)))
-  if (!sourced || candidate.oracle === 'disagreement' || candidate.oracle !== 'existing-test' || candidate.files.length) return { status: 'hypothesis', reason: 'oracle requires independent source validation' }
+  const authenticated = oracles.some(o => candidate.requirementIds.includes(o.requirementId) && candidate.oracleSourceIds.includes(o.requirementId) && o.command.trim() === candidate.command.trim() && o.workspaceRevision === current.workspaceRevision && o.snapshotId === current.snapshotId && o.sourceFile && o.sourceHash && o.checkScope.length > 0 && o.checkScope.every(scope => evidence.checkScope.includes(scope)))
+  if (!sourced || !authenticated || candidate.oracle === 'disagreement' || candidate.oracle !== 'existing-test' || candidate.files.length) return { status: 'hypothesis', reason: 'oracle requires independent source validation' }
   return evidence.outcome === 'failed' ? { status: 'demonstrated', reason: 'unchanged source-backed test failed in the matching snapshot' } : { status: 'unknown', reason: 'no counterexample observed in this scope' }
 }
 

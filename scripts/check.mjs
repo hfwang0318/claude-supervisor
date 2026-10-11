@@ -33,6 +33,6 @@ if (!flags.includes('--pure')) {
   run('real workspace/process isolation', process.execPath, ['scripts/selftest-workspace.mjs'])
 }
 if (!flags.includes('--host')) {
-  for (const name of ['selftest', 'selftest-long', 'selftest-hard', 'selftest-late', 'selftest-weak', 'selftest-metrics', 'selftest-engineering']) run(`scorer ${name}`, process.execPath, [`eval/${name}.mjs`])
+  for (const name of ['selftest', 'selftest-long', 'selftest-hard', 'selftest-late', 'selftest-weak', 'selftest-metrics', 'selftest-engineering', 'selftest-launch']) run(`scorer ${name}`, process.execPath, [`eval/${name}.mjs`])
 }
 console.log(flags.includes('--pure') ? 'Partial CI: pure/scorer checks only; host and process gates were not run.' : flags.includes('--host') ? 'Host checks passed; scorer checks were not requested.' : 'All local engineering checks passed. No paid model evaluations ran.')

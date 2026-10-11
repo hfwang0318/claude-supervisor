@@ -16,7 +16,10 @@ test('fabricated command or output and truncated observations never authenticate
 test('generated oracles and environment failures remain hypotheses or unknown', async () => {
   expect(validateVerdict(candidate, evidence, binding, []).status).toBe('hypothesis')
   const requirements = [{ id: 'r', text: 'Keep existing tests', sourceMessageId: 'prompt-1', quote: 'Keep existing tests', status: 'explicit' as const }]
-  expect(validateVerdict(candidate, evidence, binding, requirements).status).toBe('demonstrated')
+  expect(validateVerdict(candidate, evidence, binding, requirements).status).toBe('hypothesis')
+  const oracle = { requirementId: 'r', command: 'node test.cjs', checkScope: ['node:test.cjs'], workspaceRevision: 'sha256', snapshotId: 'snap', sourceFile: 'test.cjs', sourceHash: 'test-source-sha256' }
+  expect(validateVerdict(candidate, evidence, binding, requirements, [oracle]).status).toBe('demonstrated')
+  expect(validateVerdict(candidate, evidence, binding, requirements, [{ ...oracle, workspaceRevision: 'stale' }]).status).toBe('hypothesis')
   expect(validateVerdict({ ...candidate, files: [{ path: '__supervisor_probes/x.cjs', content: 'assert.equal(1, 2)' }] }, evidence, binding, requirements).status).toBe('hypothesis')
   expect(validateVerdict(candidate, { ...evidence, outcome: 'environment-error' }, binding, requirements).status).toBe('unknown')
 })
@@ -37,4 +40,9 @@ test('legacy disclosure and refutation migrate without manufacturing fixed evide
   expect(migrated?.issues[2]?.contested).toBe(true)
   expect(normalizeTrack({ ...old, schemaVersion: 99 })).toBeNull()
   expect(normalizeTrack({ nextId: 'broken' })).toBeNull()
+})
+
+test('a model label of existing-test cannot authenticate an arbitrary failing command', async () => {
+  const requirements = [{ id: 'r', text: 'Keep existing tests', sourceMessageId: 'prompt-1', quote: 'Keep existing tests', status: 'explicit' as const }]
+  expect(validateVerdict({ ...candidate, command: 'false' }, { ...evidence, command: 'false', checkScope: ['false'] }, binding, requirements).status).toBe('hypothesis')
 })
