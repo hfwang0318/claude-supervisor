@@ -36,16 +36,19 @@ export class Coordinator {
     return true
   }
 
-  invalidate(binding: Binding) {
+  invalidate(binding: Binding, options: { preserveBudget?: boolean; now?: number } = {}) {
+    if (options.preserveBudget && this.startedAt !== null && options.now !== undefined) this.activeMs = Math.max(0, this.activeMs - Math.max(0, options.now - this.startedAt))
     for (const job of this.jobs.values()) if (job.status === 'running') { job.status = 'cancelled'; job.controller.abort() }
     this.jobs.clear()
     this.deliveries.clear()
     this.binding = { ...binding }
-    this.calls = 2
-    this.tokens = 4000
-    this.activeMs = 30000
+    if (!options.preserveBudget) {
+      this.calls = 2
+      this.tokens = 4000
+      this.activeMs = 30000
+      this.failures = 0
+    }
     this.startedAt = null
-    this.failures = 0
   }
 
   async deliver(id: string, binding: Binding, send: () => Promise<DeliveryStatus>): Promise<DeliveryStatus> {

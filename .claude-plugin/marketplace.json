@@ -10,7 +10,7 @@
     {
       "name": "deepseek-supervisor",
       "source": "./",
-      "description": "Evidence-based supervision: deterministic record rules and an explicitly configured side model no stronger than the worker; unknown identities use rules only."
+      "description": "Evidence-based supervision for any side model: defaults to the current worker and validates observations without assuming superior model capability."
     }
   ]
 }

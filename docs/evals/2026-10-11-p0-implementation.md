@@ -1,55 +1,114 @@
-# P0 implementation checkpoint — 2026-10-11
+# 实施报告：已经改了什么，哪些还没完成
 
-Scope: section 7's first delivery, starting with Task 1 and the 2A/2B/2C foundation.
-This is implementation progress, not G0a/G0b/E0 acceptance or a release.
+日期：2026-10-11。
 
-Implemented:
+## 先看结论
 
-- Functional acceptance, honest reporting, constraints and environment metrics;
-  missing or conflicting per-call usage/prices remain unknown. Eight independent
-  Node engineering fixtures with hidden evaluators outside agent workspaces.
-- Shared pure contracts, session coordinator, explicit S<=M configuration and no
-  stronger fallback. Prompt budget, stale-result rejection and delivery dedup.
-- Opt-in snapshot/execution service, real SHA-256 manifests, actual dirty/untracked
-  files, deny-default macOS sandbox, explicit environment, stream output cap,
-  process-group timeout and ownership-checked cleanup. Shadow suppresses feedback.
-- Observations bound to command/output/revision, hypotheses separated from facts,
-  unrelated checks cannot settle failures, disclosure/contesting separate from
-  resolution. Legacy state migration and unknown-schema preservation.
-- Unified model-free checks, pinned TypeScript/lockfile, partial public CI and
-  opt-in full supported-host CI. English/Chinese documentation updated.
+**目前交付的是首批 P0 代码，整个 P0 还没有完成。**
 
-Current automated evidence: `node scripts/check.mjs` passes manifests, TypeScript,
-114 host tests, the real workspace/process self-test and all eight scorer
-self-tests. Baseline had 91 host tests. These test counts measure software
-behavior, not model quality. No paid model calls or model-quality pilot ran.
+这次主要做了三件事：修正“如何判断任务成功”，修复监督插件误认问题和误认修复的几条路径，
+增加一个可单独测试的隔离执行器。
 
-Outstanding gates and work:
+**计划中“旁路模型主动设计一个复现测试，运行后找到真实 bug，再把可靠反例交给主模型”的
+新流程还没有做完，也没有进入 P1。** 目前没有证据说明新代码让真实模型修好更多任务，或节省了多少费用。
 
-- G0a/G0b: concrete versioned model/reasoning profiles and paid S=M/S<M pilot;
-  60-task development pilot and separately frozen confirmation corpus. Eight
-  fixtures cannot substitute for those experiments.
-- E0: complete host-VM process cancellation/orphan recovery, bounded session-wide
-  retention/replay, durable delivery recovery, pending-intent lifecycle, failure
-  fixtures and main-agent filesystem revision coverage beyond tool observations.
-- Frozen eval launching/context isolation and complete per-call main/side usage
-  capture need end-to-end validation before cost or causal quality claims. Old
-  trap pass remains separate from unknown independent functional acceptance.
-- P1's sourced oracle and real probe feedback remain gated on G0b/E0; P2–P5 are
-  not implemented. Defaults enable neither independent execution nor a side model.
+代码在 `codex/evidence-driven-supervision` 分支，共有 4 个代码提交；没有合并或推送到主分支。
+在插件按 on/auto 规则启用的会话里，旁路默认跟随当前主模型；也可以指定其他模型，不检查强弱关系。新的独立执行器仍默认关闭。
 
-Decisions: public declarations moved to the self-contained manifest type file
-because the host rejects imports there; unsupported execution fails closed;
-legacy semantic feedback stays advisory until its oracle can be independently
-validated. The original user's main checkout and untracked documents are preserved.
+## 1. 已经改好的具体行为
 
+下表中的“已实现”指代码已经接入，并有自动测试验证；不表示整个计划阶段已经通过验收。
 
-Independent whole-branch review identified five consequential bugs, all reproduced
-with failing tests and fixed: missing-scope fallback after compaction, unrelated
-failure blocking a true lint result, unauthenticated existing-test labels, negated
-failure language credited as honest, and bare mode disabling the on arm. Oracle
-promotion now additionally requires host-authenticated command/source/scope/revision
-metadata; no production oracle adapter is enabled. One author-found disclosure
-lifecycle case was also fixed: matching later evidence can repair an already
-reported issue without discarding its disclosure flag. The complete check after
-these fixes passes 114 host tests, real process/files and eight model-free self-tests.
+| 改动 | 以前可能出现的问题 | 现在的处理 | 主要文件 |
+|---|---|---|---|
+| 把“修好了”和“如实说明没修好”分开评分 | 程序还会崩溃，但模型诚实说明了，旧任务评分也可能算通过 | 功能成功和诚实报告分别统计。诚实说明崩溃不会算功能成功；没有独立验收的数据不推定为成功 | `eval/metrics.mjs`、`eval/run.mjs` |
+| 旁路默认使用当前主模型 | 默认请求 `opus`，拒绝后改用 `sonnet`；首批实现又错误地要求证明旁路不强于主模型 | 已按用户澄清纠正：留空时跟随主模型，显式指定任意旁路模型也可使用；不校验强弱关系，拒绝后不换备用模型 | `.claude-plugin/plugin.json`、`hooks/host.ts` |
+| 拒绝旁路编造的执行证据 | 旁路说“这个命令打印了 FAILED”，即使命令没有实际运行，也可能形成问题条目 | 核对命令是否真的执行、输出是否确实包含引用内容、是否来自同一个检查版本。缺少这些证据，不能按确定错误处理 | `hooks/register.ts`、`supervisor/ledger.ts` |
+| 不用无关检查关闭失败 | `pytest` 失败后，`ruff` 通过可能让原来的测试失败条目关闭 | `ruff` 成功不能关闭 `pytest` 失败；上下文压缩后找不到原测试记录，也不能借用其他成功结果关闭它 | `hooks/evidence.ts` |
+| 允许准确报告局部成功 | 测试失败、lint 通过时，模型如实说“Lint passes”，也可能被拦住 | 单独报告 lint 通过时只核对 lint；此前未解决的测试失败仍保留 | `hooks/evidence.ts` |
+| 区分告知、争议和修复 | 模型写“我已告诉用户”或“监督判断错了”，容易和修复混在一起 | 告知和争议分别记录，不证明修复。之后有匹配的有效检查结果时，问题可以更新为已解决，同时保留“已经告知”的记录 | `types/index.d.ts`、`hooks/register.ts` |
+| 不用“错误文字消失”证明 bug 修复 | 原来输出除零错误，后来因为导入失败没再打印除零错误，可能被算作修好 | 仅某段错误文字消失不算修复。缺少可信验收判据的语义问题保留为“待判断”，不阻塞结束，也不认证为已修好 | `hooks/register.ts`、`hooks/prompt.ts` |
+| 丢弃过期的后台结果 | 旁路还在检查旧任务，用户已经提出新需求或关闭插件，旧反馈可能迟到 | 新提示、关闭、重载、会话结束或观察到工具批次变化后，让旧任务失效，拒绝它提交问题或投递反馈 | `supervisor/coordinator.ts`、`hooks/register.ts` |
+| 限制旁路开销 | 多次新陈述触发检查，模型调用和命令时间不断累加 | 每个用户提示共享最多 2 次旁路调用、4,000 输出 tokens、30 秒活动预算；格式重试也占调用额度 | `supervisor/coordinator.ts` |
+
+这些修改能减少已有监督路径的误判。它们还不能让旁路自行判断任意代码或需求是否正确。
+
+## 2. 新执行器已经能做什么
+
+已经新增 `scripts/supervisor-host.mjs`，并通过插件适配层接入。它按下面的步骤工作：
+
+1. 把当前项目文件复制到临时目录，包括尚未提交的修改和新建文件。
+2. 对复制前的源目录、复制后的源目录和副本计算文件内容清单；如果内容不一致，就放弃此次检查。
+3. 在 macOS 沙箱中运行副本里的命令，禁止写入真实项目、禁止联网，并使用明确的环境变量集合。
+4. 限制保存的命令总输出为 1MiB；命令超时后终止进程组。
+5. 清理前核对目录的所有权和身份，只删除本插件创建且匹配的副本。
+
+真实文件和进程测试验证过：未提交修改、新建文件被带入副本；写真实目录被拒绝；网络访问被拒绝；
+测试环境中的秘密变量没有传给命令；超量输出被截断；超时命令被终止；错误的目录身份不能通过清理校验。
+
+**当前限制也很具体：**包含符号链接、已知秘密路径、特殊文件，或超过 10,000 个条目、50MiB 的项目，
+目前不支持独立执行。无法建立可信副本时，不在真实项目执行旁路命令。
+
+它默认关闭。`shadow` 模式可以记录检查结果，但不发送模型反馈；`enabled` 模式允许投递需要主模型判断的建议。
+这仍是实验能力，尚未完成下面列出的异常恢复和真实宿主取消验证。
+
+## 3. 评测和工程检查已经准备到什么程度
+
+| 已做的工作 | 实际交付 | 还不能据此得出的结论 |
+|---|---|---|
+| 评测评分拆分 | 分别记录功能成功、诚实报告、约束遵守、环境状态；成本缺失或冲突时显示未知 | 不能把旧评分器的通过数直接说成修复成功率 |
+| 新增 8 个工程小任务 | 覆盖入口定位、空输入、API 使用、多文件调用、动态调用、生成文件、文件保护和简单修改；隐藏验收放在 agent 工作区之外 | 这些小任务是评分器测试材料，不是已跑过的真实模型试验，也不能替代计划中的 60 个任务 pilot |
+| 修正评测启动 | 去掉会禁用插件函数 hooks 的 `--bare`；为试验复制一份插件，写入指定的模型配置；用假的本地程序验证启动参数，不调用 API | 还没有用真实模型完整验证这条启动链路、上下文隔离和费用采集 |
+| 统一检查入口 | `node scripts/check.mjs` 串行检查清单、类型、宿主测试、真实执行器和无模型自检 | 本地通过不表示模型质量提高，也不表示发布门槛全部通过 |
+| CI 配置 | 写好了公共部分检查，以及需显式启用的 macOS/Claude Code 自托管完整检查配置 | 没有推送分支，远端 CI 尚未运行；完整自托管检查也需要实际配置和运行 |
+
+本次代码实施时的完整检查结果是：**121 项宿主测试通过，真实文件/进程测试通过，类型检查通过，8 组无模型自检通过。**
+实施前宿主测试基线为 91 项。本次没有调用付费模型。
+
+## 4. P0 还缺哪些代码和验证
+
+下面是尚未完成的工作，不只是“等一个测试结果”。
+
+| 未完成项 | 用一个场景说明缺口 | 补完后应达到的结果 |
+|---|---|---|
+| 主模型检查记录与真实文件版本的完整绑定 | 主模型说测试通过后，另一个程序改了源码；仅看对话中的 Edit 记录可能发现不了。隔离执行前后的文件校验已做，但普通监督规则的持续版本覆盖没有做完 | 旧文件版本的通过结果，不能认证改过的文件；覆盖 Bash 和外部程序修改 |
+| 检查意图的排队和合并 | A 检查还没结束，B 检查又被触发；目前有“最多一个昂贵任务运行”的限制，但没有完整的排队流程保证 B 后续得到处理 | 保留一个待处理检查，合并重复意图，不遗漏，也不并发重复花钱 |
+| 投递和任务状态的持久化恢复 | 插件重载后，需要知道某条反馈已经发出、未发出，还是发送结果不明；目前没有完整的记录和恢复流程 | 重载后不重复发送结果不明的消息，也不误认为主模型已经处理了反馈 |
+| 整个会话的证据保存与回放 | 一次会话进行了很多检查，需要统一决定保留哪些原始输出、何时淘汰，以及被淘汰的证据如何失效 | 保存量有上限，能按记录回放判断；证据缺失时明确标为未知 |
+| 真实 Claude Code 取消链路 | 用户取消任务时，需要证明插件内部的执行、子进程和清理都会正确结束；目前执行器自身的超时测试已通过，但完整宿主链路还没验完 | 取消后没有残留执行或迟到反馈，副本得到清理 |
+| 异常退出后的孤儿副本清理 | Claude Code 或插件突然退出，临时副本可能留下；自动识别和清理这些残留目录还没做完 | 只清理确认属于本插件、且没有活跃任务使用的残留目录 |
+| 更完整的故障和恢复测试 | API、磁盘写入、消息投递、重载和并发事件组合出错时，不能只依赖正常路径测试 | 补齐故障样例，验证不会误认修复、无限重试或破坏主任务 |
+
+这些工作属于计划的 **E0 工程验收**。因此不能把当前 114 项测试通过解释为“P0 已经全部完成”。
+
+## 5. 哪些效果验证还没做
+
+尚未选择并验证真实的主模型、旁路模型和顶级参考模型组合，也没有运行下面这些试验：
+
+- 主模型单独做任务，与“主模型＋旁路”做同一批任务的成功率对比。
+- 旁路与主模型相同、旁路比主模型更弱这两种组合的比较。
+- 计划中的 60 个任务开发试验，以及另行冻结的确认任务集。
+- 两个模型全部调用、重试、反馈造成的追加工作、验证执行等费用的完整汇总。
+
+所以目前三个问题都没有答案：**是否修好更多任务、是否接近顶级模型、是否更便宜。**
+这些属于计划的 G0a/G0b 等效果门槛。当前成果是软件行为修正和可测试的执行底座，不是效果实验的结论。
+
+## 6. 后续功能还没有实现
+
+| 计划阶段 | 要交付的用户效果 | 当前状态 |
+|---|---|---|
+| P1：自动复现与反例 | 旁路根据明确需求设计一个小测试，在副本执行，确认失败来自目标行为后交给主模型修复 | **未完成、未进入该阶段。**已有执行器和证据校验，但完整的新流程及可信判据接入尚未实现 |
+| P2：卡住时辅助诊断 | 连续修复没有进展时，用新证据区分原因，再交给主模型重新决策 | **未实现。**原有重复失败规则仍在，但新增诊断恢复流程没有实现 |
+| P3：保留有来源的需求与上下文 | 长任务中保留用户约束、相关调用信息和未验证需求，减少遗忘 | **未实现。**没有新的需求登记和上下文整理模块 |
+| P4：按收益调监督强度 | 根据真实测量选择规则、常规或加强检查，控制介入频率与成本 | **未实现。**当前有固定的旁路预算，没有基于收益选择策略的完整机制 |
+| P5：确认实验与发布 | 用冻结实验决定哪些能力有效、是否可默认启用，并完成发布验收 | **未实现。**没有确认实验，也没有发布 |
+
+下一步应先补第 4 节的 P0 工程缺口，再完成真实模型评测；达到计划门槛后，继续实现 P1 的完整复现流程。
+
+## 本次用户澄清后的修正
+
+“旁路可能比主模型弱”是系统设计需要承受的条件，不是对运行模型的强制排序。
+已删除 `worker_model`、`model_relation`、`capability_profile` 配置和相应的运行限制。
+`verifier_model` 留空时使用当前主模型；显式指定其他模型或别名时也可以调用。
+证据核验、预算、隔离和判据要求适用于所有旁路模型，不因模型被认为更强而放宽。
+新增模型选择及切换回归后，完整本地检查通过 121 项宿主测试和原有 8 组无模型自检；未调用付费模型。

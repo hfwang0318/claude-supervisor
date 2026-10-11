@@ -1,6 +1,6 @@
 # deepseek-supervisor
 
-**Evidence-based supervision for Claude Code. The side model must be explicitly configured as no stronger than the worker; unverified identities use rules only. Independent execution is off by default.**
+**Evidence-based supervision for Claude Code. The side model defaults to the current worker; any explicitly selected side model is supported. Supervision relies on validated evidence, not superior model capability. Independent execution is off by default.**
 
 [中文说明](README.zh-CN.md)
 
@@ -43,12 +43,13 @@ When the model is about to hand you its answer, the same rules hold the answer t
 
 If anything raised this turn is still open, **the turn does not end**: the model gets the items and goes on, at most twice per prompt of yours and the second time only with what is new, so the check never keeps a session going by itself. It is asked to write its whole answer again with the items folded in, since you may read only its last message. Circles and stale edits do not hold a turn; a claim about the machine ("pytest isn't installed") does not either.
 
-### 3. Explicit side-model checks (experimental P0 foundation)
+### 3. Side-model checks (experimental P0 foundation)
 
-`worker_model` must match the host's full model ID; `verifier_model` has no default.
-Set `model_relation=same|side-no-stronger` and a `capability_profile` identifying
-versions, reasoning settings and measured capability evidence. Aliases cannot
-establish ordering. Refusal or changed identity uses rules without a fallback.
+Leave `verifier_model` empty to use the host's current worker model, including
+host aliases. Set it to use another side model. No model-ID capability ranking,
+worker match or relationship profile is required. The design must remain useful
+when the side model is weak or its capability relationship is unknown. Switching
+the worker invalidates old results; refusal uses rules without selecting a fallback.
 
 Each user prompt shares at most 2 side calls (including protocol retries), 4,000
 output tokens and 30 seconds of active work. Inputs and JSON responses are limited
@@ -187,10 +188,7 @@ Options, in the `/config` menu or under `pluginConfigs` in settings:
 
 | Option | Default | |
 |---|---|---|
-| `verifier_model` | empty | Explicit side model ID; no fallback |
-| `worker_model` | empty | Exact ID reported by the host |
-| `model_relation` | `unverified` | `same` or `side-no-stronger`; unknown uses rules |
-| `capability_profile` | empty | Versions, reasoning and capability relationship record |
+| `verifier_model` | current worker | Empty follows the worker; an ID or host alias selects another side model |
 | `execution_mode` | `off` | `shadow` observes only; `enabled` sends advisory feedback |
 | `review_changes` | `true` | At the end of a turn that changed code, the verifier also reviews the change. |
 
@@ -226,7 +224,7 @@ Claude Code writes type declarations into `.claude-plugin/types/` the first time
 | `hooks/prompt.ts` | The claim detector, the verifier's prompt and the parsing of its answers, what may run where, redaction, the note |
 | `hooks/band.tsx` | The band above the prompt |
 | `types/index.d.ts` | The item shape and the plugin's state contract |
-| `tests/*.test.ts` | 114 host tests on this branch against Claude Code's plugin test kit; the cases marked `live:` are misfires live sessions produced |
+| `tests/*.test.ts` | 121 host tests on this branch against Claude Code's plugin test kit; the cases marked `live:` are misfires live sessions produced |
 | `eval/` | The same tasks with the plugin and without, scored by code; see [eval/README.md](eval/README.md) |
 
 ## License

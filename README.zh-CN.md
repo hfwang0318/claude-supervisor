@@ -1,6 +1,6 @@
 # deepseek-supervisor
 
-**基于实际工具记录的 Claude Code 监督插件。旁路模型必须显式配置为不强于主模型；身份或关系未验证时仅启用规则。独立执行默认关闭。**
+**基于实际工具记录的 Claude Code 监督插件。旁路默认使用当前主模型，也支持显式指定其他模型。监督能力依靠可信证据，不依赖旁路更强的假设。独立执行默认关闭。**
 
 [English](README.md)
 
@@ -45,9 +45,10 @@ Claude Code 自带一个旁路代理 "You should know"，看着 Claude 干活，
 
 ### 3. 显式配置的旁路检查（P0 实验底座）
 
-`worker_model` 必须匹配宿主报告的完整模型 ID；`verifier_model` 没有默认值。
-还需 `model_relation=same|side-no-stronger` 与记录模型版本、推理配置和测量依据的
-`capability_profile`。别名不能保证能力排序；拒绝或身份变化后仅运行规则，不选备用模型。
+`verifier_model` 留空时，使用宿主当前的主模型；也可以指定另一个模型 ID 或宿主别名。
+不根据模型名称判断能力，不要求主模型 ID 匹配或提供强弱关系证明。
+设计必须在旁路较弱、或强弱关系未知时仍能工作。主模型切换后旧检查失效；
+服务拒绝时只保留规则，不自动选择备用模型。
 
 每个用户提示共享最多 2 次旁路调用（含协议重试）、4,000 输出 tokens 与 30 秒活动预算。
 模型输出和输入包各限 64KiB；最多三条候选命令，单条 4KiB；超过协议上限拒绝而不裁剪。
@@ -176,10 +177,7 @@ claude plugin install deepseek-supervisor@deepseek-supervisor
 
 | 选项 | 默认值 | |
 |---|---|---|
-| `verifier_model` | 空 | 明确的旁路模型 ID；无备用模型 |
-| `worker_model` | 空 | 必须与宿主报告的模型 ID 一致 |
-| `model_relation` | `unverified` | `same` 或 `side-no-stronger`，未验证时仅规则 |
-| `capability_profile` | 空 | 模型版本、推理设置及能力关系依据 |
+| `verifier_model` | 当前主模型 | 留空时跟随主模型；填写 ID 或宿主别名可选择其他旁路模型 |
 | `execution_mode` | `off` | `shadow` 仅观察；`enabled` 可投递建议 |
 | `review_changes` | `true` | 一轮改了代码时，验证者也审查本轮改动 |
 
@@ -215,7 +213,7 @@ Claude Code 第一次加载插件时，会把类型声明写进 `.claude-plugin/
 | `hooks/prompt.ts` | 结论检测、验证者的提示词和对它答复的解析、什么命令能在哪里跑、脱敏、给模型的提示 |
 | `hooks/band.tsx` | 提示框上方那一栏 |
 | `types/index.d.ts` | 条目的结构和插件状态的约定 |
-| `tests/*.test.ts` | 114 个宿主测试（当前分支），跑在 Claude Code 的插件测试工具上；标着 `live:` 的，是真实运行里出现过的误报 |
+| `tests/*.test.ts` | 121 个宿主测试（当前分支），跑在 Claude Code 的插件测试工具上；标着 `live:` 的，是真实运行里出现过的误报 |
 | `eval/` | 同一批任务开插件和不开插件各跑一遍，由代码打分；见 [eval/README.md](eval/README.md) |
 
 ## 许可证

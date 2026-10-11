@@ -1,15 +1,8 @@
-import type { ModelPair } from '../supervisor/contracts'
-import type { ModelAuthorization } from '../supervisor/ports'
+import type { ModelSelection } from '../supervisor/ports'
 
-export const authorizeModelPair = (pair: ModelPair, workerId: string): ModelAuthorization => {
-  const alias = /^(?:opus|sonnet|haiku|auto|default)$/i
-  const reason = !pair.workerId || !pair.sideId || alias.test(pair.workerId) || alias.test(pair.sideId)
-    ? 'explicit versioned worker and side model IDs required'
-    : !workerId || workerId !== pair.workerId ? 'host worker identity does not match configured pair'
-    : pair.relation === 'unverified' || !pair.capabilityProfileId ? 'model capability relationship is unverified'
-    : pair.relation === 'same' && pair.sideId !== pair.workerId ? 'same relationship requires identical model IDs'
-    : ''
-  return { allowed: reason === '', reason, pair }
+export const selectSideModel = (configured: string, workerId: string): ModelSelection => {
+  const modelId = configured.trim() || workerId.trim() || null
+  return { modelId, reason: modelId === null ? 'worker model unavailable; choose a side model explicitly' : '' }
 }
 
 import type { Binding, ExecutionEvidence, Snapshot } from '../supervisor/contracts'

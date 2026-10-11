@@ -1,8 +1,6 @@
 export type ModelPair = {
   workerId: string
   sideId: string
-  relation: 'same' | 'side-no-stronger' | 'unverified'
-  capabilityProfileId: string
 }
 
 export type Binding = {

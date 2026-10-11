@@ -34,5 +34,6 @@ const { validateExperiment } = await import('./experiment.mjs')
 assert.throws(() => validateExperiment({ schemaVersion: 1 }), /hostVersion/)
 const config = { schemaVersion: 1, hostVersion: '2.1.295', pluginSha: 'abc', environmentImage: 'fixture-1', toolPermissions: 'node,read,write', priceSnapshotId: 'unknown', split: 'development', stopRule: 'all-8', relation: 'same', capabilityProfileId: 'fixture', externalContextDisabled: true, otherPluginsDisabled: true, prices: {}, worker: { id: 'model-v1', version: 'v1', reasoning: 'low' }, side: { id: 'model-v1', version: 'v1', reasoning: 'low' }, reference: { id: 'reference-v1', version: 'v1', reasoning: 'high' } }
 assert.equal(validateExperiment(config), config)
-assert.throws(() => validateExperiment({ ...config, side: { ...config.side, id: 'opus' } }), /alias/)
-assert.throws(() => validateExperiment({ ...config, side: { ...config.side, reasoning: 'high' } }), /identical/)
+assert.equal(validateExperiment({ ...config, relation: undefined, capabilityProfileId: undefined, side: { ...config.side, id: 'opus' } }).side.id, 'opus')
+assert.equal(validateExperiment({ ...config, side: { ...config.side, reasoning: 'high' } }).side.reasoning, 'high')
+assert.equal(validateExperiment({ ...config, relation: undefined, capabilityProfileId: undefined, side: undefined }).side.id, 'model-v1')

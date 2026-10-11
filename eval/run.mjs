@@ -67,7 +67,7 @@ if (experiment && arms.includes('on') && !process.argv.includes('--summary-only'
   for (const path of ['hooks', 'supervisor', 'types', 'scripts', '.claude-plugin']) cpSync(join(ROOT, path), join(frozenPlugin, path), { recursive: true, filter: path => !path.includes('/.claude-plugin/types') })
   const manifestPath = join(frozenPlugin, '.claude-plugin/plugin.json')
   const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
-  for (const [key, value] of Object.entries({ worker_model: experiment.worker.id, verifier_model: experiment.side.id, model_relation: experiment.relation, capability_profile: experiment.capabilityProfileId, execution_mode: experiment.executionMode ?? 'off' })) manifest.userConfig[key].default = value
+  for (const [key, value] of Object.entries({ verifier_model: experiment.side.id, execution_mode: experiment.executionMode ?? 'off' })) manifest.userConfig[key].default = value
   writeFileSync(manifestPath, JSON.stringify(manifest, null, 2))
   process.on('exit', () => rmSync(frozenPlugin, { recursive: true, force: true }))
 }

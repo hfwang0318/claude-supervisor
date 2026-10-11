@@ -2,11 +2,11 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, PluginOptions, Register } from 'claude-code'
 
 import type { Issue, Reading, Track } from '../types'
-import type { Binding, ModelPair, ExecutionEvidence } from '../supervisor/contracts'
+import type { Binding, ExecutionEvidence } from '../supervisor/contracts'
 import { validateObservation, normalizeTrack } from '../supervisor/ledger'
 import { captureSnapshot } from '../supervisor/workspace'
 import { Coordinator, sameBinding } from '../supervisor/coordinator'
-import { authorizeModelPair, createHost } from './host'
+import { selectSideModel, createHost } from './host'
 import { registerBand } from './band'
 import { HISTORY as READINGS_KEPT, readingOf } from './weather'
 import type { Finding, Kind } from './evidence'
@@ -58,14 +58,10 @@ const isHidden = atom({ plugin: 'deepseek-supervisor', key: 'isHidden' } as cons
 const EMPTY: Track = { schemaVersion: 2, nextId: 1, issues: [], seen: [], runs: 0 }
 const track = atom({ plugin: 'deepseek-supervisor', key: 'track' } as const, EMPTY)
 
-type Config = { pair: ModelPair; reviewChanges: boolean; executionMode: 'off' | 'shadow' | 'enabled' }
+type Config = { verifierModel: string; reviewChanges: boolean; executionMode: 'off' | 'shadow' | 'enabled' }
 const configOf = (options: PluginOptions | undefined): Config => ({
-  pair: {
-    workerId: typeof options?.worker_model === 'string' ? options.worker_model.trim() : '',
-    sideId: typeof options?.verifier_model === 'string' ? options.verifier_model.trim() : '',
-    relation: options?.model_relation === 'same' || options?.model_relation === 'side-no-stronger' ? options.model_relation : 'unverified',
-    capabilityProfileId: typeof options?.capability_profile === 'string' ? options.capability_profile.trim() : '',
-  },
+  // Empty means follow the host's current worker; no capability ranking applies.
+  verifierModel: typeof options?.verifier_model === 'string' ? options.verifier_model.trim() : '',
   reviewChanges: options?.review_changes !== false,
   executionMode: options?.execution_mode === 'enabled' || options?.execution_mode === 'shadow' ? options.execution_mode : 'off',
 })
@@ -100,7 +96,7 @@ type Runtime = {
   steps: number; isBusy: boolean; promptsSinceCards: number; blocks: number
   held: Set<number>; followUps: number; turnFrom: number; isInteractive: boolean
   asked: string; told: number; last: string; coordinator: Coordinator
-  jobNumber: number; modelDisabled: boolean; cfg: Config; stateUsable: boolean; journal: Promise<unknown>; recordEnd: number
+  jobNumber: number; modelDisabled: boolean; cfg: Config; stateUsable: boolean; journal: Promise<unknown>; recordEnd: number; workerModel: string | null
 }
 const sessions = new Map<string, Runtime>()
 const runtimeOf = async ($: EngineInterface): Promise<Runtime> => {
@@ -108,9 +104,20 @@ const runtimeOf = async ($: EngineInterface): Promise<Runtime> => {
   let s = sessions.get(sessionId)
   if (s) return s
   const binding: Binding = { sessionId, generationId: String(await $.clock.now()), turnId: 'initial', taskRevision: 0, workspaceRevision: 'unknown', snapshotId: 'unknown' }
-  s = { steps: 0, isBusy: false, promptsSinceCards: 0, blocks: 0, held: new Set(), followUps: 0, turnFrom: 0, isInteractive: true, asked: '', told: 0, last: '', coordinator: new Coordinator(binding), jobNumber: 0, modelDisabled: false, cfg: configOf(undefined), stateUsable: true, journal: Promise.resolve(), recordEnd: 0 }
+  s = { steps: 0, isBusy: false, promptsSinceCards: 0, blocks: 0, held: new Set(), followUps: 0, turnFrom: 0, isInteractive: true, asked: '', told: 0, last: '', coordinator: new Coordinator(binding), jobNumber: 0, modelDisabled: false, cfg: configOf(undefined), stateUsable: true, journal: Promise.resolve(), recordEnd: 0, workerModel: null }
   sessions.set(sessionId, s)
   return s
+}
+
+const selectionOf = async ($: EngineInterface) => {
+  const s = await runtimeOf($)
+  const workerId = await $.session.model().catch(() => '')
+  if (s.workerModel !== null && s.workerModel !== workerId) {
+    s.coordinator.invalidate({ ...s.coordinator.binding, generationId: `model-${await $.clock.now()}-${++s.jobNumber}` }, { preserveBudget: true, now: await $.clock.now() })
+    s.modelDisabled = false
+  }
+  s.workerModel = workerId
+  return selectSideModel(s.cfg.verifierModel, workerId)
 }
 
 const hhmm = (ms: number) => {
@@ -128,8 +135,8 @@ const show = async ($: EngineInterface) => {
     )
   if (!s.stateUsable) return $.ui.status('deepseek-supervisor unknown state schema; supervision disabled; original state preserved')
   const open = (await read($, track)).issues.filter(i => i.status === 'open').length
-  const auth = authorizeModelPair(s.cfg.pair, await $.session.model().catch(() => ''))
-  $.ui.status(`deepseek-supervisor ${auth.allowed && !s.modelDisabled ? 'checking' : 'rules-only'} · ${s.told} noted` + (open === 0 ? '' : ` (${open} open)`) + (s.last === '' ? '' : ` · last: ${s.last}`))
+  const selection = await selectionOf($)
+  $.ui.status(`deepseek-supervisor ${selection.modelId !== null && !s.modelDisabled ? 'checking' : 'rules-only'} · ${s.told} noted` + (open === 0 ? '' : ` (${open} open)`) + (s.last === '' ? '' : ` · last: ${s.last}`))
 }
 
 // The context window's fill, for the line above the prompt (weather.tsx, drawn in
@@ -203,19 +210,20 @@ const addCost = (cost: VerifyResult['cost'], u: { cache_read_input_tokens?: numb
   cost.calls += 1
 }
 
-// Use only the authorized pair. Provider refusal never selects another model.
+// Resolve the chosen model for this call. Provider refusal never selects another model.
 const ask = async ($: EngineInterface, prompt: string, timeoutMs = 30000, jobSignal?: AbortSignal) => {
   const s = await runtimeOf($)
-  const authorization = authorizeModelPair(s.cfg.pair, await $.session.model().catch(() => ''))
-  if (!authorization.allowed || s.modelDisabled || jobSignal?.aborted || bytesOf(prompt) > 65536) return undefined
+  const selection = await selectionOf($)
+  if (selection.modelId === null || s.modelDisabled || jobSignal?.aborted || bytesOf(prompt) > 65536) return undefined
   const budget = s.coordinator.reserveCall(await $.clock.now(), 2000)
   if (!budget) return undefined
   const callBinding = { ...s.coordinator.binding }
-  const reply = await $.model.complete({ model: s.cfg.pair.sideId, prompt: redact(prompt), maxTokens: budget.maxTokens, timeoutMs: Math.min(timeoutMs, budget.timeoutMs) }, jobSignal ? { signal: jobSignal } : undefined).catch((err: unknown) => {
+  const reply = await $.model.complete({ model: selection.modelId, prompt: redact(prompt), maxTokens: budget.maxTokens, timeoutMs: Math.min(timeoutMs, budget.timeoutMs) }, jobSignal ? { signal: jobSignal } : undefined).catch((err: unknown) => {
     say($, `configured side model unavailable: ${String(err)}`)
     return undefined
   })
-  await remember($, { schemaVersion: 1, kind: 'side-call', callId: `${callBinding.sessionId}/${callBinding.generationId}/${callBinding.turnId}/${++s.jobNumber}`, modelId: s.cfg.pair.sideId, binding: callBinding, usage: reply?.usage ?? null, result: reply?.isAnswered ? 'answered' : 'unknown' })
+  await remember($, { schemaVersion: 1, kind: 'side-call', callId: `${callBinding.sessionId}/${callBinding.generationId}/${callBinding.turnId}/${++s.jobNumber}`, modelId: selection.modelId, binding: callBinding, usage: reply?.usage ?? null, result: reply?.isAnswered ? 'answered' : 'unknown' })
+  await selectionOf($)
   if (!sameBinding(callBinding, s.coordinator.binding)) return reply
   if (!reply || !reply.isAnswered) { s.coordinator.recordFailure(); s.modelDisabled = true }
   if (reply) s.coordinator.recordUsage(reply.usage.output_tokens)
@@ -436,6 +444,7 @@ type CheckOptions = {
 // and returns the new items; the caller delivers them.
 const check = async ($: EngineInterface, list: Rows, o: CheckOptions): Promise<Issue[]> => {
   const s = await runtimeOf($)
+  const selection = await selectionOf($)
   const binding = { ...s.coordinator.binding }
   const at = await $.clock.now()
   if (!s.stateUsable) return []
@@ -451,7 +460,7 @@ const check = async ($: EngineInterface, list: Rows, o: CheckOptions): Promise<I
   )
   // The verifier runs whenever a check hands it a claim. A claim the record already contradicts, or
   // already bears out, is not handed to it: no model is needed for those.
-  const canRun = o.verifier && !s.modelDisabled && authorizeModelPair(s.cfg.pair, await $.session.model().catch(() => '')).allowed
+  const canRun = o.verifier && !s.modelDisabled && selection.modelId !== null
   // Nor a claim said before a later edit to code: it described files that have changed since.
   const lastCodeEdit = record.edits.filter(e => !/\.(?:md|markdown|txt|rst|adoc)$/i.test(e.path)).at(-1)?.at ?? -1
   const isCurrent = (c: string) => (record.saidAt.get(c) ?? Number.MAX_SAFE_INTEGER) > lastCodeEdit
@@ -473,6 +482,7 @@ const check = async ($: EngineInterface, list: Rows, o: CheckOptions): Promise<I
     if (job) {
       currentSignals.set(s, job.signal)
       v = await verify($, { claims: handed, asked: s.asked !== '' ? s.asked : fallback, facts, open, cwd: await $.session.cwd().catch(() => ''), changes, budgetMs: 30000 })
+      await selectionOf($)
       if (currentSignals.get(s) === job.signal) currentSignals.delete(s)
       if (!s.coordinator.finish(jobId, binding, v.reason ? 'failed' : 'succeeded', await $.clock.now())) return []
     }
@@ -761,6 +771,7 @@ export const register: Register = (on, options) => {
     const s = await runtimeOf($)
     const result = yield* next(e)
     if (e.agentId !== undefined || result.stopReason === null) return result
+    await selectionOf($)
     s.steps += 1
     // The step that ends the turn is the turn's end's to check: two checks of one answer
     // would ask the verifier twice.

@@ -1,4 +1,4 @@
-import type { Binding, ExecutionEvidence, ModelPair, Snapshot } from './contracts'
+import type { Binding, ExecutionEvidence, Snapshot } from './contracts'
 
 export type Host = {
   now(): Promise<number>
@@ -11,4 +11,4 @@ export type Host = {
   deliver(id: string, text: string): Promise<'delivered' | 'dropped' | 'unknown'>
 }
 
-export type ModelAuthorization = { allowed: boolean; reason: string; pair: ModelPair }
+export type ModelSelection = { modelId: string | null; reason: string }

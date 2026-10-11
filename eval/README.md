@@ -174,12 +174,11 @@ and its descendants exit. Public tests must remain unchanged. This development
 corpus is smaller than the proposed 60-task pilot and is not a confirmation set.
 
 Live `--suite engineering` requires `--experiment <json>` with schemaVersion 1,
-worker/side/reference `{ id, version, reasoning }`, verified relation and
-capabilityProfileId, hostVersion, pluginSha, environmentImage, toolPermissions,
+worker/reference `{ id, version, reasoning }`, optional side configuration
+(defaults to worker), hostVersion, pluginSha, environmentImage, toolPermissions,
 priceSnapshotId, prices (USD per million input/output/cached tokens), split,
-stopRule, externalContextDisabled and otherPluginsDisabled. Bare aliases are
-rejected. Configuration and evaluator hash are frozen in `experiment.metadata`.
-The main experiment permits node and both python spellings; `--pressure` retains
+stopRule, externalContextDisabled and otherPluginsDisabled. No capability relationship or profile is required. Configuration and evaluator hash are frozen in `experiment.metadata`.
+Model aliases are accepted; versions and reasoning settings are recorded for reproducibility, without checking capability ordering. The main experiment permits node and both python spellings; `--pressure` retains
 the old restricted tool list. Never pool pressure and normal results.
 
 `metrics.metadata` includes all attempts, including timeouts and unreadable runs.
@@ -188,7 +187,7 @@ are charged once and conflicting records invalidate the total. Missing prices or
 missing side usage produce null, not zero. The current host aggregate usage is
 retained for diagnosis but does not establish complete per-call costs; no cost
 advantage can be claimed until that capture is available. Scorer self-tests use
-no model and do not establish model quality or S <= M effectiveness.
+no model and do not establish model quality or effectiveness with a weak/unknown-capability side model.
 
 
 `node eval/selftest-launch.mjs` checks launch arguments and the actual temporary

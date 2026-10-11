@@ -44,3 +44,13 @@ test('prompt budgets cap all calls including protocol retries and stop after two
   c.recordFailure()
   expect(c.reserveCall(0, 1)).toBeNull()
 })
+
+test('a model switch cancels old work without replenishing the prompt budget', async () => {
+  const c = new Coordinator(binding)
+  const job = c.start('j', 0)
+  c.reserveCall(0, 2000)
+  c.invalidate({ ...binding, generationId: 'changed-model' }, { preserveBudget: true, now: 10000 })
+  expect(job?.signal.aborted).toBe(true)
+  expect(c.reserveCall(10000, 2000)).toEqual({ maxTokens: 2000, timeoutMs: 20000 })
+  expect(c.reserveCall(10000, 1)).toBeNull()
+})

@@ -43,6 +43,7 @@ const world = (on: Parameters<TestBody>[1], rows: Row[] = CLAIMED) => {
     env: {} as Record<string, string>,
     // A model name the endpoint refuses, as an unknown one is.
     refusedModel: '',
+    workerModel: 'test-worker-v1',
     waitCall: 0,
     wait: undefined as Promise<void> | undefined,
   }
@@ -55,7 +56,7 @@ const world = (on: Parameters<TestBody>[1], rows: Row[] = CLAIMED) => {
   const toasts: string[] = []
   on('session.messages', () => ({ value: state.rows }) as never)
   on('session.id', () => ({ value: 'test-session' }))
-  on('session.model', () => ({ value: 'test-worker-v1' }))
+  on('session.model', () => ({ value: state.workerModel }))
   on('session.cwd', () => ({ value: '/p' }) as never)
   on('session.append', (_$, e, next) => {
     if (state.refuse) return { deny: 'refused in test' } as never
@@ -871,8 +872,9 @@ test('live: words the model refuted a rule on are not raised again when it quote
   expect((await stop($, row)).block).toBeUndefined()
 })
 
-test('an unverified pair runs deterministic rules without any model call', { options: { model_relation: 'unverified' } }, async ($, on) => {
+test('an unavailable default worker runs deterministic rules without any model call', { options: { verifier_model: '' } }, async ($, on) => {
   const w = world(on)
+  w.state.workerModel = ''
   await start($)
   await steps($, 3)
   await w.clock.advance(10)
@@ -911,8 +913,9 @@ test('shadow records observations but creates no model finding or feedback', { o
   expect(await issues($)).not.toContain('One test fails')
 })
 
-test('disclosed check failures can later become fixed from matching evidence without losing disclosure', { options: { model_relation: 'unverified' } }, async ($, on) => {
+test('disclosed check failures can later become fixed from matching evidence without losing disclosure', { options: { verifier_model: '' } }, async ($, on) => {
   const w = world(on, [{ role: 'user', text: 'fix total()', toolUses: [] }, failingRun('a')])
+  w.state.workerModel = ''
   await start($)
   await prompt($, 'fix total()')
   await stop($, 'All tests pass.')
@@ -921,4 +924,49 @@ test('disclosed check failures can later become fixed from matching evidence wit
   await batch($)
   const text = await issues($)
   expect(text).toContain('resolution=fixed disclosed=true')
+})
+
+
+test('default side selection calls the current worker without a capability profile', { options: { verifier_model: '' } }, async ($, on) => {
+  const w = world(on)
+  await start($)
+  await steps($, 3)
+  await w.clock.advance(10)
+  expect(w.models).toEqual(['test-worker-v1'])
+})
+
+test('an explicit host model alias is usable without capability ranking', { options: { verifier_model: 'opus' } }, async ($, on) => {
+  const w = world(on)
+  await start($)
+  await steps($, 3)
+  await w.clock.advance(10)
+  expect(w.models).toEqual(['opus'])
+})
+
+test('a late reply from a previous worker selection is discarded after a model switch', async ($, on) => {
+  const w = world(on, TOTAL_CLAIMED)
+  let release: (() => void) | undefined
+  w.state.waitCall = 2
+  w.state.wait = new Promise<void>(r => { release = r })
+  w.state.verifier = [RUN, FALSE.replace('One test fails: total() skips the first price', 'old model finding')]
+  await start($)
+  await steps($, 3)
+  await w.clock.advance(10)
+  w.state.workerModel = 'test-worker-v2'
+  release?.()
+  await w.clock.advance(10)
+  expect(w.notes.length).toBe(0)
+  expect(await issues($)).not.toContain('old model finding')
+})
+
+test('an empty side setting follows a switched worker on the next eligible check', { options: { verifier_model: '' } }, async ($, on) => {
+  const w = world(on)
+  await start($)
+  await steps($, 3)
+  await w.clock.advance(10)
+  w.state.workerModel = 'test-worker-v2'
+  w.state.rows.push({ role: 'assistant', text: 'Another total is correct: 60.', toolUses: [] })
+  await steps($, 3)
+  await w.clock.advance(10)
+  expect(w.models).toEqual(['test-worker-v1', 'test-worker-v2'])
 })

@@ -6,7 +6,10 @@ Coordinator isolates session identity and generations, limits expensive work to
 one active job, and rejects old bindings after prompts, off, reload, session end
 or observed tool-batch changes. Calls, protocol retries and output reservations
 share the prompt's 2-call/4k-token/30s activity budget. Model refusal never falls
-back. A capability profile is explicit configuration, not an alias ranking.
+back. The side model defaults to the current worker or an explicit configured ID/alias.
+No capability ordering or worker-ID relationship is required. Model switches
+invalidate old work without replenishing the prompt budget; evidence checks
+apply equally to any side model.
 
 Command identity and exact observed excerpts are checked in the matching copy.
 Environment errors and truncation produce unknown. Original-file changes in a

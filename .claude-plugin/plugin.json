@@ -1,7 +1,7 @@
 {
   "name": "deepseek-supervisor",
   "version": "0.8.2",
-  "description": "Evidence-based supervision: deterministic record rules and an explicitly configured side model no stronger than the worker; unknown identities use rules only.",
+  "description": "Evidence-based supervision for any side model: defaults to the current worker and validates observations without assuming superior model capability.",
   "author": {
     "name": "LACAN-1"
   },
@@ -11,7 +11,7 @@
     "verifier_model": {
       "type": "string",
       "title": "Verifier model",
-      "description": "Explicit versioned side model ID. No default and no model fallback. Requires worker_model, model_relation and capability_profile.",
+      "description": "Optional side model ID or host alias. Empty follows the current worker model. No capability ranking or model-ID relationship check; no automatic fallback on refusal.",
       "default": ""
     },
     "review_changes": {
@@ -19,24 +19,6 @@
       "title": "Review each turn's change",
       "description": "At the end of a turn that changed code, the verifier also reads the change for a defect a command can show.",
       "default": true
-    },
-    "worker_model": {
-      "type": "string",
-      "title": "Worker model",
-      "description": "Exact worker ID reported by the host; aliases cannot establish the relationship.",
-      "default": ""
-    },
-    "model_relation": {
-      "type": "string",
-      "title": "Model relationship",
-      "description": "same, side-no-stronger, or unverified. Unknown relationships run rules only.",
-      "default": "unverified"
-    },
-    "capability_profile": {
-      "type": "string",
-      "title": "Capability profile",
-      "description": "Record identifying versions, reasoning configuration and measured relationship for this task distribution.",
-      "default": ""
     },
     "execution_mode": {
       "type": "string",
