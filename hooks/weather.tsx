@@ -1,3 +1,4 @@
+import type { ElementConstructor, BoxProps, TextProps, RenderElement } from 'claude-code'
 import type { Reading } from '../types'
 
 // Token Weather, from "Getting started with Claude Code mods" (Anthropic,
@@ -43,10 +44,10 @@ export const readingOf = (context: { tokens?: number | null; window?: number | n
 }
 
 // The components come from $.ui.resolve in band.tsx.
-type Parts = { Box: (p: Record<string, unknown>) => unknown; Text: (p: Record<string, unknown>) => unknown }
+type Parts = { Box: ElementConstructor<BoxProps>; Text: ElementConstructor<TextProps> }
 
 /** The forecast line over `below`; `below` alone when there is no reading yet. */
-export const weatherLine = (history: readonly Reading[], columns: number, { Box, Text }: Parts, below: unknown) => {
+export const weatherLine = (history: readonly Reading[], columns: number, { Box, Text }: Parts, below: RenderElement) => {
   const now = history.at(-1)
   if (now === undefined) return below
   const f = FORECAST.find(b => now.percent < b.upTo) ?? FORECAST[4]

@@ -1,6 +1,6 @@
 # deepseek-supervisor
 
-**A supervisor for Claude Code running a weaker model such as DeepSeek: what the model ran is held against what it says, a second, stronger model runs its claims and reviews its changes, and what does not hold goes back to the model before you get the answer.**
+**Evidence-based supervision for Claude Code. The side model must be explicitly configured as no stronger than the worker; unverified identities use rules only. Independent execution is off by default.**
 
 [中文说明](README.zh-CN.md)
 
@@ -43,26 +43,43 @@ When the model is about to hand you its answer, the same rules hold the answer t
 
 If anything raised this turn is still open, **the turn does not end**: the model gets the items and goes on, at most twice per prompt of yours and the second time only with what is new, so the check never keeps a session going by itself. It is asked to write its whole answer again with the items folded in, since you may read only its last message. Circles and stale edits do not hold a turn; a claim about the machine ("pytest isn't installed") does not either.
 
-### 3. The verifier: a second, stronger model that runs things
+### 3. Explicit side-model checks (experimental P0 foundation)
 
-A short loop the plugin runs itself: a model proposes commands, they run in a throwaway copy of your workspace, their output goes back, for at most 6 rounds of at most 3 commands of 60 s each. It does two things.
+`worker_model` must match the host's full model ID; `verifier_model` has no default.
+Set `model_relation=same|side-no-stronger` and a `capability_profile` identifying
+versions, reasoning settings and measured capability evidence. Aliases cannot
+establish ordering. Refusal or changed identity uses rules without a fallback.
 
-- **It checks claims** a command can show false ("the total is 59.75", "fixed"), at most 3 per check. A *false* verdict must carry the command it ran and the output that contradicts the claim; one without them is dropped. Claims the record already settles, either way, are not handed to it, and neither is a claim said before a later edit to code.
-- **It reviews the turn's change.** At the end of a turn that changed code, it reads the change against your request and looks for one defect a command can show: an input the request covers that gives a wrong result or a crash. It must quote a line the turn changed, and give the command and the text its output holds while the defect is there. In a copy, it must run that command and see that text, or the defect is dropped. With no copy (see below), the model is asked to run the command itself; its own run decides: the text there means the defect is real, its absence that the reviewer was wrong. A change it has read to the end is not read again.
+Each user prompt shares at most 2 side calls (including protocol retries), 4,000
+output tokens and 30 seconds of active work. Inputs and JSON responses are limited
+to 64KiB, candidates to three commands of 4KiB each. Oversized protocols are rejected.
 
-**Which model.** By default the verifier asks for `opus`. DeepSeek's endpoint serves Claude-style names by family: `opus` gets its Pro model, `sonnet` and `haiku` its Flash one. So the work of a Flash session is checked by Pro. Set `verifier_model` to any model your endpoint takes; if the endpoint refuses it, `sonnet` is used.
+`execution_mode=off` is the default. `shadow` records independent checks without
+model feedback; `enabled` sends advisory findings for main-model judgment.
+New prompts, off, reload, session end and changed tool batches invalidate old jobs.
+Semantic hypotheses do not block completion. Record rules retain at most two holds
+and the complete final-answer behavior.
 
-**When.** During the work, at most every 3 steps, on new claims; its findings reach the model as a note at its next step. At the end of a turn: in a session you watch, after the turn, so nobody waits on it, and what it finds comes back once as a follow-up prompt; in a session nobody watches (`claude -p`, an SDK host), before the turn may end, where what it finds keeps the turn going.
+The executor copies current files, including dirty/untracked files, into an owned
+temporary directory. SHA-256 manifests compare the source before/after copying and
+the copy. macOS sandboxing denies by default, limits real-directory writes, secret
+reads and network, and supplies only an explicit environment without secrets.
+Combined command output retention is 1MiB; timeouts terminate the process group.
+Symlinks, secret paths, special files and workspaces over 10k entries or 50MiB are
+currently unsupported. Without a trustworthy copy the plugin provides read-only
+diagnostics and executes no side commands in the real project. Only matching owned
+copies are cleaned up.
 
-**Where commands run.** The copy is made with `cp -c` (an APFS clone: no data copied) and removed afterwards. Every command also runs under the macOS sandbox (`sandbox-exec`): nothing may be written under your home folder or the real workspace, except the copy. A command that names your real workspace is refused. If no copy can be made (your home folder, the root, a copy over 60 s), or there is no sandbox (not macOS), only read-only commands run, and the rules above carry the rest.
+## Issue state
 
-## How an item closes
-
-Not by the model saying so.
-
-- **fixed**: the record shows what closes it (table above), or its recheck, rerun in a fresh copy at every later check, exits 0. With no copy, an item the verifier raised about a claim can also be closed by its next reading of the code: a judgement, not an exit code.
-- **told**: the model told you about it, writing `[ysk#3 told]`.
-- **refuted**: the model says the check was wrong, `[ysk#3 refuted: why]`; or, for a suspected defect, its own run of the reviewer's command did not show it.
+`resolution=open|fixed|unknown`, `disclosed` and `contested` track separate facts.
+`[ysk#N told]` marks disclosure; `refuted` marks contesting. Neither proves repair.
+Unexecuted commands, truncated output, environment errors, mismatched revisions
+and unconfirmed sources cannot certify a defect. Error-text disappearance cannot
+certify fixed, and lint success cannot settle a failed pytest scope. New semantic
+findings remain hypotheses; complete requirement-oracle validation belongs to P1.
+Legacy UI labels remain, with the independent fields visible in `/issues`.
+Unknown schemas preserve the original record and disable supervision.
 
 ## Safety
 
@@ -170,14 +187,18 @@ Options, in the `/config` menu or under `pluginConfigs` in settings:
 
 | Option | Default | |
 |---|---|---|
-| `verifier_model` | `opus` | The verifier's model: on DeepSeek's endpoint, its Pro model. Any model id the endpoint takes. |
+| `verifier_model` | empty | Explicit side model ID; no fallback |
+| `worker_model` | empty | Exact ID reported by the host |
+| `model_relation` | `unverified` | `same` or `side-no-stronger`; unknown uses rules |
+| `capability_profile` | empty | Versions, reasoning and capability relationship record |
+| `execution_mode` | `off` | `shadow` observes only; `enabled` sends advisory feedback |
 | `review_changes` | `true` | At the end of a turn that changed code, the verifier also reviews the change. |
 
 The plugin's store is shared by every session on the machine. It keeps the on/off/auto setting and the last 50 checks, including the claims and command output. It is never sent anywhere.
 
 ## Cost
 
-The rules on the record call no model and cost nothing: a batch's check took 5 to 30 ms in the live runs. The verifier's check is a fresh request with no history: the claims, your prompt, the change, the facts, and the command output so far; it does not re-read the session. In the live runs above, a check of a turn's end took 2 to 18 s and 1 to 5 model calls on Haiku; on a reasoning model it takes longer. During the work the verifier checks every new claim, at most once every 3 steps; each check makes up to 6 model calls (12 if replies are unreadable and retried). Rechecks of open items run commands only.
+Record rules call no model. Historical timings in eval/README.md do not measure the new foundation. Current side limits are listed above; missing prices or complete worker/side usage remain unknown and cannot establish a cost advantage.
 
 In a session you watch, nothing waits on the verifier. In a session nobody watches (`claude -p`), the turn's end waits for it: in the eval runs, a run with the plugin took 1.5 to 2.1 times as long as one without, the holds included.
 
@@ -205,9 +226,15 @@ Claude Code writes type declarations into `.claude-plugin/types/` the first time
 | `hooks/prompt.ts` | The claim detector, the verifier's prompt and the parsing of its answers, what may run where, redaction, the note |
 | `hooks/band.tsx` | The band above the prompt |
 | `types/index.d.ts` | The item shape and the plugin's state contract |
-| `tests/*.test.ts` | 80 tests against Claude Code's plugin test kit; the cases marked `live:` are misfires live sessions produced |
+| `tests/*.test.ts` | 110 host tests on this branch against Claude Code's plugin test kit; the cases marked `live:` are misfires live sessions produced |
 | `eval/` | The same tasks with the plugin and without, scored by code; see [eval/README.md](eval/README.md) |
 
 ## License
 
 MIT
+
+## Engineering checks
+
+After `npm ci --ignore-scripts`, run `node scripts/check.mjs`. It checks host manifests, generated types, TypeScript, model-free host tests, real process isolation and seven scorer self-tests in sequence. Missing types are generated by the local `/deepseek-supervisor issues` command without submitting a model prompt. Public CI `--pure` is partial; full macOS/Claude Code self-hosted checks are reported separately and required for release.
+
+[Implementation results and outstanding gates](docs/evals/2026-10-11-p0-implementation.md). Paid S=M/S<M pilots have not run; quality gains and P0/E0 release acceptance are not claimed.

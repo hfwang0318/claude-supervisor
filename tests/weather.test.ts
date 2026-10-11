@@ -7,8 +7,10 @@ const band = { hasSurvey: false, isWorking: false, maxRows: 10, bodyColumns: 120
 // another plugin's band drawn below this one.
 const world = (on: Parameters<TestBody>[1]) => {
   mock.store(on)
+  mock.clock(on, { now: 0 })
   const fill = { tokens: 36_100 }
   on('session.usage', () => ({ value: { startedAt: 0, rateLimits: [], context: { tokens: fill.tokens, window: 200_000, percent: Math.round(fill.tokens / 2_000) } } }) as never)
+  on('session.id', () => ({ value: 'weather-session' }))
   on('session.start', () => ({ cwd: '/' }))
   on('turn.complete', () => ({ text: '' }) as never)
   on('ui.render', ($, e) => {

@@ -10,7 +10,7 @@
     {
       "name": "deepseek-supervisor",
       "source": "./",
-      "description": "A supervisor for Claude Code on a weaker model such as DeepSeek: rules on what the model ran catch circles, bent tests and claims the record contradicts; a second, stronger model runs its claims and reviews its changes; what does not hold goes back to the model before the turn ends"
+      "description": "Evidence-based supervision: deterministic record rules and an explicitly configured side model no stronger than the worker; unknown identities use rules only."
     }
   ]
 }

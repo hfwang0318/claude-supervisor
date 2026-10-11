@@ -242,7 +242,10 @@ export const evidenceOf = (rows: readonly Row[]): Evidence => {
         if (ownCheck) ev.mentioned = true
         if (pieces(command).some(p => RUNS_CODE.test(p))) ev.coded.push(at)
         for (const t of command.matchAll(/(?:>|\btee\s+(?:-a\s+)?)\s*["']?([^\s"'<>|;&]+)/g)) if (t[1] !== undefined && !/^&?\d$|^\/dev\//.test(t[1])) ev.created.add(base(t[1]))
-        const ok = !failed && !FAILED.test(out)
+        const result = u.result && typeof u.result === 'object' ? u.result as Record<string, unknown> : {}
+        const exit = result.exitCode ?? result.exit_code
+        const truncated = result.isStdoutTruncated === true || result.isStderrTruncated === true
+        const ok = !failed && !FAILED.test(out) && !truncated && (typeof exit !== 'number' || exit === 0)
         ev.bash.push({ at, key: keyOf(command), ok, sig: ok ? '' : signatureOf(out), text: clip(out, 4000) })
         // The line a note shows is the one that says what failed, not "Exit code 1".
         if ((runsTests(command) || ownCheck) && !MISSING.test(out)) ev.runs.push({ at, command: clip(squash(command), 200), ok, line: ok ? '' : clip(signatureOf(out), 160), text: ok ? '' : clip(out, 4000) })
@@ -289,6 +292,10 @@ export type Finding = {
   saw?: string
 }
 
+export const scopeOf = (command: string) => pieces(keyOf(command)).filter(p => CHECK.test(p)).map(p => p.replace(/^\S+\s+plugin (?=test|validate)/, 'claude plugin ')).join(' && ') || keyOf(command)
+const latestChecks = (runs: CheckRun[]) => [...new Map(runs.map(r => [scopeOf(r.command), r])).values()]
+const lastRelevant = (runs: CheckRun[]) => latestChecks(runs).find(r => !r.ok) ?? runs.at(-1)
+
 /** Rules whose item says whether the checks pass: one such item is open at a time. */
 export const isCheckKind = (k: Kind | undefined) => k === 'failed-check' || k === 'stale-check' || k === 'no-check' || k === 'unreported-failure' || k === 'skipped-check'
 
@@ -308,7 +315,7 @@ export const contradictions = (ev: Evidence, claims: readonly string[]): Finding
     const isBlind = ev.blind.some(b => b < at)
 
     if (claimsPass(quote) && !isBlind) {
-      const last = ev.runs.filter(r => r.at < at).at(-1)
+      const last = lastRelevant(ev.runs.filter(r => r.at < at))
       const lastEdit = ev.edits.filter(e => e.at < at && isCode(e.path)).at(-1)
       if (last === undefined) {
         // A command named for tests or checks ran: the project's own runner, maybe. Say nothing.
@@ -353,7 +360,7 @@ export const supports = (ev: Evidence, claim: string) => {
   if (NOT_A_CLAIM.test(claim) || !claimsPass(claim)) return false
   const at = ev.saidAt.get(claim) ?? Number.MAX_SAFE_INTEGER
   if (ev.blind.some(b => b < at)) return false
-  const last = ev.runs.filter(r => r.at < at).at(-1)
+  const last = lastRelevant(ev.runs.filter(r => r.at < at))
   const lastEdit = ev.edits.filter(e => e.at < at && isCode(e.path)).at(-1)
   return last !== undefined && last.ok && (lastEdit === undefined || lastEdit.at < last.at)
 }
@@ -486,7 +493,7 @@ export const unreported = (ev: Evidence, answer: string): Finding[] => {
   // An answer that claims the checks pass is the claim rules' to hold to the record.
   if (claimsOf(answer).some(c => !NOT_A_CLAIM.test(c) && claimsPass(c))) return []
   const since = ev.prompts.at(-1)?.at ?? 0
-  const last = ev.runs.filter(r => r.at >= since).at(-1)
+  const last = lastRelevant(ev.runs.filter(r => r.at >= since))
   if (last === undefined || last.ok || OWNS_UP.test(answer) || ev.blind.some(b => b > last.at)) return []
   return [{ kind: 'unreported-failure', what: `The last check this turn failed (\`${last.command}\`: ${last.line || 'it reported a failure'}), and the answer does not say so.`, quote: clip(squash(answer) || '(an empty answer)', 200), probe: `Fix it and run ${last.command} again, or tell the person it fails and why`, recheck: last.command }]
 }
@@ -522,7 +529,9 @@ export const settledBy = (ev: Evidence, item: { rule?: Kind; quote: string; prob
     case 'failed-check':
     case 'stale-check':
     case 'unreported-failure': {
-      const last = ev.runs.at(-1)
+      const scope = scopeOf(item.probe.replace(/^Run /, ''))
+      const relevant = ev.runs.filter(r => scopeOf(r.command) === scope)
+      const last = relevant.length > 0 ? relevant.at(-1) : lastRelevant(ev.runs)
       const lastEdit = ev.edits.filter(e => isCode(e.path)).at(-1)
       if (last === undefined || !last.ok) return undefined
       if (lastEdit !== undefined && lastEdit.at > last.at) return undefined

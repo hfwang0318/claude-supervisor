@@ -1,3 +1,81 @@
+export type ModelPair = {
+  workerId: string
+  sideId: string
+  relation: 'same' | 'side-no-stronger' | 'unverified'
+  capabilityProfileId: string
+}
+
+export type Binding = {
+  sessionId: string
+  generationId: string
+  turnId: string
+  taskRevision: number
+  workspaceRevision: string
+  snapshotId: string
+}
+
+export type RequirementRef = {
+  id: string
+  text: string
+  sourceMessageId: string
+  quote: string
+  status: 'explicit' | 'inferred' | 'confirmed'
+}
+
+export type ExecutionEvidence = {
+  id: string
+  binding: Binding
+  command: string
+  cwd: string
+  checkScope: string[]
+  exitCode: number | null
+  stdout: string
+  stderr: string
+  truncated: boolean
+  outcome: 'passed' | 'failed' | 'environment-error' | 'unknown'
+  startedAt: number
+  endedAt: number
+}
+
+export type ProbeCandidate = {
+  id: string
+  binding: Binding
+  requirementIds: string[]
+  question: string
+  command: string
+  files: { path: string; content: string }[]
+  oracle: 'existing-test' | 'spec-example' | 'invariant' | 'disagreement'
+  oracleExplanation: string
+  oracleSourceIds: string[]
+}
+
+export type Budget = {
+  remainingSideCalls: number
+  remainingOutputTokens: number
+  remainingActiveMs: number
+  deadlineMs: number
+}
+
+export type Snapshot = {
+  id: string
+  binding: Binding
+  root: string
+  sourceManifestHash: string
+  isolation: 'boxed-copy' | 'read-only'
+}
+
+export type Resolution = 'open' | 'fixed' | 'unknown'
+export type IssueState = { resolution: Resolution; disclosed: boolean; contested: boolean }
+export type JobStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled' | 'stale'
+export type DeliveryStatus = 'prepared' | 'delivered' | 'dropped' | 'unknown'
+export type Intervention = {
+  binding: Binding
+  reason: string
+  action: 'none' | 'probe' | 'recover' | 'context' | 'return-to-main'
+  evidenceIds: string[]
+  requiresMainJudgment: boolean
+}
+
 /** An item as the band shows it. */
 export type Finding = {
   /** What is wrong, in one plain sentence. */
@@ -13,6 +91,12 @@ export type Status = 'open' | 'fixed' | 'refuted' | 'told'
 
 /** One item put to the model, numbered, tracked until it is settled. */
 export type Issue = {
+  resolution?: IssueState['resolution']
+  disclosed?: boolean
+  contested?: boolean
+  binding?: Binding
+  evidenceIds?: string[]
+  checkScope?: string[]
   id: number
   /** When it was raised, epoch ms. */
   at: number
@@ -70,6 +154,7 @@ export type Issue = {
 
 /** This session's items; in $.state, so a hot reload keeps them. */
 export type Track = {
+  schemaVersion?: 2
   nextId: number
   issues: Issue[]
   /** The model's claims already handed to the verifier, so none is checked twice. */

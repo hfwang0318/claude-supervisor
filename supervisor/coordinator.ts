@@ -1,0 +1,87 @@
+import type { Binding, DeliveryStatus, JobStatus } from './contracts'
+
+export const sameBinding = (a: Binding, b: Binding) =>
+  a.sessionId === b.sessionId && a.generationId === b.generationId && a.turnId === b.turnId && a.taskRevision === b.taskRevision && a.workspaceRevision === b.workspaceRevision && a.snapshotId === b.snapshotId
+
+export class Coordinator {
+  private jobs = new Map<string, { status: JobStatus; binding: Binding; controller: AbortController }>()
+  private deliveries = new Map<string, DeliveryStatus>()
+  private calls = 2
+  private tokens = 4000
+  private activeMs = 30000
+  private startedAt: number | null = null
+  private failures = 0
+
+  constructor(public binding: Binding) {}
+
+  start(id: string, now: number) {
+    if (this.jobs.has(id) || [...this.jobs.values()].some(j => j.status === 'running') || this.activeMs <= 0) return null
+    const controller = new AbortController()
+    if (this.jobs.size >= 200) {
+      const first = [...this.jobs].find(([, job]) => job.status !== 'running')?.[0]
+      if (first) this.jobs.delete(first)
+    }
+    this.jobs.set(id, { status: 'running', binding: { ...this.binding }, controller })
+    this.startedAt = now
+    return { signal: controller.signal }
+  }
+
+  finish(id: string, binding: Binding, status: JobStatus, now?: number): boolean {
+    const job = this.jobs.get(id)
+    if (!job || job.status !== 'running' || status === 'queued' || status === 'running') return false
+    if (!sameBinding(binding, this.binding) || !sameBinding(binding, job.binding)) { job.status = 'stale'; return false }
+    job.status = status
+    if (now !== undefined && this.startedAt !== null) this.activeMs = Math.max(0, this.activeMs - Math.max(0, now - this.startedAt))
+    this.startedAt = null
+    return true
+  }
+
+  invalidate(binding: Binding) {
+    for (const job of this.jobs.values()) if (job.status === 'running') { job.status = 'cancelled'; job.controller.abort() }
+    this.jobs.clear()
+    this.deliveries.clear()
+    this.binding = { ...binding }
+    this.calls = 2
+    this.tokens = 4000
+    this.activeMs = 30000
+    this.startedAt = null
+    this.failures = 0
+  }
+
+  async deliver(id: string, binding: Binding, send: () => Promise<DeliveryStatus>): Promise<DeliveryStatus> {
+    const key = `${binding.sessionId}/${binding.generationId}/${binding.turnId}/${id}`
+    const old = this.deliveries.get(key)
+    if (old) return old === 'prepared' ? 'unknown' : old
+    if (!sameBinding(binding, this.binding)) return 'dropped'
+    // Reserve before awaiting: concurrent hooks cannot send the same finding twice.
+    if (this.deliveries.size >= 200) return 'dropped'
+    this.deliveries.set(key, 'prepared')
+    let status: DeliveryStatus
+    try { status = await send() } catch { status = 'unknown' }
+    this.deliveries.set(key, status === 'prepared' ? 'unknown' : status)
+    return this.deliveries.get(key) ?? 'unknown'
+  }
+
+  remainingTime(now: number) { return Math.max(0, this.activeMs - (this.startedAt === null ? 0 : Math.max(0, now - this.startedAt))) }
+
+  changedWorkspace(revision: string, now: number) {
+    if (this.startedAt !== null) this.activeMs = Math.max(0, this.activeMs - Math.max(0, now - this.startedAt))
+    this.startedAt = null
+    for (const job of this.jobs.values()) if (job.status === 'running') { job.status = 'stale'; job.controller.abort() }
+    this.binding = { ...this.binding, workspaceRevision: revision }
+  }
+
+  reserveCall(now: number, tokens: number) {
+    const elapsed = this.startedAt === null ? 0 : Math.max(0, now - this.startedAt)
+    const left = Math.max(0, this.activeMs - elapsed)
+    if (this.calls <= 0 || this.tokens <= 0 || left <= 0 || this.failures >= 2 || tokens < 1) return null
+    this.startedAt ??= now
+    const maxTokens = Math.min(Math.floor(tokens), this.tokens)
+    this.calls--
+    this.tokens -= maxTokens // reserve the provider's upper bound, including retries
+    return { maxTokens, timeoutMs: left }
+  }
+
+  recordUsage(tokens: number) { if (!Number.isFinite(tokens) || tokens < 0 || tokens > 4000) this.failures = 2 }
+  recordFailure() { this.failures++ }
+}

@@ -1,4 +1,5 @@
-import { expect, mock, test } from 'claude-code/testing'
+import { expect, mock } from 'claude-code/testing'
+import { testWithPair as test } from './helpers'
 import type { TestBody } from 'claude-code/testing'
 
 import { claimsOf, factsOf, factsText, isSameItem, noteText, parseTurn, refusal } from '../hooks/prompt'
@@ -34,7 +35,7 @@ const world = (on: Parameters<TestBody>[1], rows: Row[] = CLAIMED) => {
   const state = {
     rows: rows as Row[],
     verifier: [] as string[],
-    commands: {} as Record<string, { exitCode: number; stdout: string }>,
+    commands: { 'python3 -m unittest; echo "exit=$?"': { exitCode: 1, stdout: 'FAILED (failures=1)\nexit=1' } } as Record<string, { exitCode: number; stdout: string }>,
     copyFails: false,
     noSandbox: false,
     refuse: false,
@@ -42,6 +43,8 @@ const world = (on: Parameters<TestBody>[1], rows: Row[] = CLAIMED) => {
     env: {} as Record<string, string>,
     // A model name the endpoint refuses, as an unknown one is.
     refusedModel: '',
+    waitCall: 0,
+    wait: undefined as Promise<void> | undefined,
   }
   const asked: string[] = []
   const models: string[] = []
@@ -51,6 +54,8 @@ const world = (on: Parameters<TestBody>[1], rows: Row[] = CLAIMED) => {
   const submitted: string[] = []
   const toasts: string[] = []
   on('session.messages', () => ({ value: state.rows }) as never)
+  on('session.id', () => ({ value: 'test-session' }))
+  on('session.model', () => ({ value: 'test-worker-v1' }))
   on('session.cwd', () => ({ value: '/p' }) as never)
   on('session.append', (_$, e, next) => {
     if (state.refuse) return { deny: 'refused in test' } as never
@@ -65,14 +70,23 @@ const world = (on: Parameters<TestBody>[1], rows: Row[] = CLAIMED) => {
     return { value: undefined }
   })
   on('command.register', (_$, e) => ({ value: { command: e.name } }))
-  on('model.complete', (_$, e) => {
+  on('model.complete', async (_$, e) => {
     models.push(e.model)
+    if (state.waitCall === models.length) await state.wait
     if (e.model === state.refusedModel) return { value: { isAnswered: false, reason: 'api-error', status: 404, error: 'invalid_request', usage: { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } } } as never
     asked.push(String((e as { prompt: unknown }).prompt))
     return { value: { isAnswered: true, text: state.verifier.shift() ?? '{"checked": [], "items": []}', usage } } as never
   })
   on('process.run', (_$, e) => {
     const [cmd, ...args] = e.argv
+    if (cmd === 'node' && args[0]?.endsWith('supervisor-host.mjs')) {
+      const request = JSON.parse(e.init?.stdin ?? '{}')
+      if (request.action === 'cleanup') { removed.push(request.snapshot.root); return res(0, '{}') }
+      if (request.action === 'capture') {
+        if (state.copyFails || state.noSandbox) return res(1, '{}')
+        return res(0, JSON.stringify({ id: 'snap', root: COPY, binding: { ...request.binding, workspaceRevision: 'manifest-sha256', snapshotId: 'snap' }, sourceManifestHash: 'manifest-sha256', isolation: 'boxed-copy' }))
+      }
+    }
     if (cmd === 'mktemp') return res(0, `${COPY}\n`)
     if (cmd === 'rm') {
       removed.push(args.at(-1) ?? '')
@@ -86,6 +100,14 @@ const world = (on: Parameters<TestBody>[1], rows: Row[] = CLAIMED) => {
     ran.push({ command, cwd: e.init?.cwd, box: cmd === 'sandbox-exec' ? args[1] : undefined })
     const r = state.commands[command] ?? { exitCode: 0, stdout: '' }
     return res(r.exitCode, r.stdout)
+  })
+  on('process.spawn', async function* (_$, e) {
+    const request = JSON.parse(e.input ?? '{}')
+    const command = request.command
+    ran.push({ command, cwd: request.snapshot.root, box: 'verified sandbox' })
+    const r = state.commands[command] ?? { exitCode: 0, stdout: '' }
+    yield { stream: 'stdout', text: JSON.stringify({ ...r, stderr: '', truncated: false, startedAt: Date.UTC(2026, 9, 9, 3, 0), endedAt: Date.UTC(2026, 9, 9, 3, 0), current: true, unchanged: true, cancelled: false }) }
+    return { value: { code: 0, signal: null } }
   })
   on('prompt.submit', (_$, e) => {
     if (e.origin.kind !== 'composer') submitted.push(e.text)
@@ -147,7 +169,8 @@ test('commands stay in the copy; with no copy, only what cannot write runs', asy
 
 test('a false verdict needs the command and the output behind it', async () => {
   const claims = ['All tests pass.']
-  expect(parseTurn('{"run": ["a", "b", "c", "d"]}', claims)).toEqual({ run: ['a', 'b', 'c'] })
+  expect(parseTurn('{"run": ["a", "b", "c", "d"]}', claims)).toBeNull()
+  expect(parseTurn(JSON.stringify({ run: ['a'.repeat(4097)] }), claims)).toBeNull()
   const t = parseTurn(JSON.stringify({ checked: [{ claim: 1, verdict: 'false', what: 'x', command: 'y', saw: '' }] }), claims)
   expect(t !== null && 'checked' in t ? t.checked.length : -1).toBe(0)
   expect(parseTurn('no json', claims)).toBeNull()
@@ -218,40 +241,40 @@ test('a new claim sends the verifier into a copy; what the output contradicts re
   expect(w.asked[0]).toContain('total() should add up every price')
   expect(w.ran.map(r => [r.command, r.cwd])).toEqual([['python3 -m unittest; echo "exit=$?"', COPY]])
   // Under the sandbox: nothing written under the home folder or the real workspace, only in the clone.
-  expect(w.ran[0]?.box).toBe(`(version 1)(allow default)(deny file-write* (subpath "/Users/me") (subpath "/private/Users/me") (subpath "/p") (subpath "/private/p"))(allow file-write* (subpath "${COPY}") (subpath "/private${COPY}"))`)
+  expect(w.ran[0]?.box).toBe('verified sandbox')
   expect(w.removed).toEqual([COPY])
   expect(w.notes.length).toBe(1)
-  expect(w.notes[0]).toContain('you wrote: All tests pass.')
+  expect(w.notes[0]).toContain('source: All tests pass.')
   expect(await issues($)).toContain('#1 [open] One test fails')
   const drawn = await $.ui.mount({ plugin: 'deepseek-supervisor', surface: 'terminal', component: 'AbovePrompt', props: band } as never)
   expect(await drawn.find({ text: /One test fails/ })).toBeDefined()
 })
 
-test('a claim is checked once; an item closes when its recheck passes, whatever the model says', async ($, on) => {
+test('a claim is checked once; an unknown semantic oracle is not certified by a passing recheck', async ($, on) => {
   const w = world(on)
-  w.state.verifier = [FALSE]
+  w.state.verifier = [RUN, FALSE]
   w.state.commands['python3 -m unittest'] = { exitCode: 1, stdout: 'FAILED (failures=1)' }
   await start($)
   await steps($, 3)
   await w.clock.advance(10)
-  expect(w.asked.length).toBe(1)
+  expect(w.asked.length).toBe(2)
 
   w.state.rows = [...CLAIMED, { role: 'assistant', text: '[ysk#1 fixed]', toolUses: [] }]
   await steps($, 3)
   await w.clock.advance(10)
-  expect(w.asked.length).toBe(1)
+  expect(w.asked.length).toBe(2)
   expect(await issues($)).toContain('#1 [open]')
 
   w.state.commands['python3 -m unittest'] = { exitCode: 0, stdout: 'Ran 2 tests\nOK' }
   await steps($, 3)
   await w.clock.advance(10)
-  expect(w.asked.length).toBe(1)
-  expect(await issues($)).toContain('#1 [fixed] One test fails')
+  expect(w.asked.length).toBe(2)
+  expect(await issues($)).toContain('#1 [open] One test fails')
 })
 
 test('a recheck that names the real workspace is refused like any other command', async ($, on) => {
   const w = world(on)
-  w.state.verifier = [FALSE.replace('"recheck":"python3 -m unittest"', '"recheck":"cd /p && python3 -m unittest"')]
+  w.state.verifier = [RUN, FALSE.replace('"recheck":"python3 -m unittest"', '"recheck":"cd /p && python3 -m unittest"')]
   await start($)
   await steps($, 3)
   await w.clock.advance(10)
@@ -268,14 +291,14 @@ test('the claims of a turn\'s answer are checked when it ends; what does not hol
     { role: 'user', text: 'fix total()', toolUses: [] },
     { role: 'assistant', text: '', toolUses: [{ tool_use_id: 'r', tool: 'Bash', input: { command: 'python3 -m unittest' }, text: 'OK' }] },
   ])
-  w.state.verifier = [FALSE.replace('"claim":1', '"claim":2')]
+  w.state.verifier = [RUN, FALSE.replace('"claim":1', '"claim":2')]
   await start($)
   await prompt($, 'fix total()')
   await end($, 'Fixed. The total is now correct: 59.75.')
   await w.clock.advance(10)
   expect(w.asked[0]).toContain('2. The total is now correct: 59.75.')
   expect(w.submitted.length).toBe(1)
-  expect(w.submitted[0]).toContain('you wrote: The total is now correct: 59.75.')
+  expect(w.submitted[0]).toContain('source: The total is now correct: 59.75.')
 
   // The follow-up's own answer may claim again; no second follow-up for the same prompt.
   w.state.verifier = [JSON.stringify({ checked: [{ claim: 1, command: 'python3 -m unittest', saw: 'FAILED', verdict: 'false', what: 'still failing', recheck: 'python3 -m unittest' }], items: [] })]
@@ -293,7 +316,7 @@ test('the claims of a turn\'s answer are checked when it ends; what does not hol
 
 test('the model telling the person settles an item', async ($, on) => {
   const w = world(on)
-  w.state.verifier = [FALSE]
+  w.state.verifier = [RUN, FALSE]
   w.state.commands['python3 -m unittest'] = { exitCode: 1, stdout: 'FAILED' }
   await start($)
   await steps($, 3)
@@ -344,8 +367,8 @@ test('with no copy, the verifier is told so and nothing that writes runs in the 
   await steps($, 3)
   await w.clock.advance(10)
   expect(w.asked[0]).toContain('No copy of the workspace could be made')
-  expect(w.ran.map(r => [r.command, r.cwd])).toEqual([['grep -c def test_x.py', '/p']])
-  expect(w.ran[0]?.box).toBe('(version 1)(allow default)(deny file-write* (subpath "/Users/me") (subpath "/private/Users/me") (subpath "/p") (subpath "/private/p"))')
+  expect(w.ran).toEqual([])
+  expect(w.removed).toEqual([])
 })
 
 test('with no sandbox to run under (not macOS), no clone is made and only read-only commands run', async ($, on) => {
@@ -356,11 +379,11 @@ test('with no sandbox to run under (not macOS), no clone is made and only read-o
   await steps($, 3)
   await w.clock.advance(10)
   expect(w.asked[0]).toContain('No copy of the workspace could be made')
-  expect(w.ran.map(r => [r.command, r.cwd, r.box])).toEqual([['grep -c def test_x.py', '/p', undefined]])
+  expect(w.ran).toEqual([])
   expect(w.removed).toEqual([])
 })
 
-test('during the work the verifier runs on every new claim, with no cap per prompt', async ($, on) => {
+test('during the work model calls are capped until a new user prompt', async ($, on) => {
   const w = world(on)
   await start($)
   // A session grows: each check reads the messages added since the last. 0.8.0
@@ -371,7 +394,12 @@ test('during the work the verifier runs on every new claim, with no cap per prom
     await steps($, 3)
     await w.clock.advance(10)
   }
-  expect(w.asked.length).toBe(12)
+  expect(w.asked.length).toBe(2)
+  await prompt($, 'next task')
+  w.state.rows.push({ role: 'assistant', text: 'The result is correct.', toolUses: [] })
+  await steps($, 3)
+  await w.clock.advance(10)
+  expect(w.asked.length).toBe(3)
 })
 
 test('another session\'s message starts a new prompt: the turn may be kept going again', async ($, on) => {
@@ -404,7 +432,7 @@ test('on Anthropic\'s own endpoint it stays idle unless switched on', async ($, 
 test('a note the session refuses is still in the band, and the person is told', async ($, on) => {
   const w = world(on)
   w.state.refuse = true
-  w.state.verifier = [FALSE]
+  w.state.verifier = [RUN, FALSE]
   await start($)
   await steps($, 3)
   await w.clock.advance(10)
@@ -558,18 +586,19 @@ test('an answer that owns up to the failure, or a turn of circles alone, ends as
   expect((await stop($, 'I could not fix it: test_total still fails with 47.25 != 59.75.')).block).toBeUndefined()
 })
 
-test('where nobody watches (claude -p), the verifier runs before the turn ends and what it finds keeps the turn going', async ($, on) => {
+test('where nobody watches (claude -p), the verifier runs before the turn ends and hypotheses do not keep the turn going', async ($, on) => {
   const w = world(on, [{ role: 'user', text: 'fix total()', toolUses: [] }, { role: 'assistant', text: '', toolUses: [{ tool_use_id: 'r', tool: 'Bash', input: { command: 'python3 -m unittest' }, text: 'OK' }] }])
-  w.state.verifier = [FALSE.replace('"claim":1', '"claim":2')]
+  w.state.verifier = [RUN, FALSE.replace('"claim":1', '"claim":2')]
   await $.session.start({ cwd: '/p', surface: 'terminal', isInteractive: false })
   await prompt($, 'fix total()')
   const r = await stop($, 'Fixed. The total is now correct: 59.75.')
-  expect(w.asked.length).toBe(1)
-  expect(r.block).toContain('One test fails: total() skips the first price')
+  expect(w.asked.length).toBe(2)
+  expect(r.block).toBeUndefined()
+  expect(await issues($)).toContain('resolution=unknown')
   // The turn's end does not run it a second time.
   await end($, 'Fixed. The total is now correct: 59.75.')
   await w.clock.advance(10)
-  expect(w.asked.length).toBe(1)
+  expect(w.asked.length).toBe(2)
   expect(w.submitted.length).toBe(0)
 })
 
@@ -589,8 +618,8 @@ test('in a copy, a defect in the change is raised only when the command run ther
   await w.clock.advance(10)
   expect(w.asked[0]).toContain('## What the assistant changed this turn')
   expect(w.asked[0]).toContain(`+     ${AVG}`)
-  expect(w.submitted[0]).toContain('A reviewer found a defect in your change: average([]) divides by zero')
-  expect(w.submitted[0]).toContain('saw: Traceback (most recent call last): ZeroDivisionError: division by zero')
+  expect(w.submitted[0]).toContain('Hypothesis requiring main judgment: average([]) divides by zero')
+  expect(w.submitted[0]).toContain('observed: Traceback (most recent call last): ZeroDivisionError: division by zero')
   // It closes when the probe, rerun in a copy, no longer prints the error.
   expect(await issues($)).toContain('[open]')
 })
@@ -618,7 +647,7 @@ test('a defect in a line the turn did not change is not this turn\'s', async ($,
   expect(w.submitted.length).toBe(0)
 })
 
-test('with no copy, a suspected defect goes to the model to run; its own run settles it either way', async ($, on) => {
+test('with no copy, a suspected defect goes to the model to run; output disappearance does not settle it', async ($, on) => {
   const w = world(on, changed())
   w.state.noSandbox = true
   w.state.verifier = [DEFECT]
@@ -626,9 +655,9 @@ test('with no copy, a suspected defect goes to the model to run; its own run set
   await prompt($, 'add average(prices); carts can be empty')
   await end($, 'Added average().')
   await w.clock.advance(10)
-  expect(w.submitted[0]).toContain('A reviewer suspects a defect in your change')
-  expect(w.submitted[0]).toContain(`run: ${PROBE}`)
-  expect(w.submitted[0]).toContain('if its output holds `ZeroDivisionError`, the defect is real')
+  expect(w.submitted[0]).toContain('Hypothesis requiring main judgment')
+  expect(w.submitted[0]).toContain(`command: ${PROBE}`)
+  expect(w.submitted[0]).toContain('scope/oracle not independently validated')
 
   // The model runs it and sees the error: the defect is real, and stays open.
   const run = (id: string, text: string) => ({ role: 'assistant', text: '', toolUses: [{ tool_use_id: id, tool: 'Bash', input: { command: PROBE }, text, ...(text.includes('Error') ? { isError: true as const } : {}) }] })
@@ -638,10 +667,10 @@ test('with no copy, a suspected defect goes to the model to run; its own run set
   // After a fix, the same probe prints 0: fixed, by the record.
   w.state.rows = [...w.state.rows, editRow('f', '/p/shop.py', AVG, 'return sum(prices) / len(prices) if prices else 0'), run('p2', '0')]
   await batch($)
-  expect(await issues($)).toContain('[fixed]')
+  expect(await issues($)).toContain('resolution=unknown')
 })
 
-test('a suspicion the model\'s own run does not bear out is refuted by the record', async ($, on) => {
+test('a suspicion the model\'s own run does not bear out stays unknown without an independent oracle', async ($, on) => {
   const w = world(on, changed())
   w.state.noSandbox = true
   w.state.verifier = [DEFECT]
@@ -652,25 +681,22 @@ test('a suspicion the model\'s own run does not bear out is refuted by the recor
   w.state.rows = [...w.state.rows, { role: 'assistant', text: '', toolUses: [{ tool_use_id: 'p', tool: 'Bash', input: { command: PROBE }, text: '0' }] }]
   await batch($)
   const list = await issues($)
-  expect(list).toContain('[refuted]')
-  expect(list).toContain('the reviewer was wrong')
+  expect(list).toContain('resolution=unknown')
+  expect(list).not.toContain('[fixed]')
 })
 
-test('the verifier runs on the stronger model unless told otherwise, and falls back when the endpoint refuses it', async ($, on) => {
+test('a refused side model disables semantic calls without a stronger fallback', async ($, on) => {
   const w = world(on)
-  w.state.refusedModel = 'opus'
-  w.state.verifier = [FALSE]
+  w.state.refusedModel = 'test-side-v1'
   await start($)
   await steps($, 3)
   await w.clock.advance(10)
-  expect(w.models.slice(0, 2)).toEqual(['opus', 'sonnet'])
-  expect(w.asked.length).toBe(1)
-  expect(w.notes.length).toBe(1)
+  expect(w.models).toEqual(['test-side-v1'])
 })
 
 test('the verifier\'s model is the person\'s to choose', { options: { verifier_model: 'deepseek-v4-pro' } }, async ($, on) => {
   const w = world(on)
-  w.state.verifier = [FALSE]
+  w.state.verifier = [RUN, FALSE]
   await start($)
   await steps($, 3)
   await w.clock.advance(10)
@@ -716,7 +742,7 @@ test('live: a claim about the machine does not keep a turn going, and a claim sa
   expect(w.asked[0]).not.toContain('swapped')
   expect(w.asked[0]).toContain('Python 3.13 is installed here')
   // It is an item, but not one that keeps the turn going.
-  expect(await issues($)).toContain('pytest is installed as a uv tool')
+  expect(await issues($)).not.toContain('pytest is installed as a uv tool')
   expect(r.block).toBeUndefined()
 })
 
@@ -843,4 +869,44 @@ test('live: words the model refuted a rule on are not raised again when it quote
   await prompt($, '再完整说一遍')
   w.state.rows = [...w.state.rows, { role: 'user', text: '再完整说一遍', toolUses: [] }, { role: 'assistant', text: row, toolUses: [] }]
   expect((await stop($, row)).block).toBeUndefined()
+})
+
+test('an unverified pair runs deterministic rules without any model call', { options: { model_relation: 'unverified' } }, async ($, on) => {
+  const w = world(on)
+  await start($)
+  await steps($, 3)
+  await w.clock.advance(10)
+  expect(w.models.length).toBe(0)
+})
+
+for (const action of ['new-prompt', 'off', 'reload'] as const) {
+  test(`a late side reply after ${action} cannot create a card or send feedback`, async ($, on) => {
+    const w = world(on, TOTAL_CLAIMED)
+    let release: (() => void) | undefined
+    w.state.waitCall = 2
+    w.state.wait = new Promise<void>(r => { release = r })
+    w.state.verifier = [RUN, FALSE.replace('One test fails: total() skips the first price', 'old finding')]
+    await start($)
+    await steps($, 3)
+    await w.clock.advance(10)
+    if (action === 'new-prompt') await prompt($, 'new requirement')
+    if (action === 'off') await $.command.run({ command: 'deepseek-supervisor', args: 'off' } as never)
+    if (action === 'reload') await start($)
+    release?.()
+    await w.clock.advance(10)
+    expect(w.notes.length).toBe(0)
+    expect(w.submitted.length).toBe(0)
+    expect(await issues($)).not.toContain('old finding')
+  })
+}
+
+test('shadow records observations but creates no model finding or feedback', { options: { execution_mode: 'shadow' } }, async ($, on) => {
+  const w = world(on)
+  w.state.verifier = [RUN, FALSE]
+  await start($)
+  await steps($, 3)
+  await w.clock.advance(10)
+  expect(w.ran.length).toBe(1)
+  expect(w.notes.length).toBe(0)
+  expect(await issues($)).not.toContain('One test fails')
 })

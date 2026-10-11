@@ -1,0 +1,6 @@
+{
+  "name": "claude-supervisor-checks",
+  "private": true,
+  "scripts": { "check": "node scripts/check.mjs" },
+  "devDependencies": { "typescript": "5.9.3" }
+}

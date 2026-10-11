@@ -17,12 +17,9 @@ import type { Issue } from '../types'
 
 // The verifier's model when the configured one is refused: on a third-party endpoint
 // every alias maps to a model of its own (on DeepSeek's, `sonnet` to its Flash model).
-export const MODEL = 'sonnet'
 export const ROUNDS = 6
 export const COMMANDS_PER_ROUND = 3
 export const CLAIMS_CHECKED = 3
-export const COMMAND_MS = 60_000
-export const COPY_MS = 60_000
 const OUTPUT_CHARS = 2500
 const CLAIM_CHARS = 240
 const ASKED_CHARS = 6000
@@ -354,16 +351,23 @@ const rows = (x: unknown) => (Array.isArray(x) ? x.filter((y): y is Record<strin
 
 export type Turn = { run: string[] } | { checked: Probe[]; items: { id: number; status: 'fixed' | 'open'; saw: string }[]; defects: Defect[] } | null
 
+export const bytesOf = (text: string) => [...text].reduce((n, c) => { const code = c.codePointAt(0) ?? 0; return n + (code <= 127 ? 1 : code <= 2047 ? 2 : code <= 65535 ? 3 : 4) }, 0)
+
 export const parseTurn = (text: string, claims: readonly string[]): Turn => {
+  if (bytesOf(text) > 65536) return null
   const raw = objectIn(text)
   if (raw === null) return null
-  if (Array.isArray(raw.run)) return { run: raw.run.filter((c): c is string => typeof c === 'string' && c.trim() !== '').slice(0, COMMANDS_PER_ROUND) }
+  if (Array.isArray(raw.run)) {
+    if (raw.run.length > COMMANDS_PER_ROUND || raw.run.some(c => typeof c !== 'string' || !c.trim() || bytesOf(c) > 4096)) return null
+    return { run: raw.run as string[] }
+  }
   if (!Array.isArray(raw.checked)) return null
+  if (rows(raw.checked).length > CLAIMS_CHECKED || [...rows(raw.checked), ...rows(raw.defects), ...rows(raw.items)].some(r => ['command', 'recheck'].some(k => typeof r[k] === 'string' && bytesOf(r[k] as string) > 4096))) return null
   const checked = rows(raw.checked)
     .map(x => {
       const n = Number(x.claim)
       const verdict = x.verdict === 'holds' || x.verdict === 'false' ? x.verdict : 'unclear'
-      return { claim: claims[n - 1] ?? '', command: str(x, 'command'), saw: str(x, 'saw'), verdict, what: str(x, 'what'), recheck: str(x, 'recheck') } as Probe
+      return { claim: claims[n - 1] ?? '', command: str(x, 'command', 4096), saw: str(x, 'saw'), verdict, what: str(x, 'what'), recheck: str(x, 'recheck', 4096) } as Probe
     })
     // A false verdict with no output behind it is an opinion: not kept.
     .filter(p => p.claim !== '' && (p.verdict !== 'false' || (p.saw !== '' && p.command !== '' && p.what !== '')))
@@ -374,7 +378,7 @@ export const parseTurn = (text: string, claims: readonly string[]): Turn => {
     .filter(x => Number.isInteger(x.id))
   // A defect names its line, its input and the output that shows it, or it is an opinion.
   const defects = rows(raw.defects)
-    .map(x => ({ line: str(x, 'line'), what: str(x, 'what'), command: str(x, 'command'), expect: str(x, 'expect', 200), saw: str(x, 'saw') }))
+    .map(x => ({ line: str(x, 'line'), what: str(x, 'what'), command: str(x, 'command', 4096), expect: str(x, 'expect', 200), saw: str(x, 'saw') }))
     .filter(d => d.line !== '' && d.what !== '' && d.command !== '' && d.expect !== '')
     .slice(0, 1)
   return { checked, items, defects }
@@ -397,16 +401,24 @@ const CLOSES_BY_TELLING = (id: number) => `   closes: when you tell the person, 
 
 export const itemText = (raw: Issue) => {
   const i = { ...raw, what: sanitize(raw.what), quote: sanitize(raw.quote), probe: sanitize(raw.probe), saw: raw.saw === undefined ? undefined : sanitize(raw.saw) }
+  if (i.resolution === 'unknown') return [
+    `#${i.id} Hypothesis requiring main judgment: ${i.what}`,
+    `   source: ${i.quote}`,
+    `   command: ${i.probe}`,
+    `   observed: ${i.saw || 'not independently executed'}`,
+    '   scope/oracle not independently validated; no defect or repair is certified.',
+    '   confirm the requirement and use a valid assertion plus the relevant regression checks before changing the work.',
+  ].join('\n')
   if (i.defect !== undefined) {
     const expect = sanitize(i.defect.expect)
     return i.defect.demonstrated
-      ? [`#${i.id} A reviewer found a defect in your change: ${i.what}`, `   changed line: ${i.quote}`, `   ran: ${i.probe}`, `   saw: ${i.saw ?? ''}`, `   closes: when \`${i.probe}\` no longer prints \`${expect}\``].join('\n')
+      ? [`#${i.id} A reviewer found a defect in your change: ${i.what}`, `   changed line: ${i.quote}`, `   ran: ${i.probe}`, `   saw: ${i.saw ?? ''}`, `   closes: when \`${i.probe}\` passes its sourced assertion and relevant regressions; disappearance alone is insufficient for \`${expect}\``].join('\n')
       : [
           `#${i.id} A reviewer suspects a defect in your change: ${i.what}`,
           `   changed line: ${i.quote}`,
           `   run: ${i.probe}`,
-          `   if its output holds \`${expect}\`, the defect is real: fix it. If it does not, the reviewer was wrong: say so in one line, \`[ysk#${i.id} refuted: what it printed]\`.`,
-          `   closes: when \`${i.probe}\` runs without printing \`${expect}\``,
+          `   if its output holds \`${expect}\`, check whether the input and assertion match the requirement before deciding on a fix. If it does not, the reviewer was wrong: say so in one line, \`[ysk#${i.id} refuted: what it printed]\`.`,
+          `   closes: when \`${i.probe}\` passes its sourced assertion and relevant regressions; disappearance alone is insufficient for \`${expect}\``,
         ].join('\n')
   }
   if (i.from === 'verify')
@@ -448,7 +460,7 @@ export const noteText = (issues: readonly Issue[], o: { final?: boolean } = {}) 
     ...issues.map(itemText),
     '',
     'For each: fix it your own way, or tell the person plainly and write `[ysk#<id> told]` in that reply.',
-    'An item closes on evidence, not on your word: a check that passes after your last edit, the command it names printing what it should, or the person being told.',
+    'Repair requires matching execution evidence. Telling the person marks disclosed; refuted marks contested. Neither certifies fixed.',
     'If the check is wrong (the claim depends on something outside the workspace, or the item misreads what happened), say so to the person: `[ysk#<id> refuted: <why>]`.',
     ...(o.final === true ? [] : ['Keep working on everything else.']),
     // The note arrives as a user-role row and carries command output from a project

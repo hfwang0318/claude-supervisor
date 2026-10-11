@@ -2,12 +2,17 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, PluginOptions, Register } from 'claude-code'
 
 import type { Issue, Reading, Track } from '../types'
+import type { Binding, ModelPair, ExecutionEvidence } from '../supervisor/contracts'
+import { validateObservation, normalizeTrack } from '../supervisor/ledger'
+import { captureSnapshot } from '../supervisor/workspace'
+import { Coordinator, sameBinding } from '../supervisor/coordinator'
+import { authorizeModelPair, createHost } from './host'
 import { registerBand } from './band'
 import { HISTORY as READINGS_KEPT, readingOf } from './weather'
 import type { Finding, Kind } from './evidence'
 import { changesOf, contradictions, evidenceOf, isCheckClaim, isCheckCommand, isCheckKind, isClaim, keyOf, recordFindings, settledBy, skipped, supports, unreported } from './evidence'
 import type { Facts, Mode, VerifyInput, VerifyResult } from './prompt'
-import { base, claimsOf, clip, COMMAND_MS, COPY_MS, factsOf, isSameItem, MODEL, noteText, parseTurn, probeRefusal, redact, refusal, ROUNDS, shown, squash, verifyPrompt } from './prompt'
+import { base, bytesOf, claimsOf, clip,  factsOf, isSameItem, noteText, parseTurn, probeRefusal, redact, refusal, ROUNDS, shown, squash, verifyPrompt } from './prompt'
 
 // Claude Code's own "You should know" is hidden whenever ANTHROPIC_BASE_URL points
 // away from Anthropic (observed on 2.1.290: that one variable alone), so it never
@@ -22,15 +27,12 @@ import { base, claimsOf, clip, COMMAND_MS, COPY_MS, factsOf, isSameItem, MODEL, 
 //   over a failed or stale run, a failure left unsaid); what does not hold keeps the
 //   turn going, at most twice per prompt of the person's, the second time only with
 //   what the first did not say;
-// - a verifier, a second model (by default the endpoint's stronger one), checks the
+// - an explicitly configured side model no stronger than the worker, checks the
 //   model's claims by running commands in a throwaway copy, and reads the turn's
 //   change for a defect it can show with a command (see prompt.ts).
 
-// The verifier looks at most once every MIN_GAP finished steps of the main loop,
-// and only when the model has claimed something new (each check up to ROUNDS
-// calls, more with retries). No cap per prompt: 0.8.0 had 8, and a session fed by
-// another session's messages (ccds) never saw a prompt of the person's to reset it,
-// so after 8 checks the work went unchecked for the rest of the session.
+// Cheap record rules continue at every batch; semantic checks are opt-in and
+// share a per-prompt 2-call, 4k output-token, 30s activity budget.
 const MIN_GAP = 3
 const CLAIMS_PER_RUN = 12
 const SEEN_KEPT = 200
@@ -44,8 +46,6 @@ const FOLLOW_UPS_PER_PROMPT = 1
 const CLEAR_AFTER_PROMPTS = 2
 // How long the verifier may take: where a turn's end waits on it, a minute; elsewhere,
 // off anyone's path, three.
-const WAITED_MS = 60_000
-const FREE_MS = 180_000
 const ISSUES_KEPT = 40
 const HISTORY = 50
 
@@ -55,15 +55,19 @@ const cards = atom({ plugin: 'deepseek-supervisor', key: 'cards' } as const, nul
 const isHidden = atom({ plugin: 'deepseek-supervisor', key: 'isHidden' } as const, false)
 // The numbered items. In $.state, not a module variable, so a hot reload neither
 // forgets what the model was told nor reuses an id.
-const EMPTY: Track = { nextId: 1, issues: [], seen: [], runs: 0 }
+const EMPTY: Track = { schemaVersion: 2, nextId: 1, issues: [], seen: [], runs: 0 }
 const track = atom({ plugin: 'deepseek-supervisor', key: 'track' } as const, EMPTY)
 
-type Config = { verifierModel: string; reviewChanges: boolean }
+type Config = { pair: ModelPair; reviewChanges: boolean; executionMode: 'off' | 'shadow' | 'enabled' }
 const configOf = (options: PluginOptions | undefined): Config => ({
-  // On DeepSeek's endpoint `opus` names its Pro model and `sonnet` its Flash one:
-  // the work is checked by the stronger model unless the person says otherwise.
-  verifierModel: typeof options?.verifier_model === 'string' && options.verifier_model.trim() !== '' ? options.verifier_model.trim() : 'opus',
+  pair: {
+    workerId: typeof options?.worker_model === 'string' ? options.worker_model.trim() : '',
+    sideId: typeof options?.verifier_model === 'string' ? options.verifier_model.trim() : '',
+    relation: options?.model_relation === 'same' || options?.model_relation === 'side-no-stronger' ? options.model_relation : 'unverified',
+    capabilityProfileId: typeof options?.capability_profile === 'string' ? options.capability_profile.trim() : '',
+  },
   reviewChanges: options?.review_changes !== false,
+  executionMode: options?.execution_mode === 'enabled' || options?.execution_mode === 'shadow' ? options.execution_mode : 'off',
 })
 
 const say = ($: EngineInterface, line: string) => $.ui.log(`deepseek-supervisor: ${line}`, { to: 'debug' })
@@ -92,27 +96,22 @@ const isOn = async ($: EngineInterface) => {
   return setting === 'auto' ? !(await onAnthropic($)) : setting === 'on'
 }
 
-let cfg: Config = configOf(undefined)
-let steps = 0
-let isBusy = false
-let promptsSinceCards = 0
-let blocks = 0
-// The items a hold this prompt already put to the model: a second hold says only what is new.
-let held = new Set<number>()
-let followUps = 0
-// When the person's last prompt came: the items raised since are this turn's.
-let turnFrom = 0
-// A session nobody watches (`claude -p`, an SDK host) ends when its turn does, so a
-// check that lands after the turn would land nowhere: there the verifier runs before
-// the turn may end, and keeps it going if what it finds does not hold.
-let isInteractive = true
-// The verifier's model, once the configured one was refused: the endpoint's default.
-let fellBack = false
-// The person's last prompt, as they typed it: what the claims are checked against.
-let asked = ''
-// This session's count, for the status line; a hot reload starts it over.
-let told = 0
-let last = ''
+type Runtime = {
+  steps: number; isBusy: boolean; promptsSinceCards: number; blocks: number
+  held: Set<number>; followUps: number; turnFrom: number; isInteractive: boolean
+  asked: string; told: number; last: string; coordinator: Coordinator
+  jobNumber: number; modelDisabled: boolean; cfg: Config; stateUsable: boolean; journal: Promise<unknown>; recordEnd: number
+}
+const sessions = new Map<string, Runtime>()
+const runtimeOf = async ($: EngineInterface): Promise<Runtime> => {
+  const sessionId = await $.session.id().catch(() => '')
+  let s = sessions.get(sessionId)
+  if (s) return s
+  const binding: Binding = { sessionId, generationId: String(await $.clock.now()), turnId: 'initial', taskRevision: 0, workspaceRevision: 'unknown', snapshotId: 'unknown' }
+  s = { steps: 0, isBusy: false, promptsSinceCards: 0, blocks: 0, held: new Set(), followUps: 0, turnFrom: 0, isInteractive: true, asked: '', told: 0, last: '', coordinator: new Coordinator(binding), jobNumber: 0, modelDisabled: false, cfg: configOf(undefined), stateUsable: true, journal: Promise.resolve(), recordEnd: 0 }
+  sessions.set(sessionId, s)
+  return s
+}
 
 const hhmm = (ms: number) => {
   const d = new Date(ms)
@@ -120,14 +119,17 @@ const hhmm = (ms: number) => {
 }
 
 const show = async ($: EngineInterface) => {
+  const s = await runtimeOf($)
   if (!(await isOn($)))
     return $.ui.status(
       (await settingOf($)) === 'off'
         ? 'deepseek-supervisor is off (/deepseek-supervisor on)'
         : 'deepseek-supervisor idle: Anthropic endpoint, where the built-in "You should know" runs (/deepseek-supervisor on to force)',
     )
+  if (!s.stateUsable) return $.ui.status('deepseek-supervisor unknown state schema; supervision disabled; original state preserved')
   const open = (await read($, track)).issues.filter(i => i.status === 'open').length
-  $.ui.status(`deepseek-supervisor checking · ${told} noted` + (open === 0 ? '' : ` (${open} open)`) + (last === '' ? '' : ` · last: ${last}`))
+  const auth = authorizeModelPair(s.cfg.pair, await $.session.model().catch(() => ''))
+  $.ui.status(`deepseek-supervisor ${auth.allowed && !s.modelDisabled ? 'checking' : 'rules-only'} · ${s.told} noted` + (open === 0 ? '' : ` (${open} open)`) + (s.last === '' ? '' : ` · last: ${s.last}`))
 }
 
 // The context window's fill, for the line above the prompt (weather.tsx, drawn in
@@ -140,9 +142,15 @@ const takeReading = async ($: EngineInterface) => {
 }
 
 const remember = async ($: EngineInterface, entry: Record<string, unknown>) => {
-  const old = await $.store.get('history').catch(() => [])
-  const list = Array.isArray(old) ? old : []
-  await $.store.set('history', [...list, entry].slice(-HISTORY)).catch(() => undefined)
+  const s = await runtimeOf($)
+  const write = async () => {
+    const old = await $.store.get('history').catch(() => [])
+    const list = Array.isArray(old) ? old : []
+    await $.store.set('history', [...list, { schemaVersion: 2, ...entry }].slice(-HISTORY))
+  }
+  const result = s.journal.then(write, write)
+  s.journal = result.catch(() => undefined)
+  await result.catch(err => say($, `diagnostic persistence failed: ${redact(String(err))}`))
 }
 
 // The verifier's loop: the model proposes commands, they run in a copy, their
@@ -150,53 +158,43 @@ const remember = async ($: EngineInterface, entry: Record<string, unknown>) => {
 // command passes through here (where it runs, what it may touch, what it cost),
 // nothing lands in the conversation but the note, and every wait is a `$` call,
 // so a hook that waits on it keeps its 10 s budget.
-const runIn = async ($: EngineInterface, command: string, cwd: string, box: string | undefined) => {
-  const start = await $.clock.now()
+const service = async ($: EngineInterface, request: Record<string, unknown>, deadlineMs: number, signal?: AbortSignal): Promise<unknown> => {
+  const s = await runtimeOf($)
+  if (signal?.aborted && request.action !== 'cleanup') throw Error('cancelled job')
+  const timeoutMs = Math.max(1, deadlineMs - await $.clock.now())
+  // Capture/manifest/cleanup contain no project execution and are time bounded.
+  if (request.action !== 'execute') {
+    const r = await $.process.run(['node', `${$.plugin.root}/scripts/supervisor-host.mjs`], { stdin: JSON.stringify(request), timeoutMs })
+    if (r.exitCode !== 0 || r.isStdoutTruncated) throw Error('snapshot service unavailable')
+    return JSON.parse(r.stdout)
+  }
+  const stream = $.process.spawn({ argv: ['node', `${$.plugin.root}/scripts/supervisor-host.mjs`], input: JSON.stringify(request) })
+  let output = ''
+  let stop: (() => void) | undefined
+  const stopped = new Promise<null>(resolve => { stop = () => resolve(null); signal?.addEventListener('abort', stop, { once: true }) })
   try {
-    const argv = box === undefined ? ['bash', '-c', command] : ['sandbox-exec', '-p', box, 'bash', '-c', command]
-    const r = await $.process.run(argv, { cwd, timeoutMs: COMMAND_MS })
-    // Its output goes to the verifier's endpoint, a third party: credentials are cut out first.
-    return { exitCode: r.exitCode as number | null, out: redact(`${r.stdout}${r.stderr === '' ? '' : `\n[stderr]\n${r.stderr}`}`), ms: (await $.clock.now()) - start }
-  } catch (err) {
-    return { exitCode: null, out: `[did not finish: ${String(err)}]`, ms: (await $.clock.now()) - start }
+    while (true) {
+      const chunk = await Promise.race([stream.next(), stopped])
+      if (chunk === null) throw Error('cancelled job')
+      if (chunk.done) break
+      if (chunk.value.stream === 'stdout') output += chunk.value.text
+      if (output.length > 4 * 1024 * 1024) throw Error('service output limit')
+    }
+    return JSON.parse(output)
+  } finally {
+    if (stop) signal?.removeEventListener('abort', stop)
+    await stream.return({ code: null, signal: 'SIGTERM' })
   }
 }
 
-// The clone keeps a command's relative paths off the real files; it does not
-// keep off a script that writes to an absolute path (its own project's, or one
-// under the home folder). So every command runs under the macOS sandbox: nothing
-// may be written under the home folder or the real workspace, and in a clone,
-// only the clone may be. With no sandbox (not macOS), no clone is used and only
-// read-only commands run.
-const SANDBOX = '/usr/bin/sandbox-exec'
-const boxOf = (denied: readonly string[], writable: readonly string[]) =>
-  [
-    '(version 1)(allow default)',
-    `(deny file-write* ${denied.map(d => `(subpath ${JSON.stringify(d)})`).join(' ')})`,
-    ...(writable.length === 0 ? [] : [`(allow file-write* ${writable.map(w => `(subpath ${JSON.stringify(w)})`).join(' ')})`]),
-  ].join('')
-
-// A clone of the workspace (on APFS no data is copied), or nothing. The home
-// folder or the root is never copied; a copy that takes too long is given up.
-const copyOf = async ($: EngineInterface, real: string): Promise<string | undefined> => {
-  const home = (await $.process.run(['bash', '-c', 'printf %s "$HOME"']).catch(() => undefined))?.stdout ?? ''
-  if (real === '' || real === '/' || real === home) return undefined
-  const made = await $.process.run(['mktemp', '-d', '-t', 'dss-verify']).catch(() => undefined)
-  const dir = made?.exitCode === 0 ? made.stdout.trim() : ''
-  if (dir === '') return undefined
-  // `-c` clones on APFS; elsewhere (Linux), a plain recursive copy.
-  const cloned = await $.process
-    .run(['bash', '-c', 'cp -cR "$0/." "$1" 2>/dev/null || cp -R "$0/." "$1"', real, dir], { timeoutMs: COPY_MS })
-    .catch(() => undefined)
-  if (cloned?.exitCode === 0) return dir
-  await drop($, dir)
-  return undefined
-}
-
-const drop = async ($: EngineInterface, dir: string) => {
-  // Only what mktemp made for this plugin.
-  if (/\/dss-verify\.[A-Za-z0-9]+$/.test(dir)) await $.process.run(['rm', '-rf', dir]).catch(() => undefined)
-}
+const hostOf = ($: EngineInterface, signal?: AbortSignal) => createHost({
+  now: () => $.clock.now(), cwd: () => $.session.cwd(),
+  identity: async () => ({ sessionId: await $.session.id(), workerId: await $.session.model() }),
+  service: (request, deadlineMs) => service($, request, deadlineMs, signal),
+  persist: (key, value) => $.store.set(key, value),
+  deliver: async (_id, text) => { const r = await $.session.append({ message: { type: 'user', content: [{ type: 'text', text }] } }); return r.deny ? 'dropped' : 'delivered' },
+  sanitize: redact,
+})
 
 const addCost = (cost: VerifyResult['cost'], u: { cache_read_input_tokens?: number | null; input_tokens: number; output_tokens: number }) => {
   cost.cached += u.cache_read_input_tokens ?? 0
@@ -205,28 +203,28 @@ const addCost = (cost: VerifyResult['cost'], u: { cache_read_input_tokens?: numb
   cost.calls += 1
 }
 
-// One call to the verifier's model. The configured one first; if the endpoint
-// refuses it (an unknown name, a model this key may not use), the default alias,
-// for the rest of the session.
-const ask = async ($: EngineInterface, prompt: string, timeoutMs = 180_000) => {
-  const model = fellBack ? MODEL : cfg.verifierModel
-  const call = (m: string) => $.model.complete({ model: m, prompt, maxTokens: 16000, timeoutMs })
-  const reply = await call(model).catch((err: unknown) => {
-    say($, `verifier model ${model} refused: ${err}`)
+// Use only the authorized pair. Provider refusal never selects another model.
+const ask = async ($: EngineInterface, prompt: string, timeoutMs = 30000, jobSignal?: AbortSignal) => {
+  const s = await runtimeOf($)
+  const authorization = authorizeModelPair(s.cfg.pair, await $.session.model().catch(() => ''))
+  if (!authorization.allowed || s.modelDisabled || jobSignal?.aborted || bytesOf(prompt) > 65536) return undefined
+  const budget = s.coordinator.reserveCall(await $.clock.now(), 2000)
+  if (!budget) return undefined
+  const callBinding = { ...s.coordinator.binding }
+  const reply = await $.model.complete({ model: s.cfg.pair.sideId, prompt: redact(prompt), maxTokens: budget.maxTokens, timeoutMs: Math.min(timeoutMs, budget.timeoutMs) }, jobSignal ? { signal: jobSignal } : undefined).catch((err: unknown) => {
+    say($, `configured side model unavailable: ${String(err)}`)
     return undefined
   })
-  const refused = reply === undefined || (!reply.isAnswered && reply.reason === 'api-error' && (reply.status === 400 || reply.status === 404 || reply.error === 'invalid_request'))
-  if (!refused || model === MODEL) return reply ?? (await call(MODEL))
-  say($, `verifier model ${model} unavailable here; using ${MODEL}`)
-  fellBack = true
-  return call(MODEL)
+  await remember($, { schemaVersion: 1, kind: 'side-call', callId: `${callBinding.sessionId}/${callBinding.generationId}/${callBinding.turnId}/${++s.jobNumber}`, modelId: s.cfg.pair.sideId, binding: callBinding, usage: reply?.usage ?? null, result: reply?.isAnswered ? 'answered' : 'unknown' })
+  if (!sameBinding(callBinding, s.coordinator.binding)) return reply
+  if (!reply || !reply.isAnswered) { s.coordinator.recordFailure(); s.modelDisabled = true }
+  if (reply) s.coordinator.recordUsage(reply.usage.output_tokens)
+  return reply
 }
+const currentSignals = new WeakMap<Runtime, AbortSignal>()
 
 // What a demonstrated defect's recheck is: exit 0 exactly when the probe's output no
 // longer holds the text that showed the defect.
-const quoted = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`
-const absentFrom = (probe: string, expect: string) => `! ( ${probe} ) 2>&1 | grep -qF -- ${quoted(expect)}`
-
 // A change, told apart from another by its length and an FNV-1a hash: what is kept to
 // know the verifier read it, without keeping the change.
 const signatureOfChange = (s: string) => {
@@ -238,21 +236,27 @@ const signatureOfChange = (s: string) => {
 /**
  * Checks claims by running commands, and reads the turn's change for a defect a
  * command can show. Open items that carry a recheck are settled by code first:
- * exit 0 is fixed, whatever anyone says. Never rejects.
+ * matching observations are preserved; generated semantic oracles stay unknown.
  */
 const verify = async ($: EngineInterface, input: VerifyInput): Promise<VerifyResult> => {
-  const hasBox = (await $.process.run(['test', '-x', SANDBOX]).catch(() => undefined))?.exitCode === 0
-  const home = (await $.process.run(['bash', '-c', 'printf %s "$HOME"']).catch(() => undefined))?.stdout ?? ''
-  const copy = !hasBox || home === '' || input.cwd === '' ? undefined : await copyOf($, input.cwd).catch(() => undefined)
-  const mode: Mode = copy === undefined ? 'read-only' : 'copy'
-  const where = copy ?? input.cwd
-  // The sandbox matches resolved paths (/tmp is /private/tmp on macOS), so every
-  // path goes in both as given and resolved.
-  const both = async (p: string) => p === '' ? [] : [...new Set([p, (await $.process.run(['realpath', p]).catch(() => undefined))?.stdout.trim() || p])]
-  const box = !hasBox || home === '' ? undefined : boxOf([...(await both(home)), ...(await both(input.cwd))], copy === undefined ? [] : await both(copy))
+  const s = await runtimeOf($)
+  const jobSignal = currentSignals.get(s)
+  const host = hostOf($, jobSignal)
+  const deadlineMs = await $.clock.now() + s.coordinator.remainingTime(await $.clock.now())
+  const snapshot = s.cfg.executionMode === 'off' ? null : await captureSnapshot(host, { ...s.coordinator.binding }, deadlineMs)
+  const mode: Mode = snapshot === null ? 'read-only' : 'copy'
   const result: VerifyResult = { mode, probes: [], defects: [], fixed: [], ran: [], cost: { cached: 0, input: 0, output: 0, calls: 0 } }
-  // What each command the verifier ran printed: a defect must be shown by one of them.
-  const printed = new Map<string, string>()
+  const observed = new Map<string, ExecutionEvidence>()
+  let evidenceBytes = 0
+  const run = async (command: string) => {
+    if (!snapshot || await $.clock.now() + 500 >= deadlineMs) return undefined
+    const e = await host.execute(command, snapshot, deadlineMs, [])
+    evidenceBytes += bytesOf(JSON.stringify(e))
+    if (evidenceBytes > 20 * 1024 * 1024) throw Error('evidence journal limit')
+    await $.store.set('latest-evidence', { schemaVersion: 2, binding: snapshot.binding, observations: [...observed.values(), e] })
+    observed.set(command.trim(), e)
+    return { exitCode: e.exitCode, out: `${e.stdout}${e.stderr ? `\n[stderr]\n${e.stderr}` : ''}`, ms: e.endedAt - e.startedAt, evidence: e }
+  }
   try {
     // Rechecks run only in a copy: they are the project's own commands and may write.
     if (mode === 'copy') {
@@ -263,9 +267,10 @@ const verify = async ($: EngineInterface, input: VerifyInput): Promise<VerifyRes
           result.ran.push({ command: i.recheck ?? '', exitCode: null, ms: 0, refused: no })
           continue
         }
-        const r = await runIn($, i.recheck ?? '', where, box)
+        const r = await run(i.recheck ?? '')
+        if (!r) continue
         result.ran.push({ command: i.recheck ?? '', exitCode: r.exitCode, ms: r.ms })
-        if (r.exitCode === 0) result.fixed.push({ id: i.id, saw: clip(squash(r.out), 300) || `\`${i.recheck}\` exited 0` })
+        if (i.resolution !== 'unknown' && r.evidence.outcome === 'passed' && i.defect === undefined && i.probe.trim() === (i.recheck ?? '').trim()) result.fixed.push({ id: i.id, saw: clip(squash(r.out), 300) || `\`${i.recheck}\` exited 0` })
       }
     }
     const toRecheck = input.open.filter(i => i.from === 'verify' && i.defect === undefined && (mode !== 'copy' || (i.recheck ?? '') === ''))
@@ -277,30 +282,37 @@ const verify = async ($: EngineInterface, input: VerifyInput): Promise<VerifyRes
     const started = await $.clock.now()
     for (let round = 1; round <= ROUNDS; round++) {
       // Out of time: the next reply is the last, with no more commands.
-      const final = round === ROUNDS || (await $.clock.now()) - started > (input.budgetMs ?? FREE_MS) * 0.6
-      const left = Math.max(15_000, (input.budgetMs ?? FREE_MS) - ((await $.clock.now()) - started))
-      const reply = await ask($, final ? `${transcript}\n\nNo more commands: answer with the "checked" object now.` : transcript, left)
+      const final = round === ROUNDS || (await $.clock.now()) - started > (input.budgetMs ?? 30000) * 0.6
+      const left = deadlineMs - await $.clock.now()
+      if (left <= 500) return { ...result, reason: 'deadline exhausted' }
+      const reply = await ask($, final ? `${transcript}\n\nNo more commands: answer with the "checked" object now.` : transcript, left, jobSignal)
+      if (!reply) return { ...result, reason: 'rules-only: model identity, availability or budget' }
       addCost(result.cost, reply.usage)
       if (!reply.isAnswered) return { ...result, reason: reply.reason }
       let turn = parseTurn(reply.text, input.claims)
       // One second chance for a reply that is not one JSON object.
       if (turn === null) {
-        const again = await ask($, `${transcript}\n\n[your reply]\n${clip(reply.text, 2000)}\n\nThat was not one JSON object. Answer again with exactly one JSON object and nothing else.`, left)
+        const again = await ask($, `${transcript}\n\n[your reply]\n${clip(reply.text, 2000)}\n\nThat was not one JSON object. Answer again with exactly one JSON object and nothing else.`, left, jobSignal)
+        if (!again) return { ...result, reason: 'protocol retry budget exhausted' }
         addCost(result.cost, again.usage)
         turn = again.isAnswered ? parseTurn(again.text, input.claims) : null
       }
       if (turn === null) return { ...result, reason: 'unreadable reply' }
       if ('checked' in turn) {
-        result.probes = turn.checked
-        for (const it of turn.items) if (it.status === 'fixed' && it.saw !== '' && toRecheck.some(i => i.id === it.id)) result.fixed.push({ id: it.id, saw: it.saw })
+        result.probes = turn.checked.filter(p => {
+          const e = observed.get(p.command.trim())
+          return p.verdict !== 'false' || e !== undefined && validateObservation(p.command, p.saw, e, snapshot?.binding ?? e.binding)
+        })
+        
         const changed = squash(input.changes ?? '')
         for (const d of turn.defects) {
           // The line must be one the assistant changed: a defect elsewhere is not this turn's.
           if (!changed.includes(squash(d.line).replace(/^[+-]\s*/, ''))) continue
           // In a copy, shown or nothing: the command ran here and printed what shows it.
-          const out = [...printed.entries()].find(([c]) => keyOf(c) === keyOf(d.command))?.[1]
+          const execution = observed.get(d.command.trim())
+          const out = execution ? `${execution.stdout}\n${execution.stderr}` : undefined
           if (mode === 'copy') {
-            if (out !== undefined && out.includes(d.expect)) result.defects.push({ ...d, saw: clip(squash(out), 300), demonstrated: true })
+            if (execution && out !== undefined && validateObservation(d.command, d.expect, execution, snapshot?.binding ?? execution.binding)) result.defects.push({ ...d, saw: clip(squash(out), 300), demonstrated: false })
           } else {
             // Here the assistant runs the probe, under the person's own permissions: it must
             // run the project's code and do nothing else.
@@ -320,9 +332,14 @@ const verify = async ($: EngineInterface, input: VerifyInput): Promise<VerifyRes
           outputs.push(`$ ${command}\n[refused: ${no}]`)
           continue
         }
-        const r = await runIn($, command, where, box)
+        if (!snapshot) {
+          result.ran.push({ command, exitCode: null, ms: 0, refused: 'independent execution unavailable in read-only mode' })
+          outputs.push(`$ ${command}\n[not executed: read-only mode]`)
+          continue
+        }
+        const r = await run(command)
+        if (!r) return { ...result, reason: 'deadline exhausted' }
         result.ran.push({ command, exitCode: r.exitCode, ms: r.ms })
-        printed.set(command, r.out)
         outputs.push(`$ ${command}\n[exit ${r.exitCode ?? 'none'}]\n${shown(r.out)}`)
       }
       transcript = `${transcript}\n\n[your turn ${round}]\n${reply.text.trim()}\n\n[output]\n${outputs.join('\n\n')}`
@@ -331,7 +348,7 @@ const verify = async ($: EngineInterface, input: VerifyInput): Promise<VerifyRes
   } catch (err) {
     return { ...result, reason: `failed: ${String(err)}` }
   } finally {
-    if (copy !== undefined) await drop($, copy)
+    if (snapshot !== null) await host.cleanup(snapshot).catch(err => say($, `snapshot cleanup failed: ${String(err)}`))
   }
 }
 
@@ -397,7 +414,7 @@ const COST: Record<Kind, string> = {
 // done. Circles and stale edits are the work's own business while it goes on.
 // Nor a claim about the machine (what is installed): true or not, the work is the same.
 const ABOUT_THE_MACHINE = /\b(?:installed|not installed|isn't installed|available on|on (?:the )?PATH|versions?)\b|已安装|未安装|没有安装|没装/i
-const keepsTurnGoing = (i: Issue) => i.rule !== 'stuck' && i.rule !== 'edit-miss' && !(i.from === 'verify' && i.defect === undefined && ABOUT_THE_MACHINE.test(i.quote))
+const keepsTurnGoing = (i: Issue) => i.from !== 'verify' && i.rule !== 'stuck' && i.rule !== 'edit-miss'
 
 type CheckOptions = {
   kind: 'during' | 'batch' | 'answer'
@@ -418,7 +435,10 @@ type CheckOptions = {
 // items, and the verifier on the claims and the turn's change. Settles what it can
 // and returns the new items; the caller delivers them.
 const check = async ($: EngineInterface, list: Rows, o: CheckOptions): Promise<Issue[]> => {
+  const s = await runtimeOf($)
+  const binding = { ...s.coordinator.binding }
   const at = await $.clock.now()
+  if (!s.stateUsable) return []
   const before = await read($, track)
   const record = evidenceOf(list)
   const facts = { ...factsOf(list), runs: record.runs.slice(-6).map(r => `\`${clip(r.command, 100)}\`: ${r.ok ? 'passed' : `failed (${r.line || 'it reported a failure'})`}`) }
@@ -431,7 +451,7 @@ const check = async ($: EngineInterface, list: Rows, o: CheckOptions): Promise<I
   )
   // The verifier runs whenever a check hands it a claim. A claim the record already contradicts, or
   // already bears out, is not handed to it: no model is needed for those.
-  const canRun = o.verifier
+  const canRun = o.verifier && !s.modelDisabled && authorizeModelPair(s.cfg.pair, await $.session.model().catch(() => '')).allowed
   // Nor a claim said before a later edit to code: it described files that have changed since.
   const lastCodeEdit = record.edits.filter(e => !/\.(?:md|markdown|txt|rst|adoc)$/i.test(e.path)).at(-1)?.at ?? -1
   const isCurrent = (c: string) => (record.saidAt.get(c) ?? Number.MAX_SAFE_INTEGER) > lastCodeEdit
@@ -439,40 +459,40 @@ const check = async ($: EngineInterface, list: Rows, o: CheckOptions): Promise<I
   const handed = canRun ? o.claims.filter(c => isClaim(c) && !ruled.some(f => f.quote === c) && !supports(record, c) && isCurrent(c)) : []
   // A change the verifier already read to the end is not read again: a second review of
   // the same lines costs a call, and can only disagree with the first.
-  const turnChanges = canRun && o.kind === 'answer' && cfg.reviewChanges ? changesOf(record) : ''
+  const turnChanges = canRun && o.kind === 'answer' && s.cfg.reviewChanges ? changesOf(record) : ''
   const changes = turnChanges !== '' && signatureOfChange(turnChanges) === before.reviewed ? '' : turnChanges
-  const rechecks = o.verifier && open.some(i => (i.recheck ?? '') !== '')
+  const rechecks = canRun && open.some(i => (i.recheck ?? '') !== '')
   const stillUnopened = new Set(facts.unopened)
   const images = unopenedClaimed(facts, o.claims)
   let v: VerifyResult | undefined
   if (handed.length > 0 || changes !== '' || rechecks) {
     $.ui.status('deepseek-supervisor checking what the model said…')
     const fallback = list.find(r => r.role === 'user' && r.text.trim() !== '' && !r.text.includes('[deepseek-supervisor]'))?.text ?? ''
-    v = await verify($, { claims: handed, asked: asked !== '' ? asked : fallback, facts, open, cwd: await $.session.cwd().catch(() => ''), changes, budgetMs: o.kind === 'answer' && !isInteractive ? WAITED_MS : FREE_MS })
+    const jobId = `check-${++s.jobNumber}`
+    const job = s.coordinator.start(jobId, await $.clock.now())
+    if (job) {
+      currentSignals.set(s, job.signal)
+      v = await verify($, { claims: handed, asked: s.asked !== '' ? s.asked : fallback, facts, open, cwd: await $.session.cwd().catch(() => ''), changes, budgetMs: 30000 })
+      if (currentSignals.get(s) === job.signal) currentSignals.delete(s)
+      if (!s.coordinator.finish(jobId, binding, v.reason ? 'failed' : 'succeeded', await $.clock.now())) return []
+    }
   }
+  if (!sameBinding(binding, s.coordinator.binding) || !(await isOn($))) return []
   const done = await $.clock.now()
   let found: Issue[] = []
   await update($, track, t => {
+    if (!sameBinding(binding, s.coordinator.binding)) return t
     let issues = t.issues.map((i): Issue => {
-      const f = v?.fixed.find(x => x.id === i.id)
+      const f = s.cfg.executionMode === 'shadow' ? undefined : v?.fixed.find(x => x.id === i.id)
       if (i.status !== 'open') return i
-      if (f !== undefined) return { ...i, status: 'fixed', settledAt: done, why: f.saw }
+      if (f !== undefined) return { ...i, status: 'fixed', resolution: 'fixed', settledAt: done, why: f.saw }
       if (i.rule !== undefined) {
         const why = settledBy(record, i)
-        return why === undefined ? i : { ...i, status: 'fixed', settledAt: done, why }
+        return why === undefined ? i : { ...i, status: 'fixed', resolution: 'fixed', settledAt: done, why }
       }
       // A defect's probe, run by the model since: its output says whether it is there.
-      if (i.defect !== undefined && i.pos !== undefined) {
-        const probe = keyOf(i.probe)
-        const runs = record.bash.filter(b => b.at >= (i.pos ?? 0) && probe !== '' && b.key.includes(probe))
-        const now = runs.at(-1)
-        if (now === undefined) return i
-        if (now.text.includes(i.defect.expect)) return i.defect.demonstrated ? i : { ...i, defect: { ...i.defect, demonstrated: true }, saw: clip(squash(now.text), 300) }
-        return i.defect.demonstrated
-          ? { ...i, status: 'fixed', settledAt: done, why: `\`${clip(i.probe, 120)}\` no longer prints ${i.defect.expect}` }
-          : { ...i, status: 'refuted', settledAt: done, why: `\`${clip(i.probe, 120)}\` did not print ${i.defect.expect}: the reviewer was wrong` }
-      }
-      if (i.from === 'rule' && i.probe.startsWith('Read ') && !stillUnopened.has(i.probe.slice(5))) return { ...i, status: 'fixed', settledAt: done, why: `${base(i.probe.slice(5))} was opened with Read` }
+      if (i.defect !== undefined) return i
+      if (i.from === 'rule' && i.probe.startsWith('Read ') && !stillUnopened.has(i.probe.slice(5))) return { ...i, status: 'fixed', resolution: 'fixed', settledAt: done, why: `${base(i.probe.slice(5))} was opened with Read` }
       return i
     })
     const fresh: Issue[] = []
@@ -482,23 +502,24 @@ const check = async ($: EngineInterface, list: Rows, o: CheckOptions): Promise<I
       // and once it lands, at the end of the record as it is now.
       if (isKnown(f, [...issues, ...fresh], q => record.saidAt.get(q) ?? Number.MAX_SAFE_INTEGER)) continue
       const said = record.saidAt.get(f.quote) ?? record.end
-      fresh.push({ id: next(), at: done, from: 'rule', rule: f.kind, what: f.what, quote: f.quote, probe: f.probe, ...(f.saw === undefined ? {} : { saw: f.saw }), ...(f.recheck === '' ? {} : { recheck: f.recheck }), cost: COST[f.kind], status: 'open', pos: record.end, said })
+      fresh.push({ id: next(), at: done, from: 'rule', resolution: 'open', disclosed: false, contested: false, rule: f.kind, what: f.what, quote: f.quote, probe: f.probe, ...(f.saw === undefined ? {} : { saw: f.saw }), ...(f.recheck === '' ? {} : { recheck: f.recheck }), cost: COST[f.kind], status: 'open', pos: record.end, said })
     }
-    for (const p of (v?.probes ?? []).filter(p => p.verdict === 'false')) {
+    for (const p of (s.cfg.executionMode === 'shadow' ? [] : v?.probes ?? []).filter(p => p.verdict === 'false')) {
       if ([...issues, ...fresh].some(i => isSameItem({ quote: p.claim }, i))) continue
-      fresh.push({ id: next(), at: done, from: 'verify', what: p.what, quote: p.claim, probe: p.command, saw: p.saw, recheck: p.recheck, cost: 'the person will act on a claim the output contradicts', status: 'open', pos: record.end })
+      fresh.push({ id: next(), at: done, from: 'verify', resolution: 'unknown', disclosed: false, contested: false, what: p.what, quote: p.claim, probe: p.command, saw: p.saw, recheck: p.recheck, cost: 'the person will act on a claim the output contradicts', status: 'open', pos: record.end })
     }
-    for (const d of v?.defects ?? []) {
+    for (const d of s.cfg.executionMode === 'shadow' ? [] : v?.defects ?? []) {
       if ([...issues, ...fresh].some(i => i.defect !== undefined && (squash(i.quote) === squash(d.line) || keyOf(i.probe) === keyOf(d.command)))) continue
       fresh.push({
         id: next(),
         at: done,
         from: 'verify',
+        resolution: 'unknown', disclosed: false, contested: false,
         what: d.what,
         quote: d.line,
         probe: d.command,
-        saw: d.demonstrated ? d.saw : '',
-        ...(d.demonstrated ? { recheck: absentFrom(d.command, d.expect) } : {}),
+        saw: d.saw,
+        
         defect: { expect: d.expect, demonstrated: d.demonstrated },
         cost: 'the person gets code that does the wrong thing for an input they will meet',
         status: 'open',
@@ -513,7 +534,7 @@ const check = async ($: EngineInterface, list: Rows, o: CheckOptions): Promise<I
     issues = [...issues, ...fresh].slice(-ISSUES_KEPT)
     const ran = v !== undefined && v.cost.calls > 0 && o.kind === 'during'
     const readToEnd = v !== undefined && v.reason === undefined && changes !== ''
-    return { ...t, nextId: t.nextId + fresh.length, issues, seen: [...(t.seen ?? []), ...handed].slice(-SEEN_KEPT), runs: (t.runs ?? 0) + (ran ? 1 : 0), ...(readToEnd ? { reviewed: signatureOfChange(changes) } : {}) }
+    return { ...t, nextId: t.nextId + fresh.length, issues, seen: [...(t.seen ?? []), ...(v === undefined ? [] : handed)].slice(-SEEN_KEPT), runs: (t.runs ?? 0) + (ran ? 1 : 0), ...(readToEnd ? { reviewed: signatureOfChange(changes) } : {}) }
   })
   if (v !== undefined || found.length > 0)
     await remember($, {
@@ -559,10 +580,11 @@ const messages = async ($: EngineInterface) => {
 }
 
 const showCards = async ($: EngineInterface, items: readonly Issue[]) => {
+  const s = await runtimeOf($)
   const at = await $.clock.now()
-  told += items.length
-  last = `${items.length} at ${hhmm(at)}`
-  promptsSinceCards = 0
+  s.told += items.length
+  s.last = `${items.length} at ${hhmm(at)}`
+  s.promptsSinceCards = 0
   await update($, cards, () => ({ at, items: items.map(i => ({ what: `#${i.id} ${i.what}`, evidence: i.from === 'verify' ? `${i.probe} → ${i.saw ?? ''}` : i.quote, cost: i.cost })) }))
   await update($, isHidden, () => false)
 }
@@ -576,36 +598,40 @@ const settleTags = async ($: EngineInterface, answer: string) => {
     ...t,
     issues: t.issues.map(i => {
       const m = tags.find(x => Number(x[1]) === i.id)
-      return m === undefined || i.status !== 'open' ? i : { ...i, status: m[2] === 'refuted' ? ('refuted' as const) : ('told' as const), settledAt: at, why: m[0] }
+      return m === undefined || i.status !== 'open' ? i : { ...i, disclosed: i.disclosed === true || m[2] === 'told', contested: i.contested === true || m[2] === 'refuted', resolution: i.resolution ?? (i.from === 'verify' ? 'unknown' : 'open'), status: m[2] === 'refuted' ? ('refuted' as const) : ('told' as const), settledAt: at, why: m[0] }
     }),
   }))
 }
 
 // During the work: every MIN_GAP finished steps, the model's new claims, for the verifier.
 const tick = async ($: EngineInterface) => {
+  const s = await runtimeOf($)
+  const requested = { ...s.coordinator.binding }
   try {
-    if (steps < MIN_GAP) return
-    steps = 0
+    if (s.steps < MIN_GAP) return
+    s.steps = 0
     const list = await messages($)
     // Only messages no earlier check read: an old claim pushed out of `seen` is not
     // handed over again.
     const claims = claimsSince(list, await read($, track))
     const found = await check($, list, { kind: 'during', claims, verifier: true, rules: false })
     await update($, track, t => ({ ...t, scanned: list.length }))
-    if (found.length === 0) return
+    if (found.length === 0 || !sameBinding(requested, s.coordinator.binding)) return
     await showCards($, found)
     // Refused or failed, the items are still in the band: say so, so the person can pass them on.
-    const note = await $.session
-      .append({ message: { type: 'user', content: [{ type: 'text', text: noteText(found) }] } })
-      .catch((err: unknown) => ({ deny: String(err) }))
-    if (note.deny !== undefined) {
-      say($, `note not delivered (${note.deny})`)
+    const deliveryBinding = requested
+    const delivery = await s.coordinator.deliver(found.map(i => i.id).join(','), deliveryBinding, async () => {
+      const note = await $.session.append({ message: { type: 'user', content: [{ type: 'text', text: noteText(found) }] } })
+      return note.deny !== undefined ? 'dropped' : 'delivered'
+    })
+    if (delivery !== 'delivered') {
+      say($, `note not delivered (${delivery})`)
       $.ui.toast('deepseek-supervisor: a note did not reach the model; see the band above the prompt')
     }
   } catch (err) {
     say($, `check failed: ${err}`)
   } finally {
-    isBusy = false
+    s.isBusy = false
     await show($)
   }
 }
@@ -614,18 +640,23 @@ const tick = async ($: EngineInterface) => {
 // turn's change, off the turn so nobody waits on it. What does not hold goes back
 // to the model as one follow-up prompt, at most one per prompt of the person's.
 const atAnswer = async ($: EngineInterface, answer: string) => {
+  const s = await runtimeOf($)
+  const requested = { ...s.coordinator.binding }
   try {
     await settleTags($, answer)
     const list = await messages($)
     const claims = claimsSince(list, await read($, track), [answer])
     const found = await check($, list, { kind: 'answer', claims, answer, verifier: true })
     await update($, track, t => ({ ...t, scanned: list.length }))
-    if (found.length === 0) return
+    if (found.length === 0 || !sameBinding(requested, s.coordinator.binding)) return
     await showCards($, found)
-    if (followUps >= FOLLOW_UPS_PER_PROMPT) return
-    followUps += 1
+    if (s.followUps >= FOLLOW_UPS_PER_PROMPT) return
+    s.followUps += 1
     // The submit waits for the session to go idle; never await it inside the turn's end.
-    await $.prompt.submit({ text: noteText(found) }).catch(err => say($, `follow-up not submitted: ${err}`))
+    await s.coordinator.deliver(found.map(i => i.id).join(','), requested, async () => {
+      const result = await $.prompt.submit({ text: noteText(found) })
+      return result.drop === undefined ? 'delivered' : 'dropped'
+    })
   } catch (err) {
     say($, `answer check failed: ${err}`)
   } finally {
@@ -634,15 +665,22 @@ const atAnswer = async ($: EngineInterface, answer: string) => {
 }
 
 export const register: Register = (on, options) => {
-  cfg = configOf(options)
   registerBand(on)
 
   on('session.start', async ($, e, next) => {
     const result = await next(e)
+    const s = await runtimeOf($)
     await takeReading($)
-    isInteractive = e.isInteractive !== false
+    s.coordinator.invalidate({ ...s.coordinator.binding, generationId: `reload-${await $.clock.now()}-${++s.jobNumber}` })
+    const restored = normalizeTrack(await read($, track))
+    s.stateUsable = restored !== null
+    if (restored) await update($, track, () => restored)
+    else await $.store.set('unknown-state-original', await read($, track)).catch(() => undefined)
+    s.modelDisabled = false
+    s.cfg = configOf(options)
+    s.isInteractive = e.isInteractive !== false
     // A reload starts here too: what was raised before it does not hold a turn after it.
-    turnFrom = await $.clock.now()
+    s.turnFrom = await $.clock.now()
     await $.command
       .register({ name: 'deepseek-supervisor', description: 'Checks the model at work: rules on what it ran, and a second model running its claims. on, off, auto, log, or issues', argumentHint: '[on|off|auto|log|issues]' })
       .catch(err => say($, `command not registered: ${err}`))
@@ -653,18 +691,21 @@ export const register: Register = (on, options) => {
   // The person's prompts: what claims are checked against, a fresh budget, and the
   // band aging as "You should know" cards do.
   on('prompt.submit', async ($, e, next) => {
+    const s = await runtimeOf($)
     const result = await next(e)
     // The person's own: typed, from a phone, or the SDK host's turn (`claude -p`); or
     // another session's message, the way a lead session hands work over (ccds).
     if (result.drop === undefined && (e.origin.kind === 'composer' || e.origin.kind === 'bridge' || e.origin.kind === 'sdk' || e.origin.kind === 'peer')) {
-      asked = e.text
-      turnFrom = await $.clock.now()
-      blocks = 0
-      held = new Set()
-      followUps = 0
+      s.coordinator.invalidate({ ...s.coordinator.binding, taskRevision: s.coordinator.binding.taskRevision + 1, turnId: `prompt-${s.coordinator.binding.taskRevision + 1}` })
+      s.modelDisabled = false
+      s.asked = e.text
+      s.turnFrom = await $.clock.now()
+      s.blocks = 0
+      s.held = new Set()
+      s.followUps = 0
       await update($, track, t => ({ ...t, runs: 0 })).catch(() => undefined)
-      promptsSinceCards += 1
-      if (promptsSinceCards >= CLEAR_AFTER_PROMPTS) await update($, cards, () => null).catch(() => undefined)
+      s.promptsSinceCards += 1
+      if (s.promptsSinceCards >= CLEAR_AFTER_PROMPTS) await update($, cards, () => null).catch(() => undefined)
     }
     return result
   }).catch(($, e, next) => next(e))
@@ -673,9 +714,13 @@ export const register: Register = (on, options) => {
   // rules on the record. What they find goes to the model with the tool results,
   // where it is read before the next step is chosen.
   on('classic.PostToolBatch', async ($, e, next) => {
+    const s = await runtimeOf($)
     const result = await next(e)
     if (e.agent_id !== undefined || !(await isOn($))) return result
+    if (!s.stateUsable) return result
     const list = await messages($)
+    const end = evidenceOf(list).end
+    if (end !== s.recordEnd) { s.coordinator.changedWorkspace(`tool-record-${end}`, await $.clock.now()); s.recordEnd = end }
     const said = list.filter(r => r.role === 'assistant').map(r => r.text)
     // A `[ysk#3 told]` written in passing settles #3 as one in the final answer does.
     await settleTags($, said.join('\n'))
@@ -690,65 +735,81 @@ export const register: Register = (on, options) => {
   // Before the turn ends: the answer held to the record (and, where nobody watches,
   // to the verifier). What does not hold keeps the turn going, at most twice a prompt.
   on('classic.Stop', async ($, e, next) => {
+    const s = await runtimeOf($)
     const result = await next(e)
-    if (e.agent_id !== undefined || result.block !== undefined || !(await isOn($))) return result
+    if (!s.stateUsable || e.agent_id !== undefined || result.block !== undefined || !(await isOn($))) return result
     const answer = e.last_assistant_message ?? ''
     await settleTags($, answer)
     const list = await messages($)
-    const found = await check($, list, { kind: 'answer', claims: claimsSince(list, await read($, track), [answer]), answer, verifier: !isInteractive })
+    const found = await check($, list, { kind: 'answer', claims: claimsSince(list, await read($, track), [answer]), answer, verifier: !s.isInteractive })
     // Where the verifier ran here, what it read is read; where it runs after the turn, not yet.
-    if (!isInteractive) await update($, track, t => ({ ...t, scanned: list.length }))
+    if (!s.isInteractive) await update($, track, t => ({ ...t, scanned: list.length }))
     await show($)
     if (found.length > 0) await showCards($, found)
     // What this turn raised and the record has not settled holds the turn too, whichever
     // check raised it first: an item the model never got to act on is not done with.
-    const pending = (await read($, track)).issues.filter(i => i.status === 'open' && i.at >= turnFrom && !found.some(f => f.id === i.id))
-    const blocking = [...found, ...pending].filter(i => keepsTurnGoing(i) && !held.has(i.id))
-    if (blocking.length === 0 || blocks >= BLOCKS_PER_PROMPT) return result
-    blocks += 1
-    for (const i of blocking) held.add(i.id)
+    const pending = (await read($, track)).issues.filter(i => i.status === 'open' && i.at >= s.turnFrom && !found.some(f => f.id === i.id))
+    const blocking = [...found, ...pending].filter(i => keepsTurnGoing(i) && !s.held.has(i.id))
+    if (blocking.length === 0 || s.blocks >= BLOCKS_PER_PROMPT) return result
+    s.blocks += 1
+    for (const i of blocking) s.held.add(i.id)
     return { ...result, block: noteText(blocking, { final: true }) }
   }).catch(($, e, next) => next(e))
 
   // The main loop's finished steps; a subagent's are its own.
   on('turn.step', async function* ($, e, next) {
+    const s = await runtimeOf($)
     const result = yield* next(e)
     if (e.agentId !== undefined || result.stopReason === null) return result
-    steps += 1
+    s.steps += 1
     // The step that ends the turn is the turn's end's to check: two checks of one answer
     // would ask the verifier twice.
     if (result.stopReason === 'end_turn') return result
-    if (!isBusy && steps >= MIN_GAP && (await isOn($))) {
-      isBusy = true
+    if (!s.isBusy && s.steps >= MIN_GAP && (await isOn($))) {
+      s.isBusy = true
       // Off the step's own dispatch, which closes when the step ends: work that
       // must outlive it runs from a timer.
+      const scheduled = { ...s.coordinator.binding }
       $.clock.after(0, () => {
-        void tick($)
+        if (sameBinding(scheduled, s.coordinator.binding)) void tick($)
+        else s.isBusy = false
       })
     }
     return result
   })
 
   on('turn.complete', async ($, e, next) => {
+    const s = await runtimeOf($)
     const result = await next(e)
+    if (e.agentId === undefined && e.reason !== 'answer') s.coordinator.invalidate({ ...s.coordinator.binding, generationId: `cancel-${await $.clock.now()}-${++s.jobNumber}` })
     if (e.agentId === undefined) await takeReading($) // main-loop turns only
     // Only a turn the model finished on its own: one the person interrupted says nothing.
     // Where nobody watches, the verifier already ran before the turn could end.
-    if (e.agentId !== undefined || e.reason !== 'answer' || !isInteractive || !(await isOn($))) return result
+    if (e.agentId !== undefined || e.reason !== 'answer' || !s.isInteractive || !(await isOn($))) return result
     const answer = e.answer
+    const scheduled = { ...s.coordinator.binding }
     $.clock.after(0, () => {
-      void atAnswer($, answer)
+      if (sameBinding(scheduled, s.coordinator.binding)) void atAnswer($, answer)
     })
     return result
   })
 
+  on('session.end', async ($, e, next) => {
+    const s = sessions.get(e.sessionId)
+    if (s) s.coordinator.invalidate({ ...s.coordinator.binding, generationId: 'ended' })
+    sessions.delete(e.sessionId)
+    return next(e)
+  })
+
   on('command.run', { command: 'deepseek-supervisor' }, async ($, e) => {
+    const s = await runtimeOf($)
     const arg = e.args.trim().toLowerCase()
     if (arg === 'log') {
       const list = await $.store.get('history').catch(() => [])
       return { text: Array.isArray(list) && list.length > 0 ? JSON.stringify(list.slice(-10), null, 1) : 'No checks yet.' }
     }
     if (arg === 'issues') {
+      if (!s.stateUsable) return { text: 'Unknown state schema; original state preserved. No correctness judgment available.' }
       const t = await read($, track)
       return {
         text:
@@ -756,8 +817,9 @@ export const register: Register = (on, options) => {
             ? 'No items this session.'
             : t.issues
                 .map(i => {
+                  const truth = ` resolution=${i.resolution ?? (i.status === 'fixed' ? 'fixed' : 'open')} disclosed=${i.disclosed === true} contested=${i.contested === true}`
                   const kind = i.defect !== undefined ? ` (defect, ${i.defect.demonstrated ? 'shown' : 'suspected'}: \`${i.defect.expect}\`)` : i.rule !== undefined ? ` (${i.rule})` : ''
-                  return `#${i.id} [${i.status}]${kind} ${i.what}${i.from === 'verify' ? `\n   ran: ${i.probe}\n   saw: ${i.saw ?? ''}` : ''}${i.why === undefined ? '' : `\n   why: ${i.why}`}`
+                  return `#${i.id} [${i.status}]${kind} ${i.what}${i.from === 'verify' ? `\n   ran: ${i.probe}\n   saw: ${i.saw ?? ''}` : ''}${i.why === undefined ? '' : `\n   why: ${i.why}`}\n   ${truth}`
                 })
                 .join('\n'),
       }
@@ -765,7 +827,10 @@ export const register: Register = (on, options) => {
     if (arg === 'on' || arg === 'off' || arg === 'auto') {
       if (arg === 'auto') await $.store.delete('mode')
       else await $.store.set('mode', arg)
-      if (!(await isOn($))) await update($, cards, () => null)
+      if (!(await isOn($))) {
+        s.coordinator.invalidate({ ...s.coordinator.binding, generationId: `off-${await $.clock.now()}-${++s.jobNumber}` })
+        await update($, cards, () => null)
+      }
       await show($)
       return { text: `deepseek-supervisor is ${arg}${arg === 'auto' ? ` (${(await isOn($)) ? 'checking' : "idle on Anthropic's endpoint"})` : ''}.` }
     }

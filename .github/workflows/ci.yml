@@ -1,0 +1,21 @@
+name: checks
+on: [push, pull_request]
+jobs:
+  pure-and-scorers:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: node scripts/check.mjs --pure
+  supported-host:
+    if: ${{ vars.DSS_HOST_CI_ENABLED == 'true' }}
+    runs-on: [self-hosted, macOS, claude-supervisor]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm ci --ignore-scripts
+      - run: node scripts/check.mjs

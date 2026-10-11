@@ -1,4 +1,5 @@
-import { expect, mock, test } from 'claude-code/testing'
+import { testWithPair as test } from './helpers'
+import { expect, mock } from 'claude-code/testing'
 
 const usage = { input_tokens: 1, output_tokens: 1, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 }
 const FALSE = JSON.stringify({ checked: [{ claim: 1, command: 'python3 -m unittest', saw: 'FAILED', verdict: 'false', what: 'fails', recheck: 'python3 -m unittest' }], items: [] })
@@ -12,6 +13,8 @@ test('two checks out at once raise one claim once', async ($, on) => {
   let release: (() => void) | undefined
   let calls = 0
   on('session.messages', () => ({ value: [{ role: 'assistant', text: 'All tests pass.', toolUses: [] }] }) as never)
+  on('session.id', () => ({ value: 'race-session' }))
+  on('session.model', () => ({ value: 'test-worker-v1' }))
   on('session.cwd', () => ({ value: '/p' }) as never)
   on('session.append', (_$, e, next) => next(e))
   on('env.get', () => ({ value: 'https://api.deepseek.com' }) as never)
