@@ -36,18 +36,25 @@ type Row = { role: string; text: string; toolUses?: readonly { tool: string; inp
 // Observe a candidate implementation missing call/import context, or a concrete API
 // error. No reading-count heuristic, guessed target or pre-edit interception.
 export const assistSignal = (asked: string, rows: readonly Row[], cwd: string): string | null => {
-  const uses = rows.filter(r => r.role === 'assistant').flatMap(r => r.toolUses ?? [])
-  const last = uses.at(-1)
-  if (!last) return null
-  const input = (last.input ?? {}) as Record<string, unknown>
-  const output = last.text ?? ''
-  if (last.tool === 'Bash' && /TypeError:|ReferenceError:|ImportError:|Cannot find module|is not a function|has no attribute/.test(output)) return `Observed call/API error: ${output.split('\n').filter(l => /Error:|is not a function|has no attribute/.test(l)).slice(0, 2).join('\n')}`
+  const lastPrompt = rows.findLastIndex(r => r.role === 'user' && !r.text.includes('[deepseek-supervisor]'))
+  const relevantRows = lastPrompt >= 0 ? rows.slice(lastPrompt + 1) : rows.filter(r => r.role === 'assistant').slice(-1)
+  const uses = relevantRows.filter(r => r.role === 'assistant').flatMap(r => r.toolUses ?? [])
+  for (const use of [...uses].reverse()) {
+    const output = use.text ?? ''
+    if (use.tool === 'Bash' && /TypeError:|ReferenceError:|ImportError:|Cannot find module|is not a function|has no attribute/.test(output)) return `Observed call/API error: ${output.split('\n').filter(l => /Error:|is not a function|has no attribute/.test(l)).slice(0, 2).join('\n')}`
+  }
   if (/\b(?:typo|spelling)\b|错别字|拼写/i.test(asked)) return null
-  if (last.tool !== 'Read' || last.isError || typeof input.file_path !== 'string' || !input.file_path.startsWith(cwd.replace(/\/$/, '') + '/')) return null
-  const path = input.file_path.slice(cwd.replace(/\/$/, '').length + 1)
-  if (!pathOK(path) || /\b(?:require\s*\(|import\s|from\s)|writeFileSync|generated/i.test(output)) return null
-  const definitions = [...output.matchAll(/(?:function\s+|def\s+)([A-Za-z_$][\w$]*)|(?:(?:const|let)\s+|exports\.)([A-Za-z_$][\w$]*)\s*=\s*(?:\([^)]*\)|\w+)\s*=>/g)].map(m => m[1] ?? m[2] ?? '')
-  const relevant = definitions.filter(name => name.length > 2 && asked.includes(name))
-  if (!relevant.length) return null
-  return `Observed candidate ${path} defines ${relevant.slice(0, 3).join(', ')}; this read does not contain its actual caller/import or API contract. Check whether additional source facts are needed.`
+  for (const use of [...uses].reverse()) {
+    const input = (use.input ?? {}) as Record<string, unknown>
+    const output = use.text ?? ''
+    if (use.tool !== 'Read' || use.isError || typeof input.file_path !== 'string' || !input.file_path.startsWith(cwd.replace(/\/$/, '') + '/')) continue
+    const path = input.file_path.slice(cwd.replace(/\/$/, '').length + 1)
+    if (!pathOK(path)) continue
+    const definitions = [...output.matchAll(/(?:function\s+|def\s+)([A-Za-z_$][\w$]*)|(?:(?:const|let)\s+|exports\.)([A-Za-z_$][\w$]*)\s*=\s*(?:\([^)]*\)|\w+)\s*=>/g)].map(m => m[1] ?? m[2] ?? '')
+    const relevant = definitions.filter(name => name.length > 2 && asked.includes(name))
+    // Imports of other dependencies say nothing about this function's caller.
+    const missing = relevant.filter(name => !uses.some(u => (u.text ?? '').split('\n').some(line => line.includes(name) && /\brequire\s*\(|\bimport\s|\bfrom\s/.test(line))))
+    if (missing.length) return `Observed candidate ${path} defines ${missing.slice(0, 3).join(', ')}; no related actual caller/import or API contract is present. Check whether additional source facts are needed.`
+  }
+  return null
 }

@@ -18,6 +18,16 @@ try {
   assert.ok(view.facts.some(f => f.path === 'utils.cjs'))
   assert.ok(!JSON.stringify(view).includes('never-expose-this'))
   assert.equal(await handle({ action: 'validate-facts', root, view, deadlineMs: deadline() }), true)
+  let fdReads = 0
+  const readBeforeGroup = fs.default.readFileSync
+  fs.default.readFileSync = (...args) => {
+    const bytes = readBeforeGroup(...args)
+    if (typeof args[0] === 'number' && ++fdReads === 2) writeFileSync(join(root, 'app.cjs'), 'exports.day = require("./utils.cjs").changed\n')
+    return bytes
+  }
+  syncBuiltinESMExports()
+  try { assert.equal(await handle({ action: 'validate-facts', root, view, deadlineMs: deadline() }), false, 'later reads cannot accept an already changed source') }
+  finally { fs.default.readFileSync = readBeforeGroup; syncBuiltinESMExports(); writeFileSync(join(root, 'app.cjs'), 'exports.day = require("./utils.cjs").parseDate\n') }
   for (const path of ['../outside', '/etc/passwd', '.env', 'dir/../../x', 'missing.cjs']) assert.equal((await inspect({ paths: [path], terms: [] })).incomplete, true, path)
   symlinkSync(join(root, 'utils.cjs'), join(root, 'alias.cjs'))
   assert.equal((await inspect({ paths: ['alias.cjs'], terms: [] })).incomplete, true)

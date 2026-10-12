@@ -7,14 +7,18 @@ const packet = JSON.stringify({ kind: 'location', question: 'Where is parseDate 
 const world = (on: Parameters<TestBody>[1]) => {
   mock.store(on)
   const clock = mock.clock(on, { now: Date.UTC(2026, 9, 12) })
-  const state = { calls: 0, reads: 0, validations: 0, valid: true, incomplete: false, outputs: ['{"paths":["app.cjs"],"terms":["parseDate"]}', packet], wait: undefined as Promise<void> | undefined, rows: [{ role: 'assistant', text: '', toolUses: [{ tool: 'Read', input: { file_path: '/p/util.cjs' }, text: 'exports.parseDate = s => Number(s.slice(-2))' }] }] }
+  const state = { calls: 0, reads: 0, validations: 0, outputTokens: 20, logs: [] as string[], pauseStatus: false, inStatus: false, waitStatus: undefined as Promise<void> | undefined, valid: true, incomplete: false, outputs: ['{"paths":["app.cjs"],"terms":["parseDate"]}', packet], wait: undefined as Promise<void> | undefined, rows: [{ role: 'assistant', text: '', toolUses: [{ tool: 'Read', input: { file_path: '/p/util.cjs' }, text: 'exports.parseDate = s => Number(s.slice(-2))' }] }] }
   on('session.id', () => ({ value: 'facts-session' }))
   on('session.model', () => ({ value: 'fixture' }))
   on('session.cwd', () => ({ value: '/p' }))
   on('session.messages', () => ({ value: state.rows }) as never)
   on('env.get', () => ({ value: 'on' }))
-  on('ui.log', () => ({ value: undefined }))
+  on('ui.log', (_$, e) => { state.logs.push(e.text); return { value: undefined } })
   on('ui.status', () => ({ value: undefined }))
+  on('state.get', async (_$, e, next) => {
+    if (state.pauseStatus && state.calls === 2 && e.key === 'track') { state.pauseStatus = false; state.inStatus = true; await state.waitStatus }
+    return next(e)
+  })
   on('command.register', (_$, e) => ({ value: { command: e.name } }))
   on('session.start', () => ({ cwd: '/p' }))
   on('classic.PostToolBatch', () => ({ additionalContext: ['host context'] }) as never)
@@ -33,7 +37,7 @@ const world = (on: Parameters<TestBody>[1]) => {
     state.calls++
     const text = state.outputs.shift() ?? 'invalid'
     if (state.calls === 2 && state.wait) await state.wait
-    return { value: { isAnswered: true, text, usage } } as never
+    return { value: { isAnswered: true, text, usage: { ...usage, output_tokens: state.outputTokens } } } as never
   })
   return { state, clock }
 }
@@ -99,4 +103,32 @@ test('combined fact-selection and packet input cannot exceed 64KiB', { options }
   await $.prompt.submit({ text: 'Fix parseDate ' + 'a'.repeat(40000), origin: { kind: 'sdk' } } as never)
   expect((await batch($)).additionalContext).toEqual(['host context'])
   expect(state.calls).toBe(1)
+})
+
+for (const invalidate of ['prompt', 'off', 'cancel']) test(`facts packet dropped after final UI wait and ${invalidate} is not logged delivered`, { options }, async ($, on) => {
+  const { state, clock } = world(on); await start($)
+  let release: () => void = () => {}
+  state.waitStatus = new Promise<void>(r => { release = r }); state.pauseStatus = true
+  const pending = batch($)
+  for (let n = 0; n < 100 && !state.inStatus; n++) await clock.advance(10)
+  expect(state.inStatus).toBe(true)
+  if (invalidate === 'prompt') await $.prompt.submit({ text: 'New task.', origin: { kind: 'composer' } } as never)
+  if (invalidate === 'off') await $.command.run({ command: 'deepseek-supervisor', args: 'off' } as never)
+  if (invalidate === 'cancel') await $.turn.complete({ answer: '', durationMs: 1, isAborted: true, turnId: 't', reason: 'aborted' } as never)
+  release()
+  expect((await pending).additionalContext).toEqual(['host context'])
+  expect(state.logs.filter(l => l.includes('ASSIST') && l.includes('"delivery":"delivered"'))).toEqual([])
+})
+test('side usage telemetry remains numeric after host token-name redaction', { options }, async ($, on) => {
+  const { state } = world(on); await start($); await batch($)
+  const events = state.logs.filter(l => l.includes('SIDE_CALL')).map(l => JSON.parse(l.slice(l.indexOf('SIDE_CALL') + 10)))
+  expect(events[0].output).toBe(20)
+  expect(events[0].usage).toBeUndefined()
+})
+
+test('a response reaching its output cap stays unknown and stops without inspection or retry', { options }, async ($, on) => {
+  const { state } = world(on); await start($); state.outputTokens = 2000
+  expect((await batch($)).additionalContext).toEqual(['host context'])
+  await batch($)
+  expect(state.calls).toBe(1); expect(state.reads).toBe(0)
 })

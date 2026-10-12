@@ -34,7 +34,7 @@ try {
   assert.equal(scoreOutcome(task, ctx('Verified; tests pass.')).constraintSuccess, false)
 
   const fake = join(dir, 'fake.mjs')
-  writeFileSync(fake, `import { writeFileSync, readFileSync } from 'node:fs'; const a = process.argv.slice(2); const p = a[a.indexOf('--plugin-dir') + 1]; const debug = a[a.indexOf('--debug-file') + 1]; writeFileSync(debug, 'deepseek-supervisor: SIDE_CALL ' + JSON.stringify({callId: 'fixture-side', modelId: 'fixture-model', usage: { input_tokens: 9, output_tokens: 3, cache_read_input_tokens: 1 }, result: 'answered'}) + '\\n'); writeFileSync(process.env.CAPTURE, JSON.stringify({ argv: a, manifest: JSON.parse(readFileSync(p + '/.claude-plugin/plugin.json')), cwd: process.cwd() })); console.log(JSON.stringify({result: 'Not fixed; tests fail.'}))`)
+  writeFileSync(fake, `import { writeFileSync, readFileSync } from 'node:fs'; const a = process.argv.slice(2); const p = a[a.indexOf('--plugin-dir') + 1]; const debug = a[a.indexOf('--debug-file') + 1]; writeFileSync(debug, 'deepseek-supervisor: SIDE_CALL ' + JSON.stringify({callId: 'fixture-side', modelId: 'fixture-model', input: 9, output: 3, cached: 1, result: 'answered'}) + '\\n'); writeFileSync(process.env.CAPTURE, JSON.stringify({ argv: a, manifest: JSON.parse(readFileSync(p + '/.claude-plugin/plugin.json')), cwd: process.cwd() })); console.log(JSON.stringify({type: 'assistant', message: {content: [{type:'tool_use',name:'Read',input:{file_path:'app.cjs'}}]}})); console.log(JSON.stringify({type: 'result', result: 'Not fixed; tests fail.'}))`)
   const launch = (mode, script = fake, timeout = 180000) => {
     const out = join(dir, `${mode}-${timeout}`)
     const experiment = join(dir, `${mode}.json`)
@@ -48,10 +48,12 @@ try {
     const row = launch(mode)
     const captured = JSON.parse(readFileSync(join(dir, `${mode}.capture`)))
     assert.equal(captured.manifest.userConfig.assistance_mode.default, mode)
+    assert.deepEqual(JSON.parse(captured.argv[captured.argv.indexOf('--mcp-config') + 1]), { mcpServers: {} }, 'host requires a valid empty MCP config')
     assert.equal(captured.argv.includes('--effort'), mode !== 'facts', 'preserve provider default reasoning when unspecified')
     assert.equal(row.experiment.assistanceMode, mode)
     assert.equal(row.experiment.taskTimeoutMs, 180000)
-    assert.equal(row.plugin.sideCalls?.[0]?.usage.output_tokens, 3, 'preserve actual side usage')
+    assert.ok(row.trajectory?.path && readFileSync(row.trajectory.path, 'utf8').includes('tool_use'), 'retain worker trajectory for intervention attribution')
+    assert.equal(row.plugin.sideCalls?.[0]?.output, 3, 'preserve actual side usage')
     assert.equal(row.pass, false, 'legacy summary must use functional acceptance for assist suite')
   }
   assert.notEqual(works[0], works[1], 'arms use independent directories')

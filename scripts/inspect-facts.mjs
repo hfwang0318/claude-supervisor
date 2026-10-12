@@ -38,6 +38,10 @@ const read = (root, path, deadline, budget) => {
     budget.bytes += content.length
     if (content.length !== before.size || budget.bytes > 2 * 1024 * 1024 || identity(fstatSync(fd)) !== identity(before) || identity(lstatSync(checkedPath(root, path, deadline))) !== identity(before)) throw Error('changed during read')
     alive(deadline)
+    budget.versions ??= new Map()
+    const previous = budget.versions.get(path)
+    if (previous && previous !== identity(before)) throw Error('source changed across reads')
+    budget.versions.set(path, identity(before))
     return content
   } finally { closeSync(fd) }
 }
@@ -54,10 +58,13 @@ export const validateFacts = (source, view, deadlineMs, budget = { bytes: 0 }) =
       if (hash(content) !== file.fileHash) return false
       contents.set(file.path, content.toString('utf8'))
     }
-    return view.facts.length > 0 && view.facts.every(f => {
+    const factsMatch = view.facts.length > 0 && view.facts.every(f => {
       const text = contents.get(f.path)
       return text !== undefined && Number.isSafeInteger(f.startLine) && f.startLine > 0 && f.quote && !secretContent.test(f.quote) && text.split('\n')[f.startLine - 1] === f.quote && f.fileHash === view.files.find(file => file.path === f.path)?.fileHash && f.id === hash(`${f.path}\n${f.startLine}\n${f.quote}\n${f.fileHash}`)
     })
+    // A source read early must still match after all later reads. No cached
+    // content alone certifies an entire group of sources.
+    return factsMatch && [...budget.versions].every(([path, version]) => identity(lstatSync(checkedPath(root, path, deadlineMs))) === version)
   } catch { return false }
 }
 export const inspectFacts = (source, request, deadlineMs) => {

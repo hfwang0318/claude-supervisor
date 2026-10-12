@@ -47,3 +47,11 @@ test('definition-only location advice cannot stand in for an actual import or ca
   const v = { ...view, facts: [{ ...view.facts[0]!, quote: 'exports.parseDate = s => Number(s.slice(-2))' }] }
   expect(buildAssistPacket(input, v, JSON.stringify(packet))).toBeNull()
 })
+
+test('unrelated imports and other batch reads do not conceal a candidate or call error', async () => {
+  const candidate = { tool: 'Read', input: { file_path: '/p/util.cjs' }, text: 'exports.parseDate = s => Number(s.slice(-2))' }
+  const rows = (toolUses: { tool: string; input: unknown; text: string }[]) => [{ role: 'assistant', text: '', toolUses }]
+  expect(assistSignal(input.asked, rows([{ ...candidate, text: 'const fs = require("node:fs")\n' + candidate.text }]), '/p')).not.toBeNull()
+  expect(assistSignal(input.asked, rows([candidate, { tool: 'Read', input: { file_path: '/p/package.json' }, text: '{"name":"fixture"}' }]), '/p')).not.toBeNull()
+  expect(assistSignal(input.asked, rows([{ tool: 'Bash', input: { command: 'node test.cjs' }, text: 'TypeError: parseDate is not a function' }, { tool: 'Read', input: { file_path: '/p/package.json' }, text: '{}' }]), '/p')).not.toBeNull()
+})

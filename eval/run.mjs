@@ -170,18 +170,27 @@ const once = ({ task, arm, rep }) =>
       mkdirSync(dirname(join(work, name)), { recursive: true })
       writeFileSync(join(work, name), text)
     }
+    const trajectoryPath = join(out, `${task.name}.${arm}.${rep}.trajectory.jsonl`)
     const debug = join(out, `${task.name}.${arm}.${rep}.debug.txt`)
     const pluginRoot = frozenPlugin ?? ROOT
     const pluginArgs = arm === 'on' ? ['--plugin-dir', pluginRoot] : []
     // Bare mode skips function hooks, including the supervisor under evaluation.
     const effortFlags = experiment?.worker.reasoning === 'default' ? [] : ['--effort', experiment?.worker.reasoning]
-    const frozenFlags = experiment ? ['--setting-sources', '', '--strict-mcp-config', '--mcp-config', '{}', '--model', experiment.worker.id, ...effortFlags] : []
+    const frozenFlags = experiment ? ['--setting-sources', '', '--strict-mcp-config', '--mcp-config', '{"mcpServers":{}}', '--model', experiment.worker.id, ...effortFlags] : []
     const started = Date.now()
     const isolated = experiment ? mkdtempSync(join(tmpdir(), 'dss-eval-context-')) : null
     const env = { ...process.env, DSS_PROMPT: task.prompt, DEEPSEEK_SUPERVISOR: arm === 'on' ? 'on' : 'off', ...(isolated ? { HOME: isolated, CLAUDE_CONFIG_DIR: join(isolated, '.claude') } : {}) }
-    const child = spawn(cmd, [...extraArgs, ...frozenFlags, ...pluginArgs, '--debug-file', debug, '--output-format', 'json', '--allowedTools', TOOLS, '-p', task.prompt], { cwd: work, detached: true, env })
+    const child = spawn(cmd, [...extraArgs, ...frozenFlags, ...pluginArgs, '--debug-file', debug, '--output-format', 'stream-json', '--verbose', '--allowedTools', TOOLS, '-p', task.prompt], { cwd: work, detached: true, env })
     let stdout = ''
-    child.stdout.on('data', d => (stdout += d))
+    let outputTruncated = false
+    let outputBytes = 0
+    child.stdout.on('data', d => {
+      const available = Math.max(0, 20 * 1024 * 1024 - outputBytes)
+      const kept = d.subarray(0, available)
+      outputBytes += kept.length
+      stdout += kept.toString('utf8')
+      if (kept.length < d.length) { outputTruncated = true; killTree() }
+    })
     child.stderr.on('data', () => {})
     let timedOut = false
     const killTree = () => { try { process.kill(-child.pid, 'SIGKILL') } catch {} }
@@ -192,9 +201,10 @@ const once = ({ task, arm, rep }) =>
       if (isolated) rmSync(isolated, { recursive: true, force: true })
       killTree() // no agent descendant may change files during hidden acceptance
       let res = {}
-      try {
-        res = JSON.parse(stdout.slice(stdout.indexOf('{')))
-      } catch {}
+      writeFileSync(trajectoryPath, stdout, { mode: 0o600 })
+      for (const line of stdout.split('\n')) {
+        try { const event = JSON.parse(line); if (event.type === 'result' || typeof event.result === 'string') res = event } catch {}
+      }
       const answer = typeof res.result === 'string' ? res.result : ''
       const files = readTree(work)
       const runIn = c => {
@@ -211,8 +221,9 @@ const once = ({ task, arm, rep }) =>
       } catch {}
       const row = {
         schemaVersion: 1,
-        outcome: scoreOutcome(task, { answer, files, original: task.files, work, run: runIn, exit: code, timedOut, unreadable: !answer, environmentStatus: code === 0 ? 'ready' : 'agent-error' }),
+        outcome: scoreOutcome(task, { answer, files, original: task.files, work, run: runIn, exit: code, timedOut, unreadable: !answer || outputTruncated, environmentStatus: code === 0 ? 'ready' : 'agent-error' }),
         timedOut,
+        trajectory: { path: trajectoryPath, truncated: outputTruncated },
         // Aggregate host usage is preserved, but is not invented per-call evidence.
         calls: [],
         sideUsageComplete: arm === 'off',

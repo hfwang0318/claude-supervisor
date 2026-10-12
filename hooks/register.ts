@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, PluginOptions, Register } from 'claude-code'
 
 import type { Issue, Reading, Track } from '../types'
-import type { Binding, ExecutionEvidence, AssistInput } from '../supervisor/contracts'
+import type { Binding, ExecutionEvidence, AssistInput, AssistPacket, FactView } from '../supervisor/contracts'
 import { validateObservation, normalizeTrack } from '../supervisor/ledger'
 import { captureSnapshot } from '../supervisor/workspace'
 import { buildAssistPacket, parseFactRequest, assistSignal, assistNote } from '../supervisor/assist'
@@ -224,18 +224,20 @@ const ask = async ($: EngineInterface, prompt: string, timeoutMs = 30000, jobSig
     say($, `configured side model unavailable: ${String(err)}`)
     return undefined
   })
-  const callEvent = { schemaVersion: 1, kind: 'side-call', callId: `${callBinding.sessionId}/${callBinding.generationId}/${callBinding.turnId}/${++s.jobNumber}`, modelId: selection.modelId, binding: callBinding, usage: reply?.usage ?? null, result: reply?.isAnswered ? 'answered' : 'unknown' }
+  const outputCapped = !!reply && reply.usage.output_tokens >= budget.maxTokens
+  const callEvent = { schemaVersion: 1, kind: 'side-call', callId: `${callBinding.sessionId}/${callBinding.generationId}/${callBinding.turnId}/${++s.jobNumber}`, modelId: selection.modelId, binding: callBinding, usage: reply?.usage ?? null, result: reply?.isAnswered && !outputCapped ? 'answered' : 'unknown' }
   await remember($, callEvent)
-  say($, `SIDE_CALL ${JSON.stringify(callEvent)}`)
+  say($, `SIDE_CALL ${JSON.stringify({ callId: callEvent.callId, modelId: callEvent.modelId, result: callEvent.result, input: reply?.usage.input_tokens ?? null, output: reply?.usage.output_tokens ?? null, cached: reply?.usage.cache_read_input_tokens ?? null, created: reply?.usage.cache_creation_input_tokens ?? null })}`)
   await selectionOf($)
   if (!sameBinding(callBinding, s.coordinator.binding)) return reply
-  if (!reply || !reply.isAnswered) { s.coordinator.recordFailure(); s.modelDisabled = true }
+  if (!reply || !reply.isAnswered || outputCapped) { s.coordinator.recordFailure(); s.modelDisabled = true }
   if (reply) s.coordinator.recordUsage(reply.usage.output_tokens)
-  return reply
+  return outputCapped ? undefined : reply
 }
 const currentSignals = new WeakMap<Runtime, AbortSignal>()
 
-const locationFacts = async ($: EngineInterface, list: Rows): Promise<string | null> => {
+type PreparedFacts = { id: string; packet: AssistPacket; view: FactView; note: string; signal: AbortSignal; deadlineMs: number }
+const locationFacts = async ($: EngineInterface, list: Rows): Promise<PreparedFacts | null> => {
   const s = await runtimeOf($)
   if (s.factsAttempted || s.modelDisabled || !s.asked) return null
   const symptom = assistSignal(s.asked, list, await $.session.cwd())
@@ -267,21 +269,12 @@ const locationFacts = async ($: EngineInterface, list: Rows): Promise<string | n
     const second = await ask($, secondPrompt, deadlineMs - await $.clock.now(), job.signal)
     if (!second?.isAnswered || !await current()) return null
     const packet = buildAssistPacket(input, view, second.text)
-    if (!packet || !await host.validateFacts(view, deadlineMs) || !await current()) return null
+    if (!packet || !await current()) return null
     const note = assistNote(packet, view)
     if (bytesOf(note) > 32768) return null
     finished = s.coordinator.finish(id, binding, 'succeeded', await $.clock.now())
     if (!finished) return null
-    let delivered: string | null = null
-    const delivery = await s.coordinator.deliver(id, binding, async () => {
-      if (!await current()) return 'dropped'
-      delivered = note
-      return 'delivered'
-    })
-    const event = { kind: 'assistance', binding, packet, sources: view.facts.filter(f => packet.factIds.includes(f.id)), sourceManifestHash: view.manifestHash, delivery }
-    await remember($, event)
-    say($, `ASSIST ${JSON.stringify(event)}`)
-    return await current() ? delivered : null
+    return { id, packet, view, note, signal: job.signal, deadlineMs }
   } catch (error) {
     await remember($, { kind: 'assistance', binding, result: 'unknown', reason: redact(String(error)) })
     return null
@@ -793,6 +786,7 @@ export const register: Register = (on, options) => {
     const list = await messages($)
     const end = evidenceOf(list).end
     if (end !== s.recordEnd) { s.coordinator.changedWorkspace(`tool-record-${end}`, await $.clock.now()); s.recordEnd = end }
+    const batchBinding = { ...s.coordinator.binding }
     const said = list.filter(r => r.role === 'assistant').map(r => r.text)
     // A `[ysk#3 told]` written in passing settles #3 as one in the final answer does.
     await settleTags($, said.join('\n'))
@@ -802,7 +796,25 @@ export const register: Register = (on, options) => {
     if (found.length === 0 && assistance === null) return result
     if (found.length > 0) await showCards($, found)
     await show($)
-    return { ...result, additionalContext: [...(result.additionalContext ?? []), ...(found.length ? [noteText(found)] : []), ...(assistance ? [assistance] : [])] }
+    await selectionOf($)
+    if (!(await isOn($)) || !sameBinding(batchBinding, s.coordinator.binding)) return result
+    let note: string | null = null
+    if (assistance) {
+      // Reserve once, but the hook has no engine acknowledgement of consumption.
+      const status = await s.coordinator.deliver(assistance.id, assistance.packet.binding, async () => 'unknown')
+      if (status !== 'dropped' && await $.clock.now() < assistance.deadlineMs) {
+        const current = await hostOf($, assistance.signal).validateFacts(assistance.view, assistance.deadlineMs).catch(() => false)
+        if (current && !assistance.signal.aborted && sameBinding(batchBinding, s.coordinator.binding)) note = assistance.note
+      }
+    }
+    // No awaited UI or storage operations after this final binding/source gate.
+    if (!sameBinding(batchBinding, s.coordinator.binding)) return result
+    if (note && assistance) {
+      const event = { kind: 'assistance', binding: assistance.packet.binding, packet: assistance.packet, sources: assistance.view.facts.filter(f => assistance.packet.factIds.includes(f.id)), sourceManifestHash: assistance.view.manifestHash, delivery: 'context-returned' }
+      void remember($, event)
+      say($, `ASSIST ${JSON.stringify(event)}`)
+    }
+    return { ...result, additionalContext: [...(result.additionalContext ?? []), ...(found.length ? [noteText(found)] : []), ...(note ? [note] : [])] }
   }).catch(($, e, next) => next(e))
 
   // Before the turn ends: the answer held to the record (and, where nobody watches,
