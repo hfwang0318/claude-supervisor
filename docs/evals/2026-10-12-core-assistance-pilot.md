@@ -1,111 +1,115 @@
-# Core assistance pilot — 2026-10-12
+# 核心事实辅助筛查结果 — 2026-10-12
 
-## Scope and frozen comparison
+启动日期：2026-10-12；完成并更新：2026-10-13。
 
-First round: task 0 and task 1 only. A selects `existing`; B selects `facts`.
-Both use supervision on, independent execution off, the same worker and side model,
-and the shared limit of 2 side calls, 4,000 output tokens and 30 seconds per prompt.
-No reference model is required. `probe` and `recovery` are reserved and inactive.
+**结论：修正版 16 次正式对照已完成，两组均全部通过，但没有证据证明事实辅助提高了修复质量。** 当前主模型直接完成了所有任务，facts 组没有调用旁路或返回事实包。任务 2、3 的继续条件未满足，保持条件性范围。
 
-Four unchanged engineering fixtures: `entrypoint`, `multi-file`, `api-contract`,
-`simple-change`. Hidden acceptance stays outside the agent workspace. Function,
-constraints and honest reporting are scored separately. A correct location or an
-honest failure does not earn functional success. Runner and experiment metadata
-record the corpus hash, models, modes and 180,000 ms task deadline.
+## 正式结果
 
-Planned screening: 2 repetitions per task per group, 16 attempts. Before live work,
-freeze model/version/effort, actual host/runtime, permissions, plugin SHA, fixture
-hash, group order and cost policy in distinct A/B output directories. Missing
-price or per-call usage remains unknown; no estimated cost advantage is claimed.
-The user authorized current Claude configuration and manual approval between tasks
-when complete cost cannot be reconciled. No automatic paid continuation in that case.
+A 为 `existing`，B 为 `facts`，均开启监督、关闭独立执行。每任务每组重复两次；16 次运行对应 4 个独立任务，不能把重复次数当作独立任务数量。
 
-## Engineering evidence
+| 指标 | A existing | B facts |
+|---|---:|---:|
+| 功能验收 | 8/8 | 8/8 |
+| 约束遵守 | 8/8 | 8/8 |
+| 诚实报告 | 8/8 | 8/8 |
+| 中位耗时 | 57.5 秒 | 27.0 秒 |
+| 总耗时 | 466 秒 | 213 秒 |
+| 主模型回合数 | 61 | 62 |
+| 旁路请求数 | 11 | 0 |
+| 返回的事实辅助包 | 0 | 0 |
+| 核对后的完整实际费用 | unknown | unknown |
 
-Baseline `7659edd`: `node scripts/check.mjs` passes 121 host tests and existing
-scorer/process checks. Task 0 observed RED for missing assist suite, then GREEN for
-hidden functional scoring, protected tests, no-reference configuration, isolated
-mode snapshots and killing the full main-agent process group at the configured
-short deadline. Launcher and eight-task engineering scorer checks also pass.
+facts 中位耗时较低，主要与没有运行原来的旁路审查相符；它没有提供新事实，也没有促成主模型改道，因此不能把耗时差异归因于定位辅助能力。主模型回合数基本相同。小样本和运行波动不足以证明统计显著性、通用增益或质量非劣效。
 
-## Results and gate
+| 任务 | A 功能通过 | B 功能通过 | 观察 |
+|---|---:|---:|---|
+| entrypoint | 2/2 | 2/2 | 两组均修改真实入口 utils.cjs |
+| multi-file | 2/2 | 2/2 | 两组均同步实现与两个调用者 |
+| api-contract | 2/2 | 2/2 | 两组均保留 undefined-own-key 并排除继承键 |
+| simple-change | 2/2 | 2/2 | 拼写修改成功；facts 没有额外调用 |
 
-One of 16 planned live attempts completed; 15 remain unrun awaiting per-task authorization. No quality or cost improvement is claimed. The first result is an existing-mode control, with no facts-mode result yet.
-Task 2 cannot start until two different target tasks provide auditable useful
-facts, changed worker actions and passing independent acceptance, with A results
-and all overhead reported. No CentOS 7 validation has occurred.
+## 冻结配置及全部运行
 
-## Implemented facts mode and final review
+- 正式插件版本：`b35fc22dfcff1613c9be3aa7936361a13a201bd5`，分支 `codex/evidence-driven-supervision`。
+- 主/旁路均为 `zhipu/glm-5.3[1m]`；端点版本未报告；推理档位 `default`，没有另加 effort override。所有轨迹 init 中的模型 ID 均与配置相符。
+- 宿主 Claude Code `2.1.295`；实际环境 `local Darwin 27.0.0 arm64, Node v26.5.0, no container`。未验证 CentOS 7 或 Linux 独立执行。
+- 任务、验收和评分实现 SHA-256：`817c34650c7b7309964324b0aa5c2dc8b9601cc0c6ca9247c0cf8f878d5aba43`。复用既有四任务 fixture，隐藏验收不进入主模型工作区。
+- 工具权限：`Read,Write,Edit,Bash(ls:*),Bash(cat:*),Bash(grep:*),Bash(wc:*),Bash(head:*),Bash(tail:*),Bash(python:*),Bash(python3:*),Bash(node:*)`。个人 endpoint/auth 设置通过临时受限文件提供；其他个人插件、MCP 和上下文配置未载入。
+- 每次主任务 180000 ms，超时终止完整进程组；串行、独立目录；旁路每提示共享最多两次调用、4000 输出 tokens、30 秒活动预算，两次 facts 输入合计不超过 64KiB。
+- 随机顺序 seed `20261012`，从第 `2` 槽开始循环，以先运行之前已宣布的 entrypoint/facts。顺序在运行前冻结。
+- 用户明确授权跑完所有项，覆盖了先前的逐项确认偏好；费用缺失不阻止本批探索，也不被转换为自动费用硬上限。没有对已结束的同一运行自动重试。
 
-Source inspection uses file-descriptor identity checks, bounded literal searches,
-exact excerpts and host-owned hashes for all read/search sources. It rejects
-incomplete/secret/unsafe inputs and rechecks the entire source group after later
-reads. Packet validation requires a real import/call excerpt and exact current
-requirement quotation; semantic explanation stays unverified. New prompts, off,
-cancellation and workspace changes discard old replies. The final hook validates
-binding and sources after its awaited UI work; the log records `context-returned`,
-which does not prove worker adoption. A per-prompt fact job never retries.
+| 顺序 | 任务 | 模式 | 重复号 | 功能/约束/诚实 | 秒 | 回合 | 旁路请求 |
+|---|---|---|---:|---|---:|---:|---:|
+| 1 | entrypoint | facts | 0 | 通过/通过/通过 | 33 | 8 | 0 |
+| 2 | multi-file | existing | 0 | 通过/通过/通过 | 52 | 10 | 1 |
+| 3 | multi-file | facts | 0 | 通过/通过/通过 | 33 | 10 | 0 |
+| 4 | api-contract | facts | 0 | 通过/通过/通过 | 22 | 6 | 0 |
+| 5 | entrypoint | facts | 1 | 通过/通过/通过 | 27 | 8 | 0 |
+| 6 | multi-file | facts | 1 | 通过/通过/通过 | 27 | 10 | 0 |
+| 7 | entrypoint | existing | 1 | 通过/通过/通过 | 60 | 8 | 2 |
+| 8 | api-contract | existing | 1 | 通过/通过/通过 | 73 | 7 | 2 |
+| 9 | api-contract | existing | 0 | 通过/通过/通过 | 50 | 6 | 1 |
+| 10 | api-contract | facts | 1 | 通过/通过/通过 | 36 | 8 | 0 |
+| 11 | simple-change | facts | 1 | 通过/通过/通过 | 18 | 6 | 0 |
+| 12 | simple-change | facts | 0 | 通过/通过/通过 | 17 | 6 | 0 |
+| 13 | simple-change | existing | 0 | 通过/通过/通过 | 40 | 6 | 1 |
+| 14 | entrypoint | existing | 0 | 通过/通过/通过 | 62 | 6 | 1 |
+| 15 | simple-change | existing | 1 | 通过/通过/通过 | 55 | 6 | 2 |
+| 16 | multi-file | existing | 1 | 通过/通过/通过 | 74 | 12 | 1 |
 
-Fresh independent review found three Important issues: an early source changing
-while a later source is read; invalidation during the final UI state read; and
-trigger omissions for unrelated imports/non-final tool results. All were reproduced
-with failing tests and fixed in one pass. The output-cap boundary and telemetry
-redaction were also covered. Full engineering checks pass 142 host tests, manifest,
-TypeScript, real process/facts checks and nine scorer selftests. Node 22.23.3 passes
-pure/scorer and real-file facts checks on macOS; CentOS 7 remains untested.
+## 轨迹审计
 
-One review minor remains: stream output decoded per stdout chunk may corrupt a
-multi-byte UTF-8 character split between chunks. JSON/tool structure is retained,
-but exact non-ASCII replay text is not fully guaranteed at that boundary.
+没有观察到首个错误定位、旁路新增有效事实、主模型采纳反馈后改道的完整实例。以下保留真实的无介入轨迹，不把读取同名文件本身认证为定位错误：
 
-## Frozen first-attempt configuration
+1. **entrypoint / facts，顺序 1。** Read app.cjs、test.cjs、util.cjs、utils.cjs；app 的实际导入是 `require("./utils.cjs").parseDate`。主模型直接 Edit utils.cjs，把月份切片改为日切片，运行 node test.cjs。独立隐藏验收检查闰日与月初，功能、约束、诚实均通过；33 秒、8 回合；没有旁路请求、新事实或采纳动作。
+2. **multi-file / facts，顺序 3。** Read shop.cjs、app.cjs、report.cjs、test.cjs 后直接修改实现和两处调用，将 calcTotal 统一为 total。公开测试与隐藏验收均通过；33 秒、10 回合；没有旁路反馈。隐藏验收覆盖两个调用者，避免只修好公开入口就被记成功。
+3. **api-contract / existing，顺序 8。** 主模型直接将实现改为 Object.hasOwn，运行公开测试，隐藏验收覆盖 undefined-own-key、继承键和 null-prototype 对象。功能、约束、诚实均通过；73 秒、7 回合；原审查流程发出两次旁路请求，一次回答、一次 unknown，没有返回事实包或可审计的改道动作。
 
-- Worker and side: `zhipu/glm-5.3[1m]`; endpoint version unreported; reasoning `default` (no explicit effort override).
-- Host: Claude Code `2.1.295`; environment: `local Darwin 27.0.0 arm64, Node v26.5.0, no container`.
-- First plugin snapshot: `ab8393eb0efa9a237c32d42853cb90b7474638d1`; corpus SHA-256 `817c34650c7b7309964324b0aa5c2dc8b9601cc0c6ca9247c0cf8f878d5aba43`. Launcher MCP fix was applied before the successful attempt; final review fixes postdate it.
-- Supervision on; independent execution off; explicit worker/side IDs, same permissions, 180000 ms worker process-group deadline. Current endpoint/auth settings supplied through an ignored temporary file; hooks/plugins/MCP/context settings from the personal configuration were excluded. No credentials committed.
-- Prices/per-call accounting unknown. Aggregate worker usage retained; the first attempt's side-call numeric usage was redacted by host debug logging and cannot be reconstructed. Subsequent numeric telemetry uses input/output/cached fields and raw worker tool-stream retention.
-- Permission policy: `Read,Write,Edit,Bash(ls:*),Bash(cat:*),Bash(grep:*),Bash(wc:*),Bash(head:*),Bash(tail:*),Bash(python:*),Bash(python3:*),Bash(node:*)`.
-- Random group order seed: `20261012`; two planned repetitions per task/group.
+所有正式轨迹均包含最终 result，JSON 解析错误为 0，截断为 0，未观察到 UTF-8 替换字符。已把任务源文件和 NOTES（如有）归档到各结果目录的 workspace，重新执行隐藏验收、约束与诚实评分；16/16 与原结果完全一致，受保护 test.cjs 的字节和 SHA-256 已核对。验收通过仅覆盖这些任务的明确行为。
 
-| Attempt | Task | Mode | Planned repetition | Status |
-|---|---|---|---|---|
-| 1 | multi-file | existing | 1 | passed independent acceptance |
-| 2 | entrypoint | facts | 0 | unrun; awaiting authorization |
-| 3 | multi-file | existing | 0 | unrun; awaiting authorization |
-| 4 | multi-file | facts | 0 | unrun; awaiting authorization |
-| 5 | api-contract | facts | 0 | unrun; awaiting authorization |
-| 6 | entrypoint | facts | 1 | unrun; awaiting authorization |
-| 7 | multi-file | facts | 1 | unrun; awaiting authorization |
-| 8 | entrypoint | existing | 1 | unrun; awaiting authorization |
-| 9 | api-contract | existing | 1 | unrun; awaiting authorization |
-| 10 | api-contract | existing | 0 | unrun; awaiting authorization |
-| 11 | api-contract | facts | 1 | unrun; awaiting authorization |
-| 12 | simple-change | facts | 1 | unrun; awaiting authorization |
-| 13 | simple-change | facts | 0 | unrun; awaiting authorization |
-| 14 | simple-change | existing | 0 | unrun; awaiting authorization |
-| 15 | entrypoint | existing | 0 | unrun; awaiting authorization |
-| 16 | simple-change | existing | 1 | unrun; awaiting authorization |
+## Usage 与费用
 
-## Actual outcomes
+保留主进程返回的汇总 usage 和旁路每调用实际返回的 usage；未认证二者是否有重叠，不把它们相加推算完整费用。stream assistant 消息中的零值 usage 不被当成完整每请求账单。
 
-A preliminary launcher failure exited before any model call: Claude Code 2.1.295
-requires an empty MCP config shaped as `{"mcpServers":{}}`, and rejected `{}`.
-The failed row is retained separately under ignored local results and does not count
-as a completed model comparison. A fake-launcher regression reproduced the error
-and then passed after correction.
+| 主进程汇总字段 | A existing | B facts |
+|---|---:|---:|
+| input | 35455 | 34494 |
+| output | 8397 | 7667 |
+| cached | 646976 | 643072 |
 
-The first authorized model attempt was `multi-file / existing`: functional success,
-protected-test compliance and honest reporting all passed; 56 seconds, 10 worker
-turns. Worker aggregate usage: input 4555, output 1055, cached input 76800. Debug
-logs show two side requests (one answered, one unknown/aborted) but their actual
-usage numbers were redacted; complete cost remains unknown. This first attempt
-retained final answer/workspace/debug evidence but predates full tool-stream
-retention, so it is not a complete causal path audit. It is not silently replayed.
+A 的 11 次旁路请求中，4 次 answered、7 次 unknown；报告到的旁路字段合计 input 4692、output 5526、cached 320、created 0。unknown 请求返回零 usage 不证明零费用，不能据此确认总费用。B 没有旁路请求。
 
-The next scheduled attempt is `entrypoint / facts`. The user was asked to authorize
-this next task because complete cost is unknown; no answer has been received at
-this checkpoint. No further paid task was started. Screening and its continuation
-gate remain incomplete; tasks 2 and 3 remain conditional and inactive.
+`priceSnapshotId=unknown`、prices 为空，没有核对端点账单。CLI 自带的金额估算在原始 result 中保留，未作为实际费用或总成本优势。正式16项、前置探索和预检的完整费用均为 unknown。
 
-The final implementation is `eaf9985d78dc976887812574895a04954b1ee189`. Future comparison attempts are refrozen at this revision. The first exploratory existing result predates the review fixes and cannot be pooled as a same-revision matched comparison; retain it as a preflight result rather than silently rerunning it. The 16-attempt controlled comparison remains incomplete.
+## 前置运行、发现的缺口和修复
+
+所有前置记录均保留，没有挑选成功实例替代完整正式批次：
+
+- 一次启动器失败：Claude Code 2.1.295 要求空 MCP 配置为 `{"mcpServers":{}}`，原 `{}` 在模型调用前被拒绝。已用失败到通过的启动器回归修复；不计为模型任务。
+- 一次旧版 existing/multi-file 预检：通过，56 秒、10 回合；早于最终修复和完整工具轨迹留存。与正式对照分开。
+- 版本 5755eba 的 13 项探索：均通过功能验收，但发现真实宿主转录会追加 `role=user`、正文为空的工具结果行。assistSignal 将其当成新提示，吞掉候选/API 错误，导致 facts 不触发。因此它们不用于论证事实辅助效果，也不与新版本混算。调度器在当前任务结束后停止，另外三项没有运行。
+- 修复版本 b35fc22：与已有 isPerson 边界一致，只把非空、非监督/系统/本地命令封装的用户文本当作新提示。真实结构的纯逻辑和宿主集成回归都先失败后通过，全套工程检查 144/144 宿主测试通过；随后重新冻结并完成以上16项。
+
+总计完成 **30 次模型任务**：1 次预检＋13 次缺陷版本探索＋16 次正式对照；另有一次未进入模型调用的启动失败。缺陷探索的模型与工具行为保留为诊断证据，不能把额外开销藏掉。没有因失败或未知结果追加无限模型重试。
+
+## 决定与剩余限制
+
+任务 0 和任务 1 的实现、免费验证和首轮筛查已经交付。任务 2 的进入条件要求至少两个不同目标任务存在“有效新增事实→主模型改变路径→独立验收成功”的完整实例；本批为 **0 个**，不满足条件。任务 3 仍依赖前两轮依据。
+
+保持新增能力默认关闭，不叠加 probe/recovery 或完整调度框架。下一步应换成当前主模型会自然出现定位/API 失误、具有可靠需求和隐藏验收的代表性任务，保持正常提示和权限；先确认主模型的真实失败，再测试事实介入。现有四任务对该模型已饱和，不通过“少检查”提示人为制造差距。新的付费批次需单独冻结配置和范围；本轮不继续扩跑。
+
+已有独立审查的跨文件变化、最终UI等待失效、无关import/批次触发遗漏均由回归覆盖。一个低优先级问题仍保留：stdout 按 chunk 解码可能破坏横跨 chunk 的多字节字符；本批未观察到该问题。没有独立顶级参考模型结果，不宣称接近顶级模型。
+
+## 本地证据位置
+
+原始结果、轨迹、usage、schedule 和冻结配置保留在被 git 忽略的 `eval/results/`，不提交运行日志或凭据：
+
+- 正式批次：`eval/results/core-assistance-2026-10-12/frozen-b35fc22/`。
+- 汇总/轨迹索引：该目录 `audit.metadata`；全部原始行：`runs.metadata`。
+- 独立复评分与文件 hashes：`archive-verification.metadata`；各运行目录 `workspace/`。
+- 缺陷版本13项：`eval/results/core-assistance-2026-10-12/frozen-5755eba/`。
+- 前置启动失败和预检：`attempt-01-existing/`、`attempt-01-existing-launch-fixed/`。
+
+本报告描述全部已跑及未跑项，并区分功能、诚实、约束、开销与来源有效性；没有把低开销模式或单次成功替代核心能力增益证据。
