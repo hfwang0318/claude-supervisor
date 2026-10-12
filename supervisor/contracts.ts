@@ -1,2 +1,2 @@
 // Shared contracts live in the self-contained host declaration file.
-export type { ModelPair, Binding, RequirementRef, ExecutionEvidence, ProbeCandidate, Budget, Snapshot, VerifiedOracle, Resolution, IssueState, JobStatus, DeliveryStatus, Intervention } from '../types'
+export type { SourceFact, FactRequest, FactView, AssistInput, AssistPacket, ModelPair, Binding, RequirementRef, ExecutionEvidence, ProbeCandidate, Budget, Snapshot, VerifiedOracle, Resolution, IssueState, JobStatus, DeliveryStatus, Intervention } from '../types'

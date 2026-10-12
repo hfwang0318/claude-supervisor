@@ -158,7 +158,9 @@ const pluginStats = log => {
   const rules = checks.reduce((n, c) => n + (c.rules?.length ?? 0), 0)
   const forks = [...log.matchAll(/\[plugin_model_fork\] finished: .*?input=(\d+) output=(\d+) cacheRead=(\d+)/g)]
   const sum = k => forks.reduce((n, m) => n + Number(m[k]), 0)
-  return { passes, items, rules, input: sum(1), output: sum(2), cached: sum(3) }
+  const sideCalls = json(/deepseek-supervisor: SIDE_CALL (\{.*\})/g)
+  const assistance = json(/deepseek-supervisor: ASSIST (\{.*\})/g)
+  return { passes, items, rules, sideCalls, assistance, input: sum(1), output: sum(2), cached: sum(3) }
 }
 
 const once = ({ task, arm, rep }) =>
@@ -172,7 +174,8 @@ const once = ({ task, arm, rep }) =>
     const pluginRoot = frozenPlugin ?? ROOT
     const pluginArgs = arm === 'on' ? ['--plugin-dir', pluginRoot] : []
     // Bare mode skips function hooks, including the supervisor under evaluation.
-    const frozenFlags = experiment ? ['--setting-sources', '', '--strict-mcp-config', '--mcp-config', '{}', '--model', experiment.worker.id, '--effort', experiment.worker.reasoning] : []
+    const effortFlags = experiment?.worker.reasoning === 'default' ? [] : ['--effort', experiment?.worker.reasoning]
+    const frozenFlags = experiment ? ['--setting-sources', '', '--strict-mcp-config', '--mcp-config', '{}', '--model', experiment.worker.id, ...effortFlags] : []
     const started = Date.now()
     const isolated = experiment ? mkdtempSync(join(tmpdir(), 'dss-eval-context-')) : null
     const env = { ...process.env, DSS_PROMPT: task.prompt, DEEPSEEK_SUPERVISOR: arm === 'on' ? 'on' : 'off', ...(isolated ? { HOME: isolated, CLAUDE_CONFIG_DIR: join(isolated, '.claude') } : {}) }

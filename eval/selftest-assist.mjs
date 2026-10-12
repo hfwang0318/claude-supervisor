@@ -11,6 +11,7 @@ assert.ok(suite, 'assist suite must exist')
 assert.deepEqual(suite.TASKS.map(t => t.name), ['entrypoint', 'multi-file', 'api-contract', 'simple-change'])
 const model = { id: 'fixture-model', version: 'fixture', reasoning: 'low' }
 const config = { schemaVersion: 1, hostVersion: 'fixture', pluginSha: 'fixture', environmentImage: 'fixture', toolPermissions: 'fixture', priceSnapshotId: 'unknown', split: 'development', stopRule: 'manual per task', worker: model, prices: {}, externalContextDisabled: true, otherPluginsDisabled: true }
+assert.equal(validateExperiment({ ...config, worker: { ...model, id: 'zhipu/glm-5.3[1m]' } }).worker.id, 'zhipu/glm-5.3[1m]')
 assert.equal(validateExperiment(config).side.id, model.id, 'non-reference comparison needs no reference')
 assert.throws(() => validateExperiment({ ...config, assistanceMode: 'bogus' }), /assistance mode/)
 for (const timeout of [0, -1, 1.5, '180000']) assert.throws(() => validateExperiment({ ...config, taskTimeoutMs: timeout }), /timeout/)
@@ -33,11 +34,11 @@ try {
   assert.equal(scoreOutcome(task, ctx('Verified; tests pass.')).constraintSuccess, false)
 
   const fake = join(dir, 'fake.mjs')
-  writeFileSync(fake, `import { writeFileSync, readFileSync } from 'node:fs'; const a = process.argv.slice(2); const p = a[a.indexOf('--plugin-dir') + 1]; writeFileSync(process.env.CAPTURE, JSON.stringify({ manifest: JSON.parse(readFileSync(p + '/.claude-plugin/plugin.json')), cwd: process.cwd() })); console.log(JSON.stringify({result: 'Not fixed; tests fail.'}))`)
+  writeFileSync(fake, `import { writeFileSync, readFileSync } from 'node:fs'; const a = process.argv.slice(2); const p = a[a.indexOf('--plugin-dir') + 1]; const debug = a[a.indexOf('--debug-file') + 1]; writeFileSync(debug, 'deepseek-supervisor: SIDE_CALL ' + JSON.stringify({callId: 'fixture-side', modelId: 'fixture-model', usage: { input_tokens: 9, output_tokens: 3, cache_read_input_tokens: 1 }, result: 'answered'}) + '\\n'); writeFileSync(process.env.CAPTURE, JSON.stringify({ argv: a, manifest: JSON.parse(readFileSync(p + '/.claude-plugin/plugin.json')), cwd: process.cwd() })); console.log(JSON.stringify({result: 'Not fixed; tests fail.'}))`)
   const launch = (mode, script = fake, timeout = 180000) => {
     const out = join(dir, `${mode}-${timeout}`)
     const experiment = join(dir, `${mode}.json`)
-    writeFileSync(experiment, JSON.stringify({ ...config, assistanceMode: mode, taskTimeoutMs: timeout }))
+    writeFileSync(experiment, JSON.stringify({ ...config, worker: { ...model, reasoning: mode === 'facts' ? 'default' : 'low' }, assistanceMode: mode, taskTimeoutMs: timeout }))
     execFileSync(process.execPath, ['eval/run.mjs', '--suite', 'assist', '--experiment', experiment, '--tasks', 'entrypoint', '--arms', 'on', '--reps', '1', '--jobs', '1', '--out', out], { env: { ...process.env, DSS_CMD: process.execPath, DSS_ARGV: JSON.stringify([script]), CAPTURE: join(dir, `${mode}.capture`) }, timeout: 15000, stdio: 'pipe' })
     const row = JSON.parse(readFileSync(join(out, 'entrypoint.on.0.json')))
     works.push(row.work)
@@ -47,8 +48,10 @@ try {
     const row = launch(mode)
     const captured = JSON.parse(readFileSync(join(dir, `${mode}.capture`)))
     assert.equal(captured.manifest.userConfig.assistance_mode.default, mode)
+    assert.equal(captured.argv.includes('--effort'), mode !== 'facts', 'preserve provider default reasoning when unspecified')
     assert.equal(row.experiment.assistanceMode, mode)
     assert.equal(row.experiment.taskTimeoutMs, 180000)
+    assert.equal(row.plugin.sideCalls?.[0]?.usage.output_tokens, 3, 'preserve actual side usage')
     assert.equal(row.pass, false, 'legacy summary must use functional acceptance for assist suite')
   }
   assert.notEqual(works[0], works[1], 'arms use independent directories')

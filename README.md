@@ -71,6 +71,32 @@ currently unsupported. Without a trustworthy copy the plugin provides read-only
 diagnostics and executes no side commands in the real project. Only matching owned
 copies are cleaned up.
 
+### Read-only location assistance (opt-in)
+
+Set `assistance_mode=facts` to replace the existing side-model review with one
+location task after a tool batch. The trigger is a named function candidate without
+caller/import context, or an observed call/API error. Simple spelling changes can
+skip it. The first call selects files/search terms; the second may return one
+advisory packet or null. Both share the same per-prompt budget; their combined
+input is at most 64KiB. There is no new completion hold or repair verdict.
+
+The host reads only source text: up to 6 selected files, 2 literal search terms,
+200 visited entries, 2MiB total reads, 256KiB per file and 32KiB returned data.
+Secret paths/lines, symlinks, special files, missing sources and incomplete ranges
+produce no packet. Every excerpt has its path, line and SHA-256. Source hashes
+are checked during inspection and before delivery; changed batches, new prompts,
+off and cancellation discard old results. Explanations and suggested checks remain
+unverified. The host neither executes nor imports project code for this mode.
+
+`assistance_mode=existing` remains the default. `probe` and `recovery` are reserved
+and currently run only record rules. `execution_mode` separately controls the
+existing independent executor and does not enable real-directory side writes.
+Use `node eval/selftest-assist.mjs` and `node scripts/selftest-assist.mjs` for free
+checks. The four-task `assist` suite needs a frozen `--experiment` config with
+`assistanceMode` and optional `taskTimeoutMs` (pilot: 180000); A and B both use
+`--arms on` with different mode configs and fresh result directories. Live quality
+and cost gains remain unproven; see [the pilot report](docs/evals/2026-10-12-core-assistance-pilot.md).
+
 ## Issue state
 
 `resolution=open|fixed|unknown`, `disclosed` and `contested` track separate facts.

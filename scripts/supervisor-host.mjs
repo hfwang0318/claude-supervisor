@@ -1,4 +1,5 @@
 // Trusted, model-free local service. Requests are argv/stdin data, never shell code.
+import { inspectFacts, validateFacts } from './inspect-facts.mjs'
 import { createHash, randomUUID } from 'node:crypto'
 import { cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
@@ -169,6 +170,8 @@ export const execute = async (snapshot, command, files, deadlineMs) => {
 }
 
 export const handle = async request => {
+  if (request.action === 'inspect') return inspectFacts(request.root, request.request, request.deadlineMs)
+  if (request.action === 'validate-facts') return validateFacts(request.root, request.view, request.deadlineMs)
   if (request.action === 'manifest') return manifest(request.root, request.deadlineMs)
   if (request.action === 'capture') return capture(request.binding, request.root, request.deadlineMs)
   if (request.action === 'cleanup') { cleanup(request.snapshot); return { cleaned: true } }

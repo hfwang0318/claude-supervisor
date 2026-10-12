@@ -30,9 +30,10 @@ if (!flags.includes('--pure')) {
   if (!existsSync(join(root, '.claude-plugin/types/tsconfig.json'))) { console.error('Host types missing: full engineering checks unavailable'); process.exit(1) }
   run('TypeScript', process.execPath, ['node_modules/typescript/bin/tsc', '-p', '.'])
   run('host tests', 'claude', ['plugin', 'test', '.'], true)
+  run('real read-only facts', process.execPath, ['scripts/selftest-assist.mjs'])
   run('real workspace/process isolation', process.execPath, ['scripts/selftest-workspace.mjs'])
 }
 if (!flags.includes('--host')) {
-  for (const name of ['selftest', 'selftest-long', 'selftest-hard', 'selftest-late', 'selftest-weak', 'selftest-metrics', 'selftest-engineering', 'selftest-launch']) run(`scorer ${name}`, process.execPath, [`eval/${name}.mjs`])
+  for (const name of ['selftest', 'selftest-long', 'selftest-hard', 'selftest-late', 'selftest-weak', 'selftest-metrics', 'selftest-engineering', 'selftest-launch', 'selftest-assist']) run(`scorer ${name}`, process.execPath, [`eval/${name}.mjs`])
 }
 console.log(flags.includes('--pure') ? 'Partial CI: pure/scorer checks only; host and process gates were not run.' : flags.includes('--host') ? 'Host checks passed; scorer checks were not requested.' : 'All local engineering checks passed. No paid model evaluations ran.')

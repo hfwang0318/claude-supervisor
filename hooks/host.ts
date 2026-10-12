@@ -5,7 +5,7 @@ export const selectSideModel = (configured: string, workerId: string): ModelSele
   return { modelId, reason: modelId === null ? 'worker model unavailable; choose a side model explicitly' : '' }
 }
 
-import type { Binding, ExecutionEvidence, Snapshot } from '../supervisor/contracts'
+import type { Binding, ExecutionEvidence, Snapshot, FactView } from '../supervisor/contracts'
 import type { Host } from '../supervisor/ports'
 import { classifyOutput } from '../supervisor/runner'
 
@@ -21,6 +21,12 @@ type Dependencies = {
 
 export const createHost = (deps: Dependencies): Host => ({
   now: deps.now, identity: deps.identity, cwd: deps.cwd, persist: deps.persist, deliver: deps.deliver,
+  inspectFacts: async (request, deadlineMs) => {
+    const value = await deps.service({ action: 'inspect', root: await deps.cwd(), request, deadlineMs }, deadlineMs) as FactView
+    if (!value || !Array.isArray(value.facts) || !Array.isArray(value.files) || value.incomplete !== false || deps.sanitize(JSON.stringify(value)) !== JSON.stringify(value)) return { facts: [], files: [], manifestHash: '', incomplete: true }
+    return value
+  },
+  validateFacts: async (view, deadlineMs) => await deps.service({ action: 'validate-facts', root: await deps.cwd(), view, deadlineMs }, deadlineMs) === true,
   capture: async (binding: Binding, deadlineMs: number) => {
     const value = await deps.service({ action: 'capture', root: await deps.cwd(), binding, deadlineMs }, deadlineMs) as Snapshot
     if (!value?.id || !value.root || !value.binding) return null

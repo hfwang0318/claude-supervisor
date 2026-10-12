@@ -1,3 +1,14 @@
+export type SourceFact = { id: string; path: string; startLine: number; quote: string; fileHash: string }
+export type FactRequest = { paths: string[]; terms: string[] }
+// Host-owned source hashes include searched files, not just returned matches.
+export type FactView = { facts: SourceFact[]; files: { path: string; fileHash: string }[]; manifestHash: string; incomplete: boolean }
+export type AssistInput = { binding: Binding; asked: string; recentFacts: SourceFact[]; symptom: string }
+export type AssistPacket = {
+  binding: Binding; kind: 'location' | 'probe' | 'recovery'; question: string
+  requirementQuote: string; factIds: string[]; observationIds: string[]
+  explanation: string; nextCheck: string | null; requiresMainJudgment: true
+}
+
 export type ModelPair = {
   workerId: string
   sideId: string

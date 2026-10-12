@@ -2,9 +2,10 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, PluginOptions, Register } from 'claude-code'
 
 import type { Issue, Reading, Track } from '../types'
-import type { Binding, ExecutionEvidence } from '../supervisor/contracts'
+import type { Binding, ExecutionEvidence, AssistInput } from '../supervisor/contracts'
 import { validateObservation, normalizeTrack } from '../supervisor/ledger'
 import { captureSnapshot } from '../supervisor/workspace'
+import { buildAssistPacket, parseFactRequest, assistSignal, assistNote } from '../supervisor/assist'
 import { Coordinator, sameBinding } from '../supervisor/coordinator'
 import { selectSideModel, createHost } from './host'
 import { registerBand } from './band'
@@ -12,7 +13,7 @@ import { HISTORY as READINGS_KEPT, readingOf } from './weather'
 import type { Finding, Kind } from './evidence'
 import { changesOf, contradictions, evidenceOf, isCheckClaim, isCheckCommand, isCheckKind, isClaim, keyOf, recordFindings, settledBy, skipped, supports, unreported } from './evidence'
 import type { Facts, Mode, VerifyInput, VerifyResult } from './prompt'
-import { base, bytesOf, claimsOf, clip,  factsOf, isSameItem, noteText, parseTurn, probeRefusal, redact, refusal, ROUNDS, shown, squash, verifyPrompt } from './prompt'
+import { assistPacketPrompt, factRequestPrompt, base, bytesOf, claimsOf, clip,  factsOf, isSameItem, noteText, parseTurn, probeRefusal, redact, refusal, ROUNDS, shown, squash, verifyPrompt } from './prompt'
 
 // Claude Code's own "You should know" is hidden whenever ANTHROPIC_BASE_URL points
 // away from Anthropic (observed on 2.1.290: that one variable alone), so it never
@@ -58,10 +59,11 @@ const isHidden = atom({ plugin: 'deepseek-supervisor', key: 'isHidden' } as cons
 const EMPTY: Track = { schemaVersion: 2, nextId: 1, issues: [], seen: [], runs: 0 }
 const track = atom({ plugin: 'deepseek-supervisor', key: 'track' } as const, EMPTY)
 
-type Config = { verifierModel: string; reviewChanges: boolean; executionMode: 'off' | 'shadow' | 'enabled' }
+type Config = { verifierModel: string; reviewChanges: boolean; executionMode: 'off' | 'shadow' | 'enabled'; assistanceMode: 'existing' | 'facts' | 'probe' | 'recovery' }
 const configOf = (options: PluginOptions | undefined): Config => ({
   // Empty means follow the host's current worker; no capability ranking applies.
   verifierModel: typeof options?.verifier_model === 'string' ? options.verifier_model.trim() : '',
+  assistanceMode: options?.assistance_mode === 'facts' || options?.assistance_mode === 'probe' || options?.assistance_mode === 'recovery' ? options.assistance_mode : 'existing',
   reviewChanges: options?.review_changes !== false,
   executionMode: options?.execution_mode === 'enabled' || options?.execution_mode === 'shadow' ? options.execution_mode : 'off',
 })
@@ -96,7 +98,7 @@ type Runtime = {
   steps: number; isBusy: boolean; promptsSinceCards: number; blocks: number
   held: Set<number>; followUps: number; turnFrom: number; isInteractive: boolean
   asked: string; told: number; last: string; coordinator: Coordinator
-  jobNumber: number; modelDisabled: boolean; cfg: Config; stateUsable: boolean; journal: Promise<unknown>; recordEnd: number; workerModel: string | null
+  jobNumber: number; modelDisabled: boolean; cfg: Config; stateUsable: boolean; journal: Promise<unknown>; recordEnd: number; workerModel: string | null; factsAttempted: boolean
 }
 const sessions = new Map<string, Runtime>()
 const runtimeOf = async ($: EngineInterface): Promise<Runtime> => {
@@ -104,7 +106,7 @@ const runtimeOf = async ($: EngineInterface): Promise<Runtime> => {
   let s = sessions.get(sessionId)
   if (s) return s
   const binding: Binding = { sessionId, generationId: String(await $.clock.now()), turnId: 'initial', taskRevision: 0, workspaceRevision: 'unknown', snapshotId: 'unknown' }
-  s = { steps: 0, isBusy: false, promptsSinceCards: 0, blocks: 0, held: new Set(), followUps: 0, turnFrom: 0, isInteractive: true, asked: '', told: 0, last: '', coordinator: new Coordinator(binding), jobNumber: 0, modelDisabled: false, cfg: configOf(undefined), stateUsable: true, journal: Promise.resolve(), recordEnd: 0, workerModel: null }
+  s = { steps: 0, isBusy: false, promptsSinceCards: 0, blocks: 0, held: new Set(), followUps: 0, turnFrom: 0, isInteractive: true, asked: '', told: 0, last: '', coordinator: new Coordinator(binding), jobNumber: 0, modelDisabled: false, cfg: configOf(undefined), stateUsable: true, journal: Promise.resolve(), recordEnd: 0, workerModel: null, factsAttempted: false }
   sessions.set(sessionId, s)
   return s
 }
@@ -172,7 +174,7 @@ const service = async ($: EngineInterface, request: Record<string, unknown>, dea
   // Capture/manifest/cleanup contain no project execution and are time bounded.
   if (request.action !== 'execute') {
     const r = await $.process.run(['node', `${$.plugin.root}/scripts/supervisor-host.mjs`], { stdin: JSON.stringify(request), timeoutMs })
-    if (r.exitCode !== 0 || r.isStdoutTruncated) throw Error('snapshot service unavailable')
+    if (r.exitCode !== 0 || r.isStdoutTruncated || r.isStderrTruncated) throw Error('snapshot service unavailable')
     return JSON.parse(r.stdout)
   }
   const stream = $.process.spawn({ argv: ['node', `${$.plugin.root}/scripts/supervisor-host.mjs`], input: JSON.stringify(request) })
@@ -222,7 +224,9 @@ const ask = async ($: EngineInterface, prompt: string, timeoutMs = 30000, jobSig
     say($, `configured side model unavailable: ${String(err)}`)
     return undefined
   })
-  await remember($, { schemaVersion: 1, kind: 'side-call', callId: `${callBinding.sessionId}/${callBinding.generationId}/${callBinding.turnId}/${++s.jobNumber}`, modelId: selection.modelId, binding: callBinding, usage: reply?.usage ?? null, result: reply?.isAnswered ? 'answered' : 'unknown' })
+  const callEvent = { schemaVersion: 1, kind: 'side-call', callId: `${callBinding.sessionId}/${callBinding.generationId}/${callBinding.turnId}/${++s.jobNumber}`, modelId: selection.modelId, binding: callBinding, usage: reply?.usage ?? null, result: reply?.isAnswered ? 'answered' : 'unknown' }
+  await remember($, callEvent)
+  say($, `SIDE_CALL ${JSON.stringify(callEvent)}`)
   await selectionOf($)
   if (!sameBinding(callBinding, s.coordinator.binding)) return reply
   if (!reply || !reply.isAnswered) { s.coordinator.recordFailure(); s.modelDisabled = true }
@@ -230,6 +234,62 @@ const ask = async ($: EngineInterface, prompt: string, timeoutMs = 30000, jobSig
   return reply
 }
 const currentSignals = new WeakMap<Runtime, AbortSignal>()
+
+const locationFacts = async ($: EngineInterface, list: Rows): Promise<string | null> => {
+  const s = await runtimeOf($)
+  if (s.factsAttempted || s.modelDisabled || !s.asked) return null
+  const symptom = assistSignal(s.asked, list, await $.session.cwd())
+  if (symptom === null) return null
+  const id = `facts-${++s.jobNumber}`
+  const binding = { ...s.coordinator.binding }
+  const job = s.coordinator.start(id, await $.clock.now())
+  if (!job) return null
+  s.factsAttempted = true
+  const input: AssistInput = { binding, asked: s.asked, recentFacts: [], symptom }
+  const host = hostOf($, job.signal)
+  const deadlineMs = await $.clock.now() + s.coordinator.remainingTime(await $.clock.now())
+  const current = async () => {
+    await selectionOf($)
+    return !job.signal.aborted && sameBinding(binding, s.coordinator.binding) && await isOn($) && await $.clock.now() < deadlineMs
+  }
+  let finished = false
+  try {
+    if (!await current()) return null
+    const firstPrompt = factRequestPrompt(input.asked, symptom)
+    const first = await ask($, firstPrompt, deadlineMs - await $.clock.now(), job.signal)
+    if (!first?.isAnswered || !await current()) return null
+    const request = parseFactRequest(first.text)
+    if (!request) return null
+    const view = await host.inspectFacts(request, deadlineMs)
+    if (view.incomplete || !await current()) return null
+    const secondPrompt = assistPacketPrompt(input, view)
+    if (bytesOf(firstPrompt) + bytesOf(secondPrompt) > 65536) return null
+    const second = await ask($, secondPrompt, deadlineMs - await $.clock.now(), job.signal)
+    if (!second?.isAnswered || !await current()) return null
+    const packet = buildAssistPacket(input, view, second.text)
+    if (!packet || !await host.validateFacts(view, deadlineMs) || !await current()) return null
+    const note = assistNote(packet, view)
+    if (bytesOf(note) > 32768) return null
+    finished = s.coordinator.finish(id, binding, 'succeeded', await $.clock.now())
+    if (!finished) return null
+    let delivered: string | null = null
+    const delivery = await s.coordinator.deliver(id, binding, async () => {
+      if (!await current()) return 'dropped'
+      delivered = note
+      return 'delivered'
+    })
+    const event = { kind: 'assistance', binding, packet, sources: view.facts.filter(f => packet.factIds.includes(f.id)), sourceManifestHash: view.manifestHash, delivery }
+    await remember($, event)
+    say($, `ASSIST ${JSON.stringify(event)}`)
+    return await current() ? delivered : null
+  } catch (error) {
+    await remember($, { kind: 'assistance', binding, result: 'unknown', reason: redact(String(error)) })
+    return null
+  } finally {
+    if (!finished) s.coordinator.finish(id, binding, 'failed', await $.clock.now())
+  }
+}
+
 
 // What a demonstrated defect's recheck is: exit 0 exactly when the probe's output no
 // longer holds the text that showed the defect.
@@ -460,7 +520,7 @@ const check = async ($: EngineInterface, list: Rows, o: CheckOptions): Promise<I
   )
   // The verifier runs whenever a check hands it a claim. A claim the record already contradicts, or
   // already bears out, is not handed to it: no model is needed for those.
-  const canRun = o.verifier && !s.modelDisabled && selection.modelId !== null
+  const canRun = s.cfg.assistanceMode === 'existing' && o.verifier && !s.modelDisabled && selection.modelId !== null
   // Nor a claim said before a later edit to code: it described files that have changed since.
   const lastCodeEdit = record.edits.filter(e => !/\.(?:md|markdown|txt|rst|adoc)$/i.test(e.path)).at(-1)?.at ?? -1
   const isCurrent = (c: string) => (record.saidAt.get(c) ?? Number.MAX_SAFE_INTEGER) > lastCodeEdit
@@ -688,6 +748,7 @@ export const register: Register = (on, options) => {
     else await $.store.set('unknown-state-original', await read($, track)).catch(() => undefined)
     s.modelDisabled = false
     s.cfg = configOf(options)
+    s.factsAttempted = false
     s.isInteractive = e.isInteractive !== false
     // A reload starts here too: what was raised before it does not hold a turn after it.
     s.turnFrom = await $.clock.now()
@@ -709,6 +770,7 @@ export const register: Register = (on, options) => {
       s.coordinator.invalidate({ ...s.coordinator.binding, taskRevision: s.coordinator.binding.taskRevision + 1, turnId: `prompt-${s.coordinator.binding.taskRevision + 1}` })
       s.modelDisabled = false
       s.asked = e.text
+      s.factsAttempted = false
       s.turnFrom = await $.clock.now()
       s.blocks = 0
       s.held = new Set()
@@ -736,10 +798,11 @@ export const register: Register = (on, options) => {
     await settleTags($, said.join('\n'))
     const claims = [...new Set(said.flatMap(claimsOf))]
     const found = await check($, list, { kind: 'batch', claims, verifier: false })
-    if (found.length === 0) return result
-    await showCards($, found)
+    const assistance = s.cfg.assistanceMode === 'facts' ? await locationFacts($, list) : null
+    if (found.length === 0 && assistance === null) return result
+    if (found.length > 0) await showCards($, found)
     await show($)
-    return { ...result, additionalContext: [...(result.additionalContext ?? []), noteText(found)] }
+    return { ...result, additionalContext: [...(result.additionalContext ?? []), ...(found.length ? [noteText(found)] : []), ...(assistance ? [assistance] : [])] }
   }).catch(($, e, next) => next(e))
 
   // Before the turn ends: the answer held to the record (and, where nobody watches,
@@ -776,7 +839,7 @@ export const register: Register = (on, options) => {
     // The step that ends the turn is the turn's end's to check: two checks of one answer
     // would ask the verifier twice.
     if (result.stopReason === 'end_turn') return result
-    if (!s.isBusy && s.steps >= MIN_GAP && (await isOn($))) {
+    if (s.cfg.assistanceMode === 'existing' && !s.isBusy && s.steps >= MIN_GAP && (await isOn($))) {
       s.isBusy = true
       // Off the step's own dispatch, which closes when the step ends: work that
       // must outlive it runs from a timer.
@@ -796,7 +859,7 @@ export const register: Register = (on, options) => {
     if (e.agentId === undefined) await takeReading($) // main-loop turns only
     // Only a turn the model finished on its own: one the person interrupted says nothing.
     // Where nobody watches, the verifier already ran before the turn could end.
-    if (e.agentId !== undefined || e.reason !== 'answer' || !s.isInteractive || !(await isOn($))) return result
+    if (e.agentId !== undefined || e.reason !== 'answer' || s.cfg.assistanceMode !== 'existing' || !s.isInteractive || !(await isOn($))) return result
     const answer = e.answer
     const scheduled = { ...s.coordinator.binding }
     $.clock.after(0, () => {

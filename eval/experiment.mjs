@@ -10,7 +10,7 @@ export const validateExperiment = config => {
   for (const role of ['worker', 'side', ...(config.reference === undefined ? [] : ['reference'])]) {
     const model = role === 'side' ? config.side ?? config.worker : config[role]
     for (const key of ['id', 'version', 'reasoning']) if (typeof model?.[key] !== 'string' || !model[key].trim()) throw Error(`${role} requires ${key}`)
-    if (!/^[A-Za-z0-9_.:@/-]+$/.test(model.id)) throw Error(`${role} model ID has invalid characters`)
+    if (!/^[A-Za-z0-9_.:@/-]+(?:\[1m\])?$/.test(model.id)) throw Error(`${role} model ID has invalid characters`)
   }
   if (config.externalContextDisabled !== true || config.otherPluginsDisabled !== true) throw Error('disable external context and other plugins for frozen experiments')
   if (!config.prices || typeof config.prices !== 'object') throw Error('price snapshot required; unknown prices remain unknown')

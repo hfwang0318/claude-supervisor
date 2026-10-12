@@ -63,6 +63,25 @@ Claude Code 自带一个旁路代理 "You should know"，看着 Claude 干活，
 包含 symlink、秘密路径、特殊文件、超过 10k 条目或 50MiB 的目录目前不支持独立执行。
 无法取得可信副本时为只读诊断，不在真实项目运行旁路命令。清理仅删除身份匹配的副本。
 
+### 只读定位事实辅助（手动开启）
+
+设 `assistance_mode=facts`，用一次定位任务替代原来的旁路模型审查，在工具批次后补充事实。
+触发条件是读到需求所指的函数候选、但未见调用/导入上下文，或观察到调用/API 错误。
+简单拼写修改可不介入。第一次调用选择文件/搜索词，第二次可返回一个建议包或 null。
+两次调用共用每提示额度，总输入最多 64KiB；不新增结束阻塞，也不裁决修复是否正确。
+
+宿主只读源文件：最多 6 个选中文件、2 个字面搜索词、200 个访问条目、累计读取 2MiB、
+单文件 256KiB、返回 32KiB。秘密路径/内容、symlink、特殊文件、缺失来源和范围不足均不投递。
+每段引文带路径、行号及 SHA-256；检索期间与投递前核对来源版本。批次变化、新提示、off
+和取消会丢弃旧反馈。解释及建议检查标记为待验证。此模式不执行或导入项目代码。
+
+默认仍是 `assistance_mode=existing`；`probe`、`recovery` 仅预留，目前只保留确定性规则。
+`execution_mode` 独立控制原副本执行器，不表示允许旁路写真实目录。
+免费检查用 `node eval/selftest-assist.mjs`、`node scripts/selftest-assist.mjs`。
+四任务 `assist` suite 需要冻结的 `--experiment` 配置，支持 `assistanceMode`、可选
+`taskTimeoutMs`（首轮 180000）；A/B 都用 `--arms on`，分别选择模式并使用全新结果目录。
+真实质量/费用增益尚未证实，见[筛查报告](docs/evals/2026-10-12-core-assistance-pilot.md)。
+
 ## 问题状态
 
 `resolution=open|fixed|unknown`、`disclosed`、`contested` 分别表示事实状态、是否告知、是否争议。
