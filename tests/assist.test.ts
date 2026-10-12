@@ -55,3 +55,12 @@ test('unrelated imports and other batch reads do not conceal a candidate or call
   expect(assistSignal(input.asked, rows([candidate, { tool: 'Read', input: { file_path: '/p/package.json' }, text: '{"name":"fixture"}' }]), '/p')).not.toBeNull()
   expect(assistSignal(input.asked, rows([{ tool: 'Bash', input: { command: 'node test.cjs' }, text: 'TypeError: parseDate is not a function' }, { tool: 'Read', input: { file_path: '/p/package.json' }, text: '{}' }]), '/p')).not.toBeNull()
 })
+
+test('user tool-result rows cannot hide an observed candidate or API error', async () => {
+  const asked = 'Fix parseDate used by app.cjs.'
+  const candidate = { role: 'assistant', text: '', toolUses: [{ tool: 'Read', input: { file_path: '/p/util.cjs' }, text: 'exports.parseDate = s => Number(s.slice(-2))' }] }
+  const toolResult = { role: 'user', text: '', toolUses: [], toolResults: [{ tool_use_id: 'read', text: 'source excerpt' }] }
+  expect(assistSignal(asked, [{ role: 'user', text: asked, toolUses: [] }, candidate, toolResult], '/p')).not.toBeNull()
+  expect(assistSignal(asked, [{ role: 'user', text: asked, toolUses: [] }, { role: 'assistant', text: '', toolUses: [{ tool: 'Bash', input: { command: 'node test.cjs' }, text: 'TypeError: parseDate is not a function' }] }, toolResult], '/p')).not.toBeNull()
+  expect(assistSignal(asked, [{ role: 'user', text: asked, toolUses: [] }, candidate, toolResult, { role: 'user', text: 'A new unrelated task.', toolUses: [] }], '/p')).toBeNull()
+})

@@ -132,3 +132,10 @@ test('a response reaching its output cap stays unknown and stops without inspect
   await batch($)
   expect(state.calls).toBe(1); expect(state.reads).toBe(0)
 })
+
+test('host-shaped trailing tool results preserve the first eligible facts job', { options }, async ($, on) => {
+  const { state } = world(on); await start($)
+  state.rows.push({ role: 'user', text: '', toolUses: [] })
+  expect((await batch($)).additionalContext?.join('\n')).toContain('app.cjs:1')
+  expect(state.calls).toBe(2)
+})

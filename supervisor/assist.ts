@@ -36,7 +36,7 @@ type Row = { role: string; text: string; toolUses?: readonly { tool: string; inp
 // Observe a candidate implementation missing call/import context, or a concrete API
 // error. No reading-count heuristic, guessed target or pre-edit interception.
 export const assistSignal = (asked: string, rows: readonly Row[], cwd: string): string | null => {
-  const lastPrompt = rows.findLastIndex(r => r.role === 'user' && !r.text.includes('[deepseek-supervisor]'))
+  const lastPrompt = rows.findLastIndex(r => r.role === 'user' && r.text.trim() !== '' && !r.text.includes('[deepseek-supervisor]') && !/^\s*<(?:system-reminder|command-|local-command|teammate-message)|^\s*Another Claude session sent a message/.test(r.text))
   const relevantRows = lastPrompt >= 0 ? rows.slice(lastPrompt + 1) : rows.filter(r => r.role === 'assistant').slice(-1)
   const uses = relevantRows.filter(r => r.role === 'assistant').flatMap(r => r.toolUses ?? [])
   for (const use of [...uses].reverse()) {
