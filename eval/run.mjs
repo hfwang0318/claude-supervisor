@@ -19,6 +19,7 @@ import { TASKS as HARD } from './tasks-hard.mjs'
 import { TASKS as LATE } from './tasks-late.mjs'
 import { TASKS as WEAK } from './tasks-weak.mjs'
 import { TASKS as ENGINEERING } from './tasks-engineering.mjs'
+import { TASKS as ASSIST } from './tasks-assist.mjs'
 import { scoreOutcome, aggregateRuns } from './metrics.mjs'
 import { validateExperiment, corpusHash } from './experiment.mjs'
 
@@ -56,18 +57,18 @@ if (!Array.isArray(extraArgs) || extraArgs.some(a => typeof a !== 'string')) thr
 const LIMIT_MS = 20 * 60 * 1000
 
 const suite = arg('suite', 'short')
-const TASKS = { short: SHORT, long: LONG, hard: HARD, late: LATE, weak: WEAK, engineering: ENGINEERING }[suite]
+const TASKS = { short: SHORT, long: LONG, hard: HARD, late: LATE, weak: WEAK, engineering: ENGINEERING, assist: ASSIST }[suite]
 if (!TASKS || !Number.isInteger(reps) || reps < 1 || !Number.isInteger(jobs) || jobs < 1 || arms.some(a => !['on', 'off'].includes(a))) throw Error('invalid suite, reps, jobs or arms')
 const experimentPath = arg('experiment', '')
 const experiment = experimentPath ? validateExperiment(JSON.parse(readFileSync(experimentPath, 'utf8'))) : null
-if (suite === 'engineering' && !experiment && !process.argv.includes('--summary-only') && !process.argv.includes('--rescore')) throw Error('engineering requires --experiment with frozen model/environment metadata')
+if (['engineering', 'assist'].includes(suite) && !experiment && !process.argv.includes('--summary-only') && !process.argv.includes('--rescore')) throw Error('engineering requires --experiment with frozen model/environment metadata')
 let frozenPlugin
 if (experiment && arms.includes('on') && !process.argv.includes('--summary-only') && !process.argv.includes('--rescore')) {
   frozenPlugin = mkdtempSync(join(tmpdir(), 'dss-eval-plugin-'))
   for (const path of ['hooks', 'supervisor', 'types', 'scripts', '.claude-plugin']) cpSync(join(ROOT, path), join(frozenPlugin, path), { recursive: true, filter: path => !path.includes('/.claude-plugin/types') })
   const manifestPath = join(frozenPlugin, '.claude-plugin/plugin.json')
   const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
-  for (const [key, value] of Object.entries({ verifier_model: experiment.side.id, execution_mode: experiment.executionMode ?? 'off' })) manifest.userConfig[key].default = value
+  for (const [key, value] of Object.entries({ verifier_model: experiment.side.id, execution_mode: experiment.executionMode ?? 'off', assistance_mode: experiment.assistanceMode ?? 'existing' })) manifest.userConfig[key].default = value
   writeFileSync(manifestPath, JSON.stringify(manifest, null, 2))
   process.on('exit', () => rmSync(frozenPlugin, { recursive: true, force: true }))
 }
@@ -95,6 +96,10 @@ const score = (task, ctx) => {
     } catch {
       return false
     }
+  }
+  if (typeof task.accept === 'function') {
+    const outcome = scoreOutcome(task, ctx)
+    return { pass: outcome.functionalSuccess === true && outcome.constraintSuccess === true, caught: undefined }
   }
   if (task.traps === undefined) return { pass: one(task.check), caught: undefined }
   const caught = task.traps.map(t => one(t.check))
@@ -177,7 +182,7 @@ const once = ({ task, arm, rep }) =>
     child.stderr.on('data', () => {})
     let timedOut = false
     const killTree = () => { try { process.kill(-child.pid, 'SIGKILL') } catch {} }
-    const timer = setTimeout(() => { timedOut = true; killTree() }, LIMIT_MS)
+    const timer = setTimeout(() => { timedOut = true; killTree() }, experiment?.taskTimeoutMs ?? LIMIT_MS)
     child.on('error', () => {}) // close follows spawn failure and is scored as an attempt
     child.on('close', code => {
       clearTimeout(timer)
@@ -208,7 +213,7 @@ const once = ({ task, arm, rep }) =>
         // Aggregate host usage is preserved, but is not invented per-call evidence.
         calls: [],
         sideUsageComplete: arm === 'off',
-        experiment: experiment ? { worker: experiment.worker, side: experiment.side, reference: experiment.reference, corpusHash: corpusHash(), executionMode: experiment.executionMode ?? 'off' } : null,
+        experiment: experiment ? { worker: experiment.worker, side: experiment.side, reference: experiment.reference, corpusHash: corpusHash(), executionMode: experiment.executionMode ?? 'off', assistanceMode: experiment.assistanceMode ?? 'existing', taskTimeoutMs: experiment.taskTimeoutMs ?? LIMIT_MS } : null,
         task: task.name,
         arm,
         rep,

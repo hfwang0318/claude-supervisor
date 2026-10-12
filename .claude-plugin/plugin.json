@@ -25,6 +25,12 @@
       "title": "Independent execution",
       "description": "off by default. shadow runs isolated checks without feedback; enabled sends advisory findings. macOS only; unsupported workspaces remain read-only.",
       "default": "off"
+    },
+    "assistance_mode": {
+      "type": "string",
+      "title": "Experimental assistance",
+      "description": "existing (default), facts (read-only location help), probe/recovery reserved for later trials. Selects one model flow; record rules remain active.",
+      "default": "existing"
     }
   },
   "keywords": [
