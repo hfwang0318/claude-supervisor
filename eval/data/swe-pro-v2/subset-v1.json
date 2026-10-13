@@ -1,0 +1,1290 @@
+{
+  "schemaVersion": 1,
+  "name": "swe-pro-v2-project-subset-v1",
+  "benchmark": "SWE-bench Pro V2",
+  "benchmarkVersion": "2.0.0",
+  "sourceRepository": "https://github.com/scaleapi/SWE-bench_Pro-os",
+  "sourceCommit": "66f92766bba642462d4bbe5479e83f91f9211862",
+  "dataset": {
+    "id": "ScaleAI/SWE-bench_Pro",
+    "config": "default",
+    "split": "test",
+    "revisionAtMetadataRead": "2d52cb3df914a3fcf80c7f66738b3a88ae37fc50"
+  },
+  "sourceSHA256SUMS": "9d84f8507c89241d42d8b3ef911600a1ec75dbbb32687ce9b45b93318502c0bd",
+  "selection": {
+    "seed": "20261013",
+    "candidatePoolSize": 82,
+    "method": "repo-stratified seeded candidate pool plus requirement/content coverage review; no target-model outcomes",
+    "taskCount": 30,
+    "development": 20,
+    "holdout": 10,
+    "smoke": 6,
+    "ordinary": 20,
+    "hard51": 10,
+    "splitUnit": "repository components and issue families; repositories overlap; not a repository-disjoint generalization claim",
+    "populationEstimate": false
+  },
+  "readiness": {
+    "selectionFrozen": true,
+    "sourceMetadataVerified": true,
+    "registryDescriptorsVerified": true,
+    "containerLayersPulled": false,
+    "emptyPatchVerifiedLocally": false,
+    "referencePatchVerifiedLocally": false,
+    "modelRunsStarted": 0
+  },
+  "runtime": {
+    "architecture": "linux/amd64",
+    "officialAgentTimeoutSeconds": 3000,
+    "officialVerifierTimeoutSeconds": 3000,
+    "officialAgentNetwork": "no-network except separately allowed model endpoint",
+    "workerEnvironment": "pending user environment choice / actual provisioning"
+  },
+  "models": {
+    "requestedWorker": "glm-5.2",
+    "requestedReviewer": "glm-5.2",
+    "actualIdentityVerified": false,
+    "note": "current configured endpoint rejects this route and direct provider response identifies glm-5.3; resolve independently before model runs"
+  },
+  "visibility": {
+    "agent": "only immutable original instruction and clean repository snapshot; no reference patch, tests/verifier artifacts or solution history",
+    "evaluator": "official verifier and reference hashes; fresh-sandbox patch replay"
+  },
+  "license": {
+    "harness": "MIT",
+    "tasks": "upstream repository licenses apply; per-task source/base-commit links retained; full task code is not vendored here"
+  },
+  "tasks": [
+    {
+      "instanceId": "instance_NodeBB__NodeBB-8ca65b0c78c67c1653487c02d1135e1b702185e1-vf2cf3cbd463b7ad942381f1c6d077626485a1e9e",
+      "repo": "NodeBB/NodeBB",
+      "baseCommit": "f2c0c18879ffdeea8d643ffa05a188e43f14afee",
+      "languageAsUpstream": "js",
+      "label": "上传错误响应不一致",
+      "split": "development",
+      "smoke": true,
+      "hard51": false,
+      "instructionURL": "https://raw.githubusercontent.com/scaleapi/SWE-bench_Pro-os/66f92766bba642462d4bbe5479e83f91f9211862/v2/tasks/instance_NodeBB__NodeBB-8ca65b0c78c67c1653487c02d1135e1b702185e1-vf2cf3cbd463b7ad942381f1c6d077626485a1e9e/instruction.md",
+      "instructionBytes": 2772,
+      "testScope": {
+        "failToPassCount": 1,
+        "passToPassCount": 32,
+        "regressionCoverageNote": "upstream P2P list preserved by verifier"
+      },
+      "image": {
+        "tagReference": "ghcr.io/scaleapi/swe-bench_pro-v2:instance_NodeBB__NodeBB-8ca65b0c78c67c1653487c02d1135e1b702185e1-vf2cf3cbd463b7ad942381f1c6d077626485a1e9e",
+        "digest": "sha256:9114580afd021522f8389998a41ad3fd7a6d38460b09ba83b457c06930f63b7d",
+        "indexDigest": null,
+        "configDigest": "sha256:30ce0e03c4be640f8a6c8af9cb4c03279d491248be67738e5f128d61a8dfecc5",
+        "pinnedReference": "ghcr.io/scaleapi/swe-bench_pro-v2@sha256:9114580afd021522f8389998a41ad3fd7a6d38460b09ba83b457c06930f63b7d",
+        "os": "linux",
+        "architecture": "amd64"
+      },
+      "artifactSHA256": {
+        "environment/Dockerfile": "8d843381fe332f276017dc6e4eb2dabee82386d97d1472ec092b143e47bc1588",
+        "instruction.md": "d2bfa97b84aa60772456fc9408185e27713b99fd69fcee90cea9c0ebeaae3a99",
+        "solution/gold_patch.diff": "bba4fa1df2fa0a290852d5f7e14cf1966b610d29bfefd36fc8ba5cb067a544d7",
+        "solution/solve.sh": "6d7497394937410135791cc64ba2f32ad48a94daf6308f0f4c64c74d24c50f97",
+        "task.toml": "b6ff53cf80cd32438156dea41e6ae2b73b7991d44e5fcda3e544dd3dcebf024a",
+        "tests/config.json": "81d2b9696266728af98c9dfd2b6706d09047f1519619246d30e1b6b6c874b38f",
+        "tests/parser.py": "55c2418512e1f11fac1893043e2a588d6c0809071c373b989a6c3d86906cbd97",
+        "tests/run_script.sh": "f7ae8ff66fd6a77a26a909b2812c84cfb5bfc3b369effc1e8bb683e7dfc56a47",
+        "tests/test.sh": "b6f26eecd87c1696a3702ee115d31f9d42f4704cf2116419cd879f66b60976d0",
+        "tests/test_patch.patch": "21fd4bd6e3efd485b5e90024d5384c2e7117a387f0bcb29986d3fbc868020c75"
+      },
+      "referenceAndTestPatchMatchDataset": true,
+      "repoSnapshotURL": "https://github.com/NodeBB/NodeBB/tree/f2c0c18879ffdeea8d643ffa05a188e43f14afee",
+      "referenceVerificationStatus": "pending actual container execution"
+    },
+    {
+      "instanceId": "instance_NodeBB__NodeBB-1ea9481af6125ffd6da0592ed439aa62af0bca11-vd59a5728dfc977f44533186ace531248c2917516",
+      "repo": "NodeBB/NodeBB",
+      "baseCommit": "bbaf26cedc3462ef928906dc90db5cb98a3ec22e",
+      "languageAsUpstream": "js",
+      "label": "并发请求重复创建主题",
+      "split": "development",
+      "smoke": false,
+      "hard51": false,
+      "instructionURL": "https://raw.githubusercontent.com/scaleapi/SWE-bench_Pro-os/66f92766bba642462d4bbe5479e83f91f9211862/v2/tasks/instance_NodeBB__NodeBB-1ea9481af6125ffd6da0592ed439aa62af0bca11-vd59a5728dfc977f44533186ace531248c2917516/instruction.md",
+      "instructionBytes": 2332,
+      "testScope": {
+        "failToPassCount": 3,
+        "passToPassCount": 252,
+        "regressionCoverageNote": "upstream P2P list preserved by verifier"
+      },
+      "image": {
+        "tagReference": "ghcr.io/scaleapi/swe-bench_pro-v2:instance_NodeBB__NodeBB-1ea9481af6125ffd6da0592ed439aa62af0bca11-vd59a5728dfc977f44533186ace531248c2917516",
+        "digest": "sha256:77fa410c8b4c6deaf2df8c86fb0cf4ce4d2b429075b33eee0ec87d873c9d7217",
+        "indexDigest": null,
+        "configDigest": "sha256:c72e488a1be8fc8f3af2f5a1a83f60c28d376023d2bc0adfb28b03eab5494a2a",
+        "pinnedReference": "ghcr.io/scaleapi/swe-bench_pro-v2@sha256:77fa410c8b4c6deaf2df8c86fb0cf4ce4d2b429075b33eee0ec87d873c9d7217",
+        "os": "linux",
+        "architecture": "amd64"
+      },
+      "artifactSHA256": {
+        "environment/Dockerfile": "c126a43b01f5a21b8c50850b18393df394f60183e2f6004522cf103431c86e8d",
+        "instruction.md": "dda83b1e3f32a8ff96bc44fe4c981858602d31c8515acbe3f5b1b4955f72c954",
+        "solution/gold_patch.diff": "1495849d8b4d80449a5d34dff350568b2ff62ac40f98573897cb1278e9794188",
+        "solution/solve.sh": "6d7497394937410135791cc64ba2f32ad48a94daf6308f0f4c64c74d24c50f97",
+        "task.toml": "b51002020ef1e7980c55e51d85e33c918f8f514b2241b2d8e8f92d48488bb800",
+        "tests/config.json": "c4913a184c0395dd7609397f34596ae1556c83de2ec05c8f32817bbdc1a411c8",
+        "tests/parser.py": "b9988675ff86bad71fc88729109ce3516f6df9189dc0052188d13aa24b877558",
+        "tests/run_script.sh": "aac4e739db2e04d4463555319080e5f8d87dfffc64bff2b6da46cb8ee586a501",
+        "tests/test.sh": "b6f26eecd87c1696a3702ee115d31f9d42f4704cf2116419cd879f66b60976d0",
+        "tests/test_patch.patch": "09c6396f18111c58dabaeac28dbb17a3a52a1d3ee2a4795500d1f84cee150a59"
+      },
+      "referenceAndTestPatchMatchDataset": true,
+      "repoSnapshotURL": "https://github.com/NodeBB/NodeBB/tree/bbaf26cedc3462ef928906dc90db5cb98a3ec22e",
+      "referenceVerificationStatus": "pending actual container execution"
+    },
+    {
+      "instanceId": "instance_NodeBB__NodeBB-da0211b1a001d45d73b4c84c6417a4f1b0312575-vf2cf3cbd463b7ad942381f1c6d077626485a1e9e",
+      "repo": "NodeBB/NodeBB",
+      "baseCommit": "f8cfe64c7e5243ac394695293d7517b0b509a4b3",
+      "languageAsUpstream": "js",
+      "label": "实例账号 WebFinger 响应",
+      "split": "holdout",
+      "smoke": false,
+      "hard51": false,
+      "instructionURL": "https://raw.githubusercontent.com/scaleapi/SWE-bench_Pro-os/66f92766bba642462d4bbe5479e83f91f9211862/v2/tasks/instance_NodeBB__NodeBB-da0211b1a001d45d73b4c84c6417a4f1b0312575-vf2cf3cbd463b7ad942381f1c6d077626485a1e9e/instruction.md",
+      "instructionBytes": 3132,
+      "testScope": {
+        "failToPassCount": 2,
+        "passToPassCount": 23,
+        "regressionCoverageNote": "upstream P2P list preserved by verifier"
+      },
+      "image": {
+        "tagReference": "ghcr.io/scaleapi/swe-bench_pro-v2:instance_NodeBB__NodeBB-da0211b1a001d45d73b4c84c6417a4f1b0312575-vf2cf3cbd463b7ad942381f1c6d077626485a1e9e",
+        "digest": "sha256:883835ec48aa8f36fcf6771a4806cc23a978ef0e23eada627cb17b5529a312f3",
+        "indexDigest": null,
+        "configDigest": "sha256:a8605c022f992b640db63ea7ba3d3c623c2bd7d9cfc16d4efb907377337c5b67",
+        "pinnedReference": "ghcr.io/scaleapi/swe-bench_pro-v2@sha256:883835ec48aa8f36fcf6771a4806cc23a978ef0e23eada627cb17b5529a312f3",
+        "os": "linux",
+        "architecture": "amd64"
+      },
+      "artifactSHA256": {
+        "environment/Dockerfile": "369bbad4997e6a884cb9f499f1973d42e7f15f4d970c319a8727b746d19a13e2",
+        "instruction.md": "9318f650713e12266ae1e30add44f240d5116c22a6327bc129f91dad357338d5",
+        "solution/gold_patch.diff": "c86405cd359ed2fbb442afa47c18947812b5338dcaf397c80c53390f8e2c33ea",
+        "solution/solve.sh": "6d7497394937410135791cc64ba2f32ad48a94daf6308f0f4c64c74d24c50f97",
+        "task.toml": "0c63e47658829d314b97d7943291687854dafb03f5c8137f7081186abd80a9d5",
+        "tests/config.json": "3414e64960306c172693103c592f721c2b165542f5e982f51dba7b4021dd8ff2",
+        "tests/parser.py": "55c2418512e1f11fac1893043e2a588d6c0809071c373b989a6c3d86906cbd97",
+        "tests/run_script.sh": "f7ae8ff66fd6a77a26a909b2812c84cfb5bfc3b369effc1e8bb683e7dfc56a47",
+        "tests/test.sh": "b6f26eecd87c1696a3702ee115d31f9d42f4704cf2116419cd879f66b60976d0",
+        "tests/test_patch.patch": "7e8ccde53a2e43a3495bac3aaf5cfe779065a6afa7c12c9da28768a8b3996cc9"
+      },
+      "referenceAndTestPatchMatchDataset": true,
+      "repoSnapshotURL": "https://github.com/NodeBB/NodeBB/tree/f8cfe64c7e5243ac394695293d7517b0b509a4b3",
+      "referenceVerificationStatus": "pending actual container execution"
+    },
+    {
+      "instanceId": "instance_NodeBB__NodeBB-7b8bffd763e2155cf88f3ebc258fa68ebe18188d-vf2cf3cbd463b7ad942381f1c6d077626485a1e9e",
+      "repo": "NodeBB/NodeBB",
+      "baseCommit": "e0149462b3f4e7c843d89701ad9edd2e744d7593",
+      "languageAsUpstream": "js",
+      "label": "API token 内部工具缺失",
+      "split": "development",
+      "smoke": false,
+      "hard51": false,
+      "instructionURL": "https://raw.githubusercontent.com/scaleapi/SWE-bench_Pro-os/66f92766bba642462d4bbe5479e83f91f9211862/v2/tasks/instance_NodeBB__NodeBB-7b8bffd763e2155cf88f3ebc258fa68ebe18188d-vf2cf3cbd463b7ad942381f1c6d077626485a1e9e/instruction.md",
+      "instructionBytes": 8557,
+      "testScope": {
+        "failToPassCount": 12,
+        "passToPassCount": 0,
+        "regressionCoverageNote": "upstream P2P list is empty; do not infer full regression coverage"
+      },
+      "image": {
+        "tagReference": "ghcr.io/scaleapi/swe-bench_pro-v2:instance_NodeBB__NodeBB-7b8bffd763e2155cf88f3ebc258fa68ebe18188d-vf2cf3cbd463b7ad942381f1c6d077626485a1e9e",
+        "digest": "sha256:09158ced85c5393d42b7d3264d6322f2ae5d446be60d2068400a31bdcdd89f48",
+        "indexDigest": null,
+        "configDigest": "sha256:f0945006f200b8cd860c10a370476dc57919eaea0a9ef4a56ea9b1e5c5b65991",
+        "pinnedReference": "ghcr.io/scaleapi/swe-bench_pro-v2@sha256:09158ced85c5393d42b7d3264d6322f2ae5d446be60d2068400a31bdcdd89f48",
+        "os": "linux",
+        "architecture": "amd64"
+      },
+      "artifactSHA256": {
+        "environment/Dockerfile": "9a63551269a3d989c44683fc8eaab4037f5a8d99e831caa485a29b48ba0dccbe",
+        "instruction.md": "126010f62d68cee2fd94d03278f595bb2a56991e7f5d9ffffba800882c5d8ba3",
+        "solution/gold_patch.diff": "f741566b8f95039be8a88ec8bf06509ef1aced35446a711241e45333f0b69428",
+        "solution/solve.sh": "6d7497394937410135791cc64ba2f32ad48a94daf6308f0f4c64c74d24c50f97",
+        "task.toml": "bffecb565e82d0738fcde5363af1499b3f176cdb31f020212e7cdea7fa0092fd",
+        "tests/config.json": "94f3c5b478e02aaac1c1fe1708ae67f946a219e92d34019e4b8fc20ce5aa4e8c",
+        "tests/parser.py": "55c2418512e1f11fac1893043e2a588d6c0809071c373b989a6c3d86906cbd97",
+        "tests/run_script.sh": "f7ae8ff66fd6a77a26a909b2812c84cfb5bfc3b369effc1e8bb683e7dfc56a47",
+        "tests/test.sh": "b6f26eecd87c1696a3702ee115d31f9d42f4704cf2116419cd879f66b60976d0",
+        "tests/test_patch.patch": "f286c4046853725f7932da1582ccf9e7e9d78b5631982f2b49a7d1ae1a23f60f"
+      },
+      "referenceAndTestPatchMatchDataset": true,
+      "repoSnapshotURL": "https://github.com/NodeBB/NodeBB/tree/e0149462b3f4e7c843d89701ad9edd2e744d7593",
+      "referenceVerificationStatus": "pending actual container execution"
+    },
+    {
+      "instanceId": "instance_NodeBB__NodeBB-8168c6c40707478f71b8af60300830fe554c778c-vf2cf3cbd463b7ad942381f1c6d077626485a1e9e",
+      "repo": "NodeBB/NodeBB",
+      "baseCommit": "ab5e2a416324ec56cea44b79067ba798f8394de1",
+      "languageAsUpstream": "js",
+      "label": "移除图片后磁盘文件未清理",
+      "split": "development",
+      "smoke": false,
+      "hard51": true,
+      "instructionURL": "https://raw.githubusercontent.com/scaleapi/SWE-bench_Pro-os/66f92766bba642462d4bbe5479e83f91f9211862/v2/tasks/instance_NodeBB__NodeBB-8168c6c40707478f71b8af60300830fe554c778c-vf2cf3cbd463b7ad942381f1c6d077626485a1e9e/instruction.md",
+      "instructionBytes": 5471,
+      "testScope": {
+        "failToPassCount": 4,
+        "passToPassCount": 307,
+        "regressionCoverageNote": "upstream P2P list preserved by verifier"
+      },
+      "image": {
+        "tagReference": "ghcr.io/scaleapi/swe-bench_pro-v2:instance_NodeBB__NodeBB-8168c6c40707478f71b8af60300830fe554c778c-vf2cf3cbd463b7ad942381f1c6d077626485a1e9e",
+        "digest": "sha256:267632c93bae96eb120292b36e68227a41f2b6edd8e8ff5d7a3bdd7ef4af3b6b",
+        "indexDigest": null,
+        "configDigest": "sha256:e3f1de24f5b6314268c15225d0c27fab12b0f7bc0b061e085648cf23d281a6bf",
+        "pinnedReference": "ghcr.io/scaleapi/swe-bench_pro-v2@sha256:267632c93bae96eb120292b36e68227a41f2b6edd8e8ff5d7a3bdd7ef4af3b6b",
+        "os": "linux",
+        "architecture": "amd64"
+      },
+      "artifactSHA256": {
+        "environment/Dockerfile": "5593b0d32b5e549751fd52f41873005f038f7390f6148607e0af38f6e07116ce",
+        "instruction.md": "52de1203b5077923e832ebc37bd73e5a51bff564f027fd89bb4a6558540a5971",
+        "solution/gold_patch.diff": "1d9a76681d156a24320aa8ae6b6287e48dbd8c28affadf343e9808b6efbfa28f",
+        "solution/solve.sh": "6d7497394937410135791cc64ba2f32ad48a94daf6308f0f4c64c74d24c50f97",
+        "task.toml": "db729b373648ee7f24d8dd66ed777c40aef55458562fb60d156b02d9e6d833cc",
+        "tests/config.json": "37020fb848461705272eaa28ea7ce10c1e46771e0aa091b53ffb391fd0bbc730",
+        "tests/parser.py": "55c2418512e1f11fac1893043e2a588d6c0809071c373b989a6c3d86906cbd97",
+        "tests/run_script.sh": "f7ae8ff66fd6a77a26a909b2812c84cfb5bfc3b369effc1e8bb683e7dfc56a47",
+        "tests/test.sh": "b6f26eecd87c1696a3702ee115d31f9d42f4704cf2116419cd879f66b60976d0",
+        "tests/test_patch.patch": "e06925e85187c01f93ad6a0aee28df14ce851775fe98c9e3c60645eb844cb409"
+      },
+      "referenceAndTestPatchMatchDataset": true,
+      "repoSnapshotURL": "https://github.com/NodeBB/NodeBB/tree/ab5e2a416324ec56cea44b79067ba798f8394de1",
+      "referenceVerificationStatus": "pending actual container execution"
+    },
+    {
+      "instanceId": "instance_ansible__ansible-5260527c4a71bfed99d803e687dd19619423b134-vba6da65a0f3baefda7a058ebbd0a8dcafb8512f5",
+      "repo": "ansible/ansible",
+      "baseCommit": "bf98f031f3f5af31a2d78dc2f0a58fe92ebae0bb",
+      "languageAsUpstream": "python",
+      "label": "原子移动后的文件权限",
+      "split": "holdout",
+      "smoke": false,
+      "hard51": false,
+      "instructionURL": "https://raw.githubusercontent.com/scaleapi/SWE-bench_Pro-os/66f92766bba642462d4bbe5479e83f91f9211862/v2/tasks/instance_ansible__ansible-5260527c4a71bfed99d803e687dd19619423b134-vba6da65a0f3baefda7a058ebbd0a8dcafb8512f5/instruction.md",
+      "instructionBytes": 2464,
+      "testScope": {
+        "failToPassCount": 3,
+        "passToPassCount": 8,
+        "regressionCoverageNote": "upstream P2P list preserved by verifier"
+      },
+      "image": {
+        "tagReference": "ghcr.io/scaleapi/swe-bench_pro-v2:instance_ansible__ansible-5260527c4a71bfed99d803e687dd19619423b134-vba6da65a0f3baefda7a058ebbd0a8dcafb8512f5",
+        "digest": "sha256:8b54435a3a2f88f306d40aa75af9e3331b7a056108e20f9afce6aad691b1c80a",
+        "indexDigest": null,
+        "configDigest": "sha256:a5947e01ad6b3ea621bb9279163a1cd997fcdbbc1d818b9fda0881c38efc6d9e",
+        "pinnedReference": "ghcr.io/scaleapi/swe-bench_pro-v2@sha256:8b54435a3a2f88f306d40aa75af9e3331b7a056108e20f9afce6aad691b1c80a",
+        "os": "linux",
+        "architecture": "amd64"
+      },
+      "artifactSHA256": {
+        "environment/Dockerfile": "4885f6abe7409c4de2fa711a0b9bd9b470854c859c2db2a603c4f1a03b91c7ad",
+        "instruction.md": "b616d27dace6ba21f4e8c4d57ba64891219542fa187526d8a51c1a8b09127388",
+        "solution/gold_patch.diff": "db24b60123976854b3d11175584bb01a4688d3b5d3cb49a62f874e5450aae422",
+        "solution/solve.sh": "6d7497394937410135791cc64ba2f32ad48a94daf6308f0f4c64c74d24c50f97",
+        "task.toml": "c7e1c59e668d3821f6d1e692271c8352f5d3026ed962ede3ff948fbcfcf4d139",
+        "tests/config.json": "cc63c7d495731adf2c19394e528e781a0b53b49f6c7f344a5b13e37acb3fd2cb",
+        "tests/parser.py": "3bb7f471aa61ea90f7c8992cb901f61c14efc2a703dee9a14cd682840006c2dd",
+        "tests/run_script.sh": "4194d6f1b638b5475c58b11a36cda2637b7001993d5171233ef11aab6bf726f9",
+        "tests/test.sh": "b6f26eecd87c1696a3702ee115d31f9d42f4704cf2116419cd879f66b60976d0",
+        "tests/test_patch.patch": "e20461f2e968234982dda4d90f24ac5415c6981204bc00364461572068ad6423"
+      },
+      "referenceAndTestPatchMatchDataset": true,
+      "repoSnapshotURL": "https://github.com/ansible/ansible/tree/bf98f031f3f5af31a2d78dc2f0a58fe92ebae0bb",
+      "referenceVerificationStatus": "pending actual container execution"
+    },
+    {
+      "instanceId": "instance_ansible__ansible-42355d181a11b51ebfc56f6f4b3d9c74e01cb13b-v1055803c3a812189a1133297f7f5468579283f86",
+      "repo": "ansible/ansible",
+      "baseCommit": "fafb23094e77a619066a92a7fa99a7045292e473",
+      "languageAsUpstream": "python",
+      "label": "循环与委托重复计算",
+      "split": "development",
+      "smoke": false,
+      "hard51": false,
+      "instructionURL": "https://raw.githubusercontent.com/scaleapi/SWE-bench_Pro-os/66f92766bba642462d4bbe5479e83f91f9211862/v2/tasks/instance_ansible__ansible-42355d181a11b51ebfc56f6f4b3d9c74e01cb13b-v1055803c3a812189a1133297f7f5468579283f86/instruction.md",
+      "instructionBytes": 7612,
+      "testScope": {
+        "failToPassCount": 19,
+        "passToPassCount": 1,
+        "regressionCoverageNote": "upstream P2P list preserved by verifier"
+      },
+      "image": {
+        "tagReference": "ghcr.io/scaleapi/swe-bench_pro-v2:instance_ansible__ansible-42355d181a11b51ebfc56f6f4b3d9c74e01cb13b-v1055803c3a812189a1133297f7f5468579283f86",
+        "digest": "sha256:319085b694b5f14a372801d9ede2c80e999bc36ef3ef74a9a0cbda2f5d2d8310",
+        "indexDigest": null,
+        "configDigest": "sha256:a28e270be1f382b9a589302ea3df5ae5596a073e10746656d6c021d053ca8e22",
+        "pinnedReference": "ghcr.io/scaleapi/swe-bench_pro-v2@sha256:319085b694b5f14a372801d9ede2c80e999bc36ef3ef74a9a0cbda2f5d2d8310",
+        "os": "linux",
+        "architecture": "amd64"
+      },
+      "artifactSHA256": {
+        "environment/Dockerfile": "0d783dd0ea45e08881b22d665983b4cdbc090b439af20053d5e6bc1874cb1528",
+        "instruction.md": "1aca256f141a81af33b9cec728445b719f7fdce3497e6390e8084c1b93f6738a",
+        "solution/gold_patch.diff": "486d280cd7ce771d3db8d2fb8119c24df2e2bcb48d5af610ae894ea0959a0c0f",
+        "solution/solve.sh": "6d7497394937410135791cc64ba2f32ad48a94daf6308f0f4c64c74d24c50f97",
+        "task.toml": "f6d982f4d02b453dccd95c8531710afcb8dc62b28df4d9209a0ac59bd14ad586",
+        "tests/config.json": "f1d39a6fc9ff173149a7f0f6ad27948feafe8741d2e557ea4f2e6bace0d524c7",
+        "tests/parser.py": "3bb7f471aa61ea90f7c8992cb901f61c14efc2a703dee9a14cd682840006c2dd",
+        "tests/run_script.sh": "e8c61cf1ba381c6f91c5457d248152cf1b0339d52252d0af0d1ea60c2ba483b7",
+        "tests/test.sh": "b6f26eecd87c1696a3702ee115d31f9d42f4704cf2116419cd879f66b60976d0",
+        "tests/test_patch.patch": "73239cdf401e48a89741a8f7c4eac83fd8549c223675f72d83314a01a3dde3e9"
+      },
+      "referenceAndTestPatchMatchDataset": true,
+      "repoSnapshotURL": "https://github.com/ansible/ansible/tree/fafb23094e77a619066a92a7fa99a7045292e473",
+      "referenceVerificationStatus": "pending actual container execution"
+    },
+    {
+      "instanceId": "instance_ansible__ansible-984216f52e76b904e5b0fa0fb956ab4f1e0a7751-v1055803c3a812189a1133297f7f5468579283f86",
+      "repo": "ansible/ansible",
+      "baseCommit": "d79b23910a1a16931885c5b3056179e72e0e6466",
+      "languageAsUpstream": "python",
+      "label": "插件加载来源未报告",
+      "split": "development",
+      "smoke": true,
+      "hard51": false,
+      "instructionURL": "https://raw.githubusercontent.com/scaleapi/SWE-bench_Pro-os/66f92766bba642462d4bbe5479e83f91f9211862/v2/tasks/instance_ansible__ansible-984216f52e76b904e5b0fa0fb956ab4f1e0a7751-v1055803c3a812189a1133297f7f5468579283f86/instruction.md",
+      "instructionBytes": 1479,
+      "testScope": {
+        "failToPassCount": 1,
+        "passToPassCount": 15,
+        "regressionCoverageNote": "upstream P2P list preserved by verifier"
+      },
+      "image": {
+        "tagReference": "ghcr.io/scaleapi/swe-bench_pro-v2:instance_ansible__ansible-984216f52e76b904e5b0fa0fb956ab4f1e0a7751-v1055803c3a812189a1133297f7f5468579283f86",
+        "digest": "sha256:1d18c3308ea61e150407b2ea0755c713b4b68300d287f8114308bcf8e6f27fe1",
+        "indexDigest": "sha256:8773fabfe52b7a7126d020b5d692e5c1b1c4282645e9ac32e1dfe5a8c6529203",
+        "configDigest": "sha256:24a92ef1e9f800abc975d44eb14abd6290d0329554adf0af43f9d227733661e4",
+        "pinnedReference": "ghcr.io/scaleapi/swe-bench_pro-v2@sha256:1d18c3308ea61e150407b2ea0755c713b4b68300d287f8114308bcf8e6f27fe1",
+        "os": "linux",
+        "architecture": "amd64"
+      },
+      "artifactSHA256": {
+        "environment/Dockerfile": "c0623a568fe762a161fa4e5373923df5a2b2514797bb7ec8ffe2efc8d16ec61c",
+        "instruction.md": "377ae04827d0f5a64b3152b8866b1abd7fee0d9dbf10ac6d9b0edfa05ab5aa95",
+        "solution/gold_patch.diff": "94e996cc3fe7566ca00730e82542c9759949704fb6a8ae4a7818eda6eda23b1c",
+        "solution/solve.sh": "6d7497394937410135791cc64ba2f32ad48a94daf6308f0f4c64c74d24c50f97",
+        "task.toml": "8b6d4e7dd9c7629b1db00bd6ea63eb62d1f521854e277113fdae4bca2bb8dbf4",
+        "tests/config.json": "467baecf7764bb3497f22023a7892361d4bf53db149d248d1aa6f9843f444f9e",
+        "tests/parser.py": "3bb7f471aa61ea90f7c8992cb901f61c14efc2a703dee9a14cd682840006c2dd",
+        "tests/run_script.sh": "e8c61cf1ba381c6f91c5457d248152cf1b0339d52252d0af0d1ea60c2ba483b7",
+        "tests/test.sh": "b6f26eecd87c1696a3702ee115d31f9d42f4704cf2116419cd879f66b60976d0",
+        "tests/test_patch.patch": "6ab8e483096e9b2da66deb2a6c37f120791c81555dbe03a38a7603dacd0096d3"
+      },
+      "referenceAndTestPatchMatchDataset": true,
+      "repoSnapshotURL": "https://github.com/ansible/ansible/tree/d79b23910a1a16931885c5b3056179e72e0e6466",
+      "referenceVerificationStatus": "pending actual container execution"
+    },
+    {
+      "instanceId": "instance_ansible__ansible-d62496fe416623e88b90139dc7917080cb04ce70-v0f01c69f1e2528b935359cfe578530722bca2c59",
+      "repo": "ansible/ansible",
+      "baseCommit": "df29852f3a48160e1a60635692c202531dd8b14a",
+      "languageAsUpstream": "python",
+      "label": "无效容量字符串未拒绝",
+      "split": "development",
+      "smoke": false,
+      "hard51": true,
+      "instructionURL": "https://raw.githubusercontent.com/scaleapi/SWE-bench_Pro-os/66f92766bba642462d4bbe5479e83f91f9211862/v2/tasks/instance_ansible__ansible-d62496fe416623e88b90139dc7917080cb04ce70-v0f01c69f1e2528b935359cfe578530722bca2c59/instruction.md",
+      "instructionBytes": 2710,
+      "testScope": {
+        "failToPassCount": 22,
+        "passToPassCount": 92,
+        "regressionCoverageNote": "upstream P2P list preserved by verifier"
+      },
+      "image": {
+        "tagReference": "ghcr.io/scaleapi/swe-bench_pro-v2:instance_ansible__ansible-d62496fe416623e88b90139dc7917080cb04ce70-v0f01c69f1e2528b935359cfe578530722bca2c59",
+        "digest": "sha256:5886dc437c80fa58b347bf930c7e044b4bc9813b183ab01761b801907d82dfc0",
+        "indexDigest": "sha256:2c6d53c235a04be7c6f188bf7004a9bc3b94a1f7ad058ae43b786259dbe0123f",
+        "configDigest": "sha256:f216de9cbf248940111e34f1c50a097f1034ccd759c5c11d610e1000597290c4",
+        "pinnedReference": "ghcr.io/scaleapi/swe-bench_pro-v2@sha256:5886dc437c80fa58b347bf930c7e044b4bc9813b183ab01761b801907d82dfc0",
+        "os": "linux",
+        "architecture": "amd64"
+      },
+      "artifactSHA256": {
+        "environment/Dockerfile": "7d669618912bd19efa58ff3030889fd26c40d9d2944ff402c806f8782ec2c666",
+        "instruction.md": "e8538e435727e8f24bed64ba8ae84878fe6c876509d5176568c057777a8950b6",
+        "solution/gold_patch.diff": "660d2fc687a0693669792cd13744e724f1ba61713fe0ca434115c841de40dd3b",
+        "solution/solve.sh": "6d7497394937410135791cc64ba2f32ad48a94daf6308f0f4c64c74d24c50f97",
+        "task.toml": "55393fa8edc09c1a4ed7b7db00bfae191e56d89ddab430f0212578be206a7d80",
+        "tests/config.json": "528b2fb7ca398af81da6acb3374bc2a1239d9a758f56d06af569658183f38d64",
+        "tests/parser.py": "5ea7efbbcec4ef823ad414bfcfffaf1fa7d0f3ab8e748ea465c03bc839b3721b",
+        "tests/run_script.sh": "6266fd04d263adc7fe7356680ccc934e5a1d9668898e553c54671104487dc0f8",
+        "tests/test.sh": "b6f26eecd87c1696a3702ee115d31f9d42f4704cf2116419cd879f66b60976d0",
+        "tests/test_patch.patch": "f494dd235876d3bde1ddf50a5a397f6b6c74cb83424a9270fe11b9ded9dbe327"
+      },
+      "referenceAndTestPatchMatchDataset": true,
+      "repoSnapshotURL": "https://github.com/ansible/ansible/tree/df29852f3a48160e1a60635692c202531dd8b14a",
+      "referenceVerificationStatus": "pending actual container execution"
+    },
+    {
+      "instanceId": "instance_element-hq__element-web-72a8f8f03b1a01bb70ef8a5bb61759416991b32c-vnan",
+      "repo": "element-hq/element-web",
+      "baseCommit": "650b9cb0cf9bb10674057e232f4792acf83f2e46",
+      "languageAsUpstream": "js",
+      "label": "窗口宽度状态接口",
+      "split": "development",
+      "smoke": false,
+      "hard51": false,
+      "instructionURL": "https://raw.githubusercontent.com/scaleapi/SWE-bench_Pro-os/66f92766bba642462d4bbe5479e83f91f9211862/v2/tasks/instance_element-hq__element-web-72a8f8f03b1a01bb70ef8a5bb61759416991b32c-vnan/instruction.md",
+      "instructionBytes": 2301,
+      "testScope": {
+        "failToPassCount": 2,
+        "passToPassCount": 217,
+        "regressionCoverageNote": "upstream P2P list preserved by verifier"
+      },
+      "image": {
+        "tagReference": "ghcr.io/scaleapi/swe-bench_pro-v2:instance_element-hq__element-web-72a8f8f03b1a01bb70ef8a5bb61759416991b32c-vnan",
+        "digest": "sha256:afd6314b457251b0b0571ec7db1c2fc4d00b03bb90552b0827f69ccbb13aaf7c",
+        "indexDigest": null,
+        "configDigest": "sha256:cb0b5a567332afee8fd868d5a3cc9cfe256f2b957c4cb327d8681633ea2676f9",
+        "pinnedReference": "ghcr.io/scaleapi/swe-bench_pro-v2@sha256:afd6314b457251b0b0571ec7db1c2fc4d00b03bb90552b0827f69ccbb13aaf7c",
+        "os": "linux",
+        "architecture": "amd64"
+      },
+      "artifactSHA256": {
+        "environment/Dockerfile": "42024c53ae53bec9ad7f34053758ad95914b965ab1b107a09411d425c484cdde",
+        "instruction.md": "bf749481aacfd003411938ac556a9adb96a0b3cc76d4cc5a2f58d0f070f94cd7",
+        "solution/gold_patch.diff": "6ca76b159f7d64cd5df2ce942d6a5a1c5dd0d86d726b5d8e66ab295e56cdf9c3",
+        "solution/solve.sh": "6d7497394937410135791cc64ba2f32ad48a94daf6308f0f4c64c74d24c50f97",
+        "task.toml": "66ab71110669f2491797d6e7d3efc837e43f1b67101f7259a8ab11606e1c6724",
+        "tests/config.json": "7a59b412814151552e21288542a4acff32801466d0c4b7161aaa69de0b2f2a73",
+        "tests/parser.py": "53aff51506358c3895f23046a9e1e374fff838d4110b4355e6dea257efe54db2",
+        "tests/run_script.sh": "8fa955298afd7223f9d1f7196c614de668ce66e77799fe2ec6d6f43d41082246",
+        "tests/test.sh": "b6f26eecd87c1696a3702ee115d31f9d42f4704cf2116419cd879f66b60976d0",
+        "tests/test_patch.patch": "977ad15963b3454675872cc9dab06f76ca2ab0770a67e3c9e662c01c20e2034c"
+      },
+      "referenceAndTestPatchMatchDataset": true,
+      "repoSnapshotURL": "https://github.com/element-hq/element-web/tree/650b9cb0cf9bb10674057e232f4792acf83f2e46",
+      "referenceVerificationStatus": "pending actual container execution"
+    },
+    {
+      "instanceId": "instance_element-hq__element-web-4fec436883b601a3cac2d4a58067e597f737b817-vnan",
+      "repo": "element-hq/element-web",
+      "baseCommit": "b8bb8f163a89cb6f2af0ac1cfc97e89deb938368",
+      "languageAsUpstream": "js",
+      "label": "设备会话重命名",
+      "split": "holdout",
+      "smoke": false,
+      "hard51": false,
+      "instructionURL": "https://raw.githubusercontent.com/scaleapi/SWE-bench_Pro-os/66f92766bba642462d4bbe5479e83f91f9211862/v2/tasks/instance_element-hq__element-web-4fec436883b601a3cac2d4a58067e597f737b817-vnan/instruction.md",
+      "instructionBytes": 6907,
+      "testScope": {
+        "failToPassCount": 13,
+        "passToPassCount": 35,
+        "regressionCoverageNote": "upstream P2P list preserved by verifier"
+      },
+      "image": {
+        "tagReference": "ghcr.io/scaleapi/swe-bench_pro-v2:instance_element-hq__element-web-4fec436883b601a3cac2d4a58067e597f737b817-vnan",
+        "digest": "sha256:70faf2058bbd4c8380bfe83575849c524ae97824ccf4272f327802089b407267",
+        "indexDigest": null,
+        "configDigest": "sha256:96df40f43ef6c4b58a2a3a79fa216ef2129174bedcc90ba00c7e0229cd45b7e2",
+        "pinnedReference": "ghcr.io/scaleapi/swe-bench_pro-v2@sha256:70faf2058bbd4c8380bfe83575849c524ae97824ccf4272f327802089b407267",
+        "os": "linux",
+        "architecture": "amd64"
+      },
+      "artifactSHA256": {
+        "environment/Dockerfile": "bfcd58fc55e62ab3f5d349e510d60eab496d9832dd005691c116c223fc4d5a2a",
+        "instruction.md": "5ab49aeff28a5f809cc0776a12f1f247200a4fe963e717b05a02db187d56a563",
+        "solution/gold_patch.diff": "425cc3ffead1df88f8553189c2f76c192147e8ae2a0c034500a5008ed2747a97",
+        "solution/solve.sh": "6d7497394937410135791cc64ba2f32ad48a94daf6308f0f4c64c74d24c50f97",
+        "task.toml": "bd23552eb042a415e869702657f6bbbb7222967a8bbd737e80cb6a59cdd9e40f",
+        "tests/config.json": "469dcc3ecd52b3e6bf34673283c3db87278040920cf7869a378243fb91e81a33",
+        "tests/parser.py": "53aff51506358c3895f23046a9e1e374fff838d4110b4355e6dea257efe54db2",
+        "tests/run_script.sh": "8fa955298afd7223f9d1f7196c614de668ce66e77799fe2ec6d6f43d41082246",
+        "tests/test.sh": "b6f26eecd87c1696a3702ee115d31f9d42f4704cf2116419cd879f66b60976d0",
+        "tests/test_patch.patch": "b40af129314e99f5a7f5ad4cec9a2f815f7e70eb20d3e189afcd3a8a92c5624a"
+      },
+      "referenceAndTestPatchMatchDataset": true,
+      "repoSnapshotURL": "https://github.com/element-hq/element-web/tree/b8bb8f163a89cb6f2af0ac1cfc97e89deb938368",
+      "referenceVerificationStatus": "pending actual container execution"
+    },
+    {
+      "instanceId": "instance_element-hq__element-web-404c412bcb694f04ba0c4d5479541203d701bca0-vnan",
+      "repo": "element-hq/element-web",
+      "baseCommit": "f152613f830ec32a3de3d7f442816a63a4c732c5",
+      "languageAsUpstream": "js",
+      "label": "IndexedDB 意外关闭",
+      "split": "development",
+      "smoke": true,
+      "hard51": false,
+      "instructionURL": "https://raw.githubusercontent.com/scaleapi/SWE-bench_Pro-os/66f92766bba642462d4bbe5479e83f91f9211862/v2/tasks/instance_element-hq__element-web-404c412bcb694f04ba0c4d5479541203d701bca0-vnan/instruction.md",
+      "instructionBytes": 2919,
+      "testScope": {
+        "failToPassCount": 6,
+        "passToPassCount": 62,
+        "regressionCoverageNote": "upstream P2P list preserved by verifier"
+      },
+      "image": {
+        "tagReference": "ghcr.io/scaleapi/swe-bench_pro-v2:instance_element-hq__element-web-404c412bcb694f04ba0c4d5479541203d701bca0-vnan",
+        "digest": "sha256:52f0479ca7ac8549b8e32ae51b904fb16ed7368084ee118bd55f66d7aded801b",
+        "indexDigest": null,
+        "configDigest": "sha256:6c7e5558844d4e9ab890733c517e2fadd6f3a53049ea28815ed3deef218394e9",
+        "pinnedReference": "ghcr.io/scaleapi/swe-bench_pro-v2@sha256:52f0479ca7ac8549b8e32ae51b904fb16ed7368084ee118bd55f66d7aded801b",
+        "os": "linux",
+        "architecture": "amd64"
+      },
+      "artifactSHA256": {
+        "environment/Dockerfile": "f4264d664bb46fd801bbc5a0d9066b7684e113ac519a016aa836912f42334fc9",
+        "instruction.md": "d7aa883acc5481981a65e28ce5ad7b5ef29c3f3c72ec436869e7034f374c4201",
+        "solution/gold_patch.diff": "4b29c702dff620d0544772e528ba7c064a67c1dfc609b9bafa8b4c2e170f4a61",
+        "solution/solve.sh": "6d7497394937410135791cc64ba2f32ad48a94daf6308f0f4c64c74d24c50f97",
+        "task.toml": "cb2280bed815d15bf1ed2151e9c39545a1b7852ae0a00c22f29a6354bce4c23d",
+        "tests/config.json": "708b257d71232d39a9330349a9d6faee22f56ae35796bed3c3577439cbc050e7",
+        "tests/parser.py": "53aff51506358c3895f23046a9e1e374fff838d4110b4355e6dea257efe54db2",
+        "tests/run_script.sh": "8fa955298afd7223f9d1f7196c614de668ce66e77799fe2ec6d6f43d41082246",
+        "tests/test.sh": "b6f26eecd87c1696a3702ee115d31f9d42f4704cf2116419cd879f66b60976d0",
+        "tests/test_patch.patch": "a85bffb1626258505287cff9337296b5a56ecdb0eb3d871212b75c421ab9dbc2"
+      },
+      "referenceAndTestPatchMatchDataset": true,
+      "repoSnapshotURL": "https://github.com/element-hq/element-web/tree/f152613f830ec32a3de3d7f442816a63a4c732c5",
+      "referenceVerificationStatus": "pending actual container execution"
+    },
+    {
+      "instanceId": "instance_element-hq__element-web-ecfd1736e5dd9808e87911fc264e6c816653e1a9-vnan",
+      "repo": "element-hq/element-web",
+      "baseCommit": "f34c1609c3c42f095b59bc068620f342894f94ed",
+      "languageAsUpstream": "js",
+      "label": "跨连续消息搜索结果合并",
+      "split": "development",
+      "smoke": false,
+      "hard51": true,
+      "instructionURL": "https://raw.githubusercontent.com/scaleapi/SWE-bench_Pro-os/66f92766bba642462d4bbe5479e83f91f9211862/v2/tasks/instance_element-hq__element-web-ecfd1736e5dd9808e87911fc264e6c816653e1a9-vnan/instruction.md",
+      "instructionBytes": 4160,
+      "testScope": {
+        "failToPassCount": 9,
+        "passToPassCount": 17,
+        "regressionCoverageNote": "upstream P2P list preserved by verifier"
+      },
+      "image": {
+        "tagReference": "ghcr.io/scaleapi/swe-bench_pro-v2:instance_element-hq__element-web-ecfd1736e5dd9808e87911fc264e6c816653e1a9-vnan",
+        "digest": "sha256:b05662eed301c0c6fa444dd54e7038b1f75c439ea57e620519661c5f778aa86c",
+        "indexDigest": null,
+        "configDigest": "sha256:8dc96454a8db2dcc6eddded1d646f5bb8452dbc2a09b37de5639bb407a703f72",
+        "pinnedReference": "ghcr.io/scaleapi/swe-bench_pro-v2@sha256:b05662eed301c0c6fa444dd54e7038b1f75c439ea57e620519661c5f778aa86c",
+        "os": "linux",
+        "architecture": "amd64"
+      },
+      "artifactSHA256": {
+        "environment/Dockerfile": "20a3fcf0ce42b328f70cdd87fce71ec4c975fe05b911a94cbb44aa9c7d685cd6",
+        "instruction.md": "ee9ae5cb0ceb125bc9ff635c1ae90cc8b7933903f0fa8b1e7fdf073e83855d18",
+        "solution/gold_patch.diff": "0b694e16185371ff0ca1aa750e0caafa71f5e1ef13e1331a2b7571c94aab5115",
+        "solution/solve.sh": "6d7497394937410135791cc64ba2f32ad48a94daf6308f0f4c64c74d24c50f97",
+        "task.toml": "35087aa878dad175a19de745d53aab2972f11acf558750e369208d0e646e4a0a",
+        "tests/config.json": "43af7cc7571e7e83d8255f28353407fe4050d1c6e1781c4553a64933e15ab70f",
+        "tests/parser.py": "53aff51506358c3895f23046a9e1e374fff838d4110b4355e6dea257efe54db2",
+        "tests/run_script.sh": "8fa955298afd7223f9d1f7196c614de668ce66e77799fe2ec6d6f43d41082246",
+        "tests/test.sh": "b6f26eecd87c1696a3702ee115d31f9d42f4704cf2116419cd879f66b60976d0",
+        "tests/test_patch.patch": "c903a9892014bb33aef6663c06f017fbc053cc05101d3f8b4e824dcadc3c1140"
+      },
+      "referenceAndTestPatchMatchDataset": true,
+      "repoSnapshotURL": "https://github.com/element-hq/element-web/tree/f34c1609c3c42f095b59bc068620f342894f94ed",
+      "referenceVerificationStatus": "pending actual container execution"
+    },
+    {
+      "instanceId": "instance_flipt-io__flipt-f36bd61fb1cee4669de1f00e59da462bfeae8765",
+      "repo": "flipt-io/flipt",
+      "baseCommit": "54e188b64f0dda5a1ab9caf8425f94dac3d08f40",
+      "languageAsUpstream": "go",
+      "label": "配置校验缺少文件位置",
+      "split": "development",
+      "smoke": true,
+      "hard51": false,
+      "instructionURL": "https://raw.githubusercontent.com/scaleapi/SWE-bench_Pro-os/66f92766bba642462d4bbe5479e83f91f9211862/v2/tasks/instance_flipt-io__flipt-f36bd61fb1cee4669de1f00e59da462bfeae8765/instruction.md",
+      "instructionBytes": 5051,
+      "testScope": {
+        "failToPassCount": 2,
+        "passToPassCount": 0,
+        "regressionCoverageNote": "upstream P2P list is empty; do not infer full regression coverage"
+      },
+      "image": {
+        "tagReference": "ghcr.io/scaleapi/swe-bench_pro-v2:instance_flipt-io__flipt-f36bd61fb1cee4669de1f00e59da462bfeae8765",
+        "digest": "sha256:c17497ca811b80dbab277a3ba02eb70379bc56269ee855588b0ed234382bab31",
+        "indexDigest": "sha256:0ca138469b653773088fafc4a135a800cfecf804ec8b8b3f7572edbeb7dc9af3",
+        "configDigest": "sha256:14a9cea2bbb55b98fbcdab94b7f54dbc739794b72abc81933e28e4b304cdd177",
+        "pinnedReference": "ghcr.io/scaleapi/swe-bench_pro-v2@sha256:c17497ca811b80dbab277a3ba02eb70379bc56269ee855588b0ed234382bab31",
+        "os": "linux",
+        "architecture": "amd64"
+      },
+      "artifactSHA256": {
+        "environment/Dockerfile": "18e1d141d0e29486b9b59ee0049ba2b3d2992197a8dea8f9132ccffdfadbf3e4",
+        "instruction.md": "52e0eddaa90682cb39208a8a596e20b3969863a21bf4ed745a142f18422e3bd4",
+        "solution/gold_patch.diff": "c9f40c62ea7be3c2539938e5d0eb06d56eceda05f48d338151fe07ef37bbf352",
+        "solution/solve.sh": "6d7497394937410135791cc64ba2f32ad48a94daf6308f0f4c64c74d24c50f97",
+        "task.toml": "3a573ea8d0b2a34c9cf9dd5e8caa88d2cb026c5a58b19b84ed9c4f157d851ad2",
+        "tests/config.json": "84876e3729ab3a7ad4242fc7861cfdb182a5c2467021b58747e9a12d7b122972",
+        "tests/parser.py": "fedec88f7bb3094f8c694a517fc4894d26cc508a5e932fd2099a0355dbcbd81a",
+        "tests/run_script.sh": "4f1ffe791646ea95a532fc0959ba7258a3fbc91368d87c9c25770b307915bd9a",
+        "tests/test.sh": "2784ec4beaf84365579b9cbd20e9b31ccbc739f6028acd11622232569917f5de",
+        "tests/test_patch.patch": "7b4d2fe1985fd40d3df4b5fcd9a9c5cfa00a8b2723f5e0ac1a516a72441476a7"
+      },
+      "referenceAndTestPatchMatchDataset": true,
+      "repoSnapshotURL": "https://github.com/flipt-io/flipt/tree/54e188b64f0dda5a1ab9caf8425f94dac3d08f40",
+      "referenceVerificationStatus": "pending actual container execution"
+    },
+    {
+      "instanceId": "instance_flipt-io__flipt-c1728053367c753688f114ec26e703c8fdeda125",
+      "repo": "flipt-io/flipt",
+      "baseCommit": "775da4fe5fcbc163ab01fd9a809fdbddd9a87ebd",
+      "languageAsUpstream": "go",
+      "label": "CUE 校验 YAML 配置",
+      "split": "development",
+      "smoke": false,
+      "hard51": true,
+      "instructionURL": "https://raw.githubusercontent.com/scaleapi/SWE-bench_Pro-os/66f92766bba642462d4bbe5479e83f91f9211862/v2/tasks/instance_flipt-io__flipt-c1728053367c753688f114ec26e703c8fdeda125/instruction.md",
+      "instructionBytes": 4150,
+      "testScope": {
+        "failToPassCount": 2,
+        "passToPassCount": 0,
+        "regressionCoverageNote": "upstream P2P list is empty; do not infer full regression coverage"
+      },
+      "image": {
+        "tagReference": "ghcr.io/scaleapi/swe-bench_pro-v2:instance_flipt-io__flipt-c1728053367c753688f114ec26e703c8fdeda125",
+        "digest": "sha256:000203ab948b2b1ec3f09e0fa2abb1f07b574d5e4196e7563dd2bc586d918032",
+        "indexDigest": null,
+        "configDigest": "sha256:b36ca1f067ef6fbd3b225e2b8a74b767fac88c3752c5461c60fa8388dcc95f9a",
+        "pinnedReference": "ghcr.io/scaleapi/swe-bench_pro-v2@sha256:000203ab948b2b1ec3f09e0fa2abb1f07b574d5e4196e7563dd2bc586d918032",
+        "os": "linux",
+        "architecture": "amd64"
+      },
+      "artifactSHA256": {
+        "environment/Dockerfile": "c55a872c980be7b4bccda189ac02a99a757468d98b908ef95d30d01f03d53667",
+        "instruction.md": "8687ad7f16f047248d98bc08ba4f0839bfafda05d9dcb99a9c7821a2dbdc882e",
+        "solution/gold_patch.diff": "ff0c004094bd7ad3ccfc5f37d30a75672b06b98dea9eb40f6c7585ae4c88c310",
+        "solution/solve.sh": "6d7497394937410135791cc64ba2f32ad48a94daf6308f0f4c64c74d24c50f97",
+        "task.toml": "ddc6954d14e8fcdcfec8215f677acd33b755ea9d880ce883c2c71a4d4a5acada",
+        "tests/config.json": "e2d257a50ee0d0c2fbb6f2378756999b6842f1bdde6275c735c1f545901498ea",
+        "tests/parser.py": "fedec88f7bb3094f8c694a517fc4894d26cc508a5e932fd2099a0355dbcbd81a",
+        "tests/run_script.sh": "4f1ffe791646ea95a532fc0959ba7258a3fbc91368d87c9c25770b307915bd9a",
+        "tests/test.sh": "b6f26eecd87c1696a3702ee115d31f9d42f4704cf2116419cd879f66b60976d0",
+        "tests/test_patch.patch": "b0acd00a7f85063a98c61924dd4f394c1824ec7bae15b9161a5de5fa659b3194"
+      },
+      "referenceAndTestPatchMatchDataset": true,
+      "repoSnapshotURL": "https://github.com/flipt-io/flipt/tree/775da4fe5fcbc163ab01fd9a809fdbddd9a87ebd",
+      "referenceVerificationStatus": "pending actual container execution"
+    },
+    {
+      "instanceId": "instance_future-architect__vuls-e049df50fa1eecdccc5348e27845b5c783ed7c76-v73dc95f6b90883d8a87e01e5e9bb6d3cc32add6d",
+      "repo": "future-architect/vuls",
+      "baseCommit": "dce837950529084d34c6815fa66e59a4f68fa8e4",
+      "languageAsUpstream": "go",
+      "label": "漏洞模型 KEV 字段",
+      "split": "development",
+      "smoke": false,
+      "hard51": false,
+      "instructionURL": "https://raw.githubusercontent.com/scaleapi/SWE-bench_Pro-os/66f92766bba642462d4bbe5479e83f91f9211862/v2/tasks/instance_future-architect__vuls-e049df50fa1eecdccc5348e27845b5c783ed7c76-v73dc95f6b90883d8a87e01e5e9bb6d3cc32add6d/instruction.md",
+      "instructionBytes": 2733,
+      "testScope": {
+        "failToPassCount": 2,
+        "passToPassCount": 0,
+        "regressionCoverageNote": "upstream P2P list is empty; do not infer full regression coverage"
+      },
+      "image": {
+        "tagReference": "ghcr.io/scaleapi/swe-bench_pro-v2:instance_future-architect__vuls-e049df50fa1eecdccc5348e27845b5c783ed7c76-v73dc95f6b90883d8a87e01e5e9bb6d3cc32add6d",
+        "digest": "sha256:1ee2380573c3957dbb9b6f4e9f2ef9b5a6eb17284acfdafcf106c08209edf82a",
+        "indexDigest": null,
+        "configDigest": "sha256:fd54dc3548078530de96855c2a8b658405333049bd0fe51a1b149c8d2f997fb6",
+        "pinnedReference": "ghcr.io/scaleapi/swe-bench_pro-v2@sha256:1ee2380573c3957dbb9b6f4e9f2ef9b5a6eb17284acfdafcf106c08209edf82a",
+        "os": "linux",
+        "architecture": "amd64"
+      },
+      "artifactSHA256": {
+        "environment/Dockerfile": "a4379646b29f713727357d804859069ab7779388ede64e761e866240ba392c71",
+        "instruction.md": "bfdff67ff76e615c84ed13614519969c78ebca433323fd457068cfa2ceddfa08",
+        "solution/gold_patch.diff": "70d26d991fd44ff37712eb4b663ecdabf2df8708b59d7ac76314010e735bf55a",
+        "solution/solve.sh": "6d7497394937410135791cc64ba2f32ad48a94daf6308f0f4c64c74d24c50f97",
+        "task.toml": "8121c8bb33b8f90131a6bfe7aff22aa35f2aefabb50fc963e1a9dcb835de6d38",
+        "tests/config.json": "a1dd8eca3ac237ea4cc4e64ef509d89df11a803d0345f93a66a76d67dcfe736e",
+        "tests/parser.py": "13d39c0b97c7732bbf9f151bcb7bc9b449e4fd7707f4fe2ebc9a7b0e4c6a48a7",
+        "tests/run_script.sh": "8f213382d44a3c869199762584f63241418f0fc11c2c23ecf2edbe8c30b50ca0",
+        "tests/test.sh": "b6f26eecd87c1696a3702ee115d31f9d42f4704cf2116419cd879f66b60976d0",
+        "tests/test_patch.patch": "873c43eb1a57f8e8f02f31eacfceb61c7c1e10f01148f06acef3edfbe750e01f"
+      },
+      "referenceAndTestPatchMatchDataset": true,
+      "repoSnapshotURL": "https://github.com/future-architect/vuls/tree/dce837950529084d34c6815fa66e59a4f68fa8e4",
+      "referenceVerificationStatus": "pending actual container execution"
+    },
+    {
+      "instanceId": "instance_future-architect__vuls-ca3f6b1dbf2cd24d1537bfda43e788443ce03a0c",
+      "repo": "future-architect/vuls",
+      "baseCommit": "f1c78e42a22aaefe3aa816c0ebd47a845850b856",
+      "languageAsUpstream": "go",
+      "label": "Amazon Linux 2 扩展仓库",
+      "split": "development",
+      "smoke": false,
+      "hard51": true,
+      "instructionURL": "https://raw.githubusercontent.com/scaleapi/SWE-bench_Pro-os/66f92766bba642462d4bbe5479e83f91f9211862/v2/tasks/instance_future-architect__vuls-ca3f6b1dbf2cd24d1537bfda43e788443ce03a0c/instruction.md",
+      "instructionBytes": 7065,
+      "testScope": {
+        "failToPassCount": 16,
+        "passToPassCount": 64,
+        "regressionCoverageNote": "upstream P2P list preserved by verifier"
+      },
+      "image": {
+        "tagReference": "ghcr.io/scaleapi/swe-bench_pro-v2:instance_future-architect__vuls-ca3f6b1dbf2cd24d1537bfda43e788443ce03a0c",
+        "digest": "sha256:78589d52b083b76adf455a17b9580771c9d268d5ac8e2877f6df7c7f418c3ba4",
+        "indexDigest": "sha256:966da6c3722257f2e6121102c980b15de0e2b0baba7fef2b63517a958a15aea2",
+        "configDigest": "sha256:1ce666bc8f1699115d3e47d201ecd64bc02f361d0d0a6560f1d01970ab370e5b",
+        "pinnedReference": "ghcr.io/scaleapi/swe-bench_pro-v2@sha256:78589d52b083b76adf455a17b9580771c9d268d5ac8e2877f6df7c7f418c3ba4",
+        "os": "linux",
+        "architecture": "amd64"
+      },
+      "artifactSHA256": {
+        "environment/Dockerfile": "c3b15476b61262ec58679ce48208465e105e0d66f8b10733d87148f6ef996739",
+        "instruction.md": "64de849ef2cf3fc8bb7002e452f54d0c5f36a1557f5d24a997bd888dba3bdfbe",
+        "solution/gold_patch.diff": "afbb68361a1ced7981f696f918a112360ff73404ff2b411b4eefc73f02d4280d",
+        "solution/solve.sh": "6d7497394937410135791cc64ba2f32ad48a94daf6308f0f4c64c74d24c50f97",
+        "task.toml": "92bdd6151bfe0b0b541e0ed6f5462a2e3dd99ff92fbbd8df46559571d1677762",
+        "tests/config.json": "3f89f5a76c32f7bc111fa32a2c50aa5a18926b2f437d2734a7c397d5c88ef74a",
+        "tests/parser.py": "bfd3ba2ec189b525d683cfaedf80ac597395a956a3413ef1369ae49a7e830fc5",
+        "tests/run_script.sh": "30a684e22ff51166126775b5cc19ced9a53c32e1d329ab43d822394d698440ed",
+        "tests/test.sh": "84378cfbd7d7fe9e5350f6a576fd6f80c330b76724e04d225ac5911356e9ac40",
+        "tests/test_patch.patch": "f01771fad8c0335ab62f5fad3e20fadf9b3416cbabb1b9854f22cf3075910bed"
+      },
+      "referenceAndTestPatchMatchDataset": true,
+      "repoSnapshotURL": "https://github.com/future-architect/vuls/tree/f1c78e42a22aaefe3aa816c0ebd47a845850b856",
+      "referenceVerificationStatus": "pending actual container execution"
+    },
+    {
+      "instanceId": "instance_gravitational__teleport-3ff75e29fb2153a2637fe7f83e49dc04b1c99c9f",
+      "repo": "gravitational/teleport",
+      "baseCommit": "4b11dc4a8e02ec5620b27f9ecb28f3180a5e67f7",
+      "languageAsUpstream": "go",
+      "label": "禁止删除唯一必需的 MFA 设备",
+      "split": "holdout",
+      "smoke": false,
+      "hard51": false,
+      "instructionURL": "https://raw.githubusercontent.com/scaleapi/SWE-bench_Pro-os/66f92766bba642462d4bbe5479e83f91f9211862/v2/tasks/instance_gravitational__teleport-3ff75e29fb2153a2637fe7f83e49dc04b1c99c9f/instruction.md",
+      "instructionBytes": 2237,
+      "testScope": {
+        "failToPassCount": 1,
+        "passToPassCount": 1,
+        "regressionCoverageNote": "upstream P2P list preserved by verifier"
+      },
+      "image": {
+        "tagReference": "ghcr.io/scaleapi/swe-bench_pro-v2:instance_gravitational__teleport-3ff75e29fb2153a2637fe7f83e49dc04b1c99c9f",
+        "digest": "sha256:b11aac26d010fe09054792ed5964a10d468017ce2c1003b7ab173ead716043e7",
+        "indexDigest": null,
+        "configDigest": "sha256:a4f0f98e1bda715b0a095cfd7358ced4f27eb6c54e1651ea50a83c9f9af1aabe",
+        "pinnedReference": "ghcr.io/scaleapi/swe-bench_pro-v2@sha256:b11aac26d010fe09054792ed5964a10d468017ce2c1003b7ab173ead716043e7",
+        "os": "linux",
+        "architecture": "amd64"
+      },
+      "artifactSHA256": {
+        "environment/Dockerfile": "c7bda653a4ea0889c044657880cfe4714a01de896e6020ccb73c365e9ac56e06",
+        "instruction.md": "0b90899bcbb8e4e352939f5e8a79e59cf57d40609f3da499b3cc94a578076834",
+        "solution/gold_patch.diff": "c9d11d0fa5058bbdaa4c13fc196db46336410a7e02274c8c76e71906ff50c3ee",
+        "solution/solve.sh": "6d7497394937410135791cc64ba2f32ad48a94daf6308f0f4c64c74d24c50f97",
+        "task.toml": "c46e7d9217625a3dc6dd0318f0365d0779e702eedfd38ffe3dcd3d876ccfc3ab",
+        "tests/config.json": "e511246bc58f92e120d258bdc2d7def0386172753e8964d3b328c7025687b34d",
+        "tests/parser.py": "9a0f04486e3680a6e2f577e54fa9151da15e5bc0b2cc4804177a9da28adc1b17",
+        "tests/run_script.sh": "955e730096d90c330ae7bb6f856e7a3081e50714e3dbb94b0dc3ecc82294696d",
+        "tests/test.sh": "b6f26eecd87c1696a3702ee115d31f9d42f4704cf2116419cd879f66b60976d0",
+        "tests/test_patch.patch": "fa572d52dd91b9279d8e184a1198170a6ed6618a4c14ba1f0c6b1daa3a460472"
+      },
+      "referenceAndTestPatchMatchDataset": true,
+      "repoSnapshotURL": "https://github.com/gravitational/teleport/tree/4b11dc4a8e02ec5620b27f9ecb28f3180a5e67f7",
+      "referenceVerificationStatus": "pending actual container execution"
+    },
+    {
+      "instanceId": "instance_gravitational__teleport-2b15263e49da5625922581569834eec4838a9257-vee9b09fb20c43af7e520f57e9239bbcf46b7113d",
+      "repo": "gravitational/teleport",
+      "baseCommit": "189d41a956ebf5b90b6cf5829d60be46c1df992e",
+      "languageAsUpstream": "go",
+      "label": "助手 token 用量计数",
+      "split": "development",
+      "smoke": false,
+      "hard51": true,
+      "instructionURL": "https://raw.githubusercontent.com/scaleapi/SWE-bench_Pro-os/66f92766bba642462d4bbe5479e83f91f9211862/v2/tasks/instance_gravitational__teleport-2b15263e49da5625922581569834eec4838a9257-vee9b09fb20c43af7e520f57e9239bbcf46b7113d/instruction.md",
+      "instructionBytes": 7702,
+      "testScope": {
+        "failToPassCount": 14,
+        "passToPassCount": 0,
+        "regressionCoverageNote": "upstream P2P list is empty; do not infer full regression coverage"
+      },
+      "image": {
+        "tagReference": "ghcr.io/scaleapi/swe-bench_pro-v2:instance_gravitational__teleport-2b15263e49da5625922581569834eec4838a9257-vee9b09fb20c43af7e520f57e9239bbcf46b7113d",
+        "digest": "sha256:79cc62083ee6186c30fe3cd455b993344b92da3bbda87c792abee5bf130f57c4",
+        "indexDigest": null,
+        "configDigest": "sha256:cba5f1cc233dae6f9e792b24ad7f8940df09464523779d86d614cb1aed54dc7d",
+        "pinnedReference": "ghcr.io/scaleapi/swe-bench_pro-v2@sha256:79cc62083ee6186c30fe3cd455b993344b92da3bbda87c792abee5bf130f57c4",
+        "os": "linux",
+        "architecture": "amd64"
+      },
+      "artifactSHA256": {
+        "environment/Dockerfile": "35090a080047cbd4bd12076383ba258d84ad3f174429a292d794f2b031f3afed",
+        "instruction.md": "8a9aeafd26d9bde0c0d96f62c03fceec4cb47426dd1356a1ed16a7521c07afb2",
+        "solution/gold_patch.diff": "c39b52432677dccb027dca4e548d4ef51d1c25a25425f1e92f3c60580f0d6947",
+        "solution/solve.sh": "6d7497394937410135791cc64ba2f32ad48a94daf6308f0f4c64c74d24c50f97",
+        "task.toml": "3fcb7a9ce5c0bef8284680e378c1b3edb1552dbd6dfc73eb21cc1ffe3590a103",
+        "tests/config.json": "17779024f0efc4c7387eddd5f7c6869d5cd1d6d735957ca7c7d743932c882fe3",
+        "tests/parser.py": "f9317549f89bd177c0fcad18141e0576278c7a9d7ac181e2b598758d578a79af",
+        "tests/run_script.sh": "60f774059dee9300f49292e0b67f8883a6355757fcebe97d91e21266b3678cfc",
+        "tests/test.sh": "b6f26eecd87c1696a3702ee115d31f9d42f4704cf2116419cd879f66b60976d0",
+        "tests/test_patch.patch": "0b40b83b97f8bebf7598b87d253e3901aa112a9ebf2b501b2ca11bc8e2db3df9"
+      },
+      "referenceAndTestPatchMatchDataset": true,
+      "repoSnapshotURL": "https://github.com/gravitational/teleport/tree/189d41a956ebf5b90b6cf5829d60be46c1df992e",
+      "referenceVerificationStatus": "pending actual container execution"
+    },
+    {
+      "instanceId": "instance_internetarchive__openlibrary-fdbc0d8f418333c7e575c40b661b582c301ef7ac-v13642507b4fc1f8d234172bf8129942da2c2ca26",
+      "repo": "internetarchive/openlibrary",
+      "baseCommit": "69cb6f271d8eb461baf163260f8e43e7420793e7",
+      "languageAsUpstream": "python",
+      "label": "规范化未移除占位值",
+      "split": "development",
+      "smoke": true,
+      "hard51": false,
+      "instructionURL": "https://raw.githubusercontent.com/scaleapi/SWE-bench_Pro-os/66f92766bba642462d4bbe5479e83f91f9211862/v2/tasks/instance_internetarchive__openlibrary-fdbc0d8f418333c7e575c40b661b582c301ef7ac-v13642507b4fc1f8d234172bf8129942da2c2ca26/instruction.md",
+      "instructionBytes": 1824,
+      "testScope": {
+        "failToPassCount": 1,
+        "passToPassCount": 37,
+        "regressionCoverageNote": "upstream P2P list preserved by verifier"
+      },
+      "image": {
+        "tagReference": "ghcr.io/scaleapi/swe-bench_pro-v2:instance_internetarchive__openlibrary-fdbc0d8f418333c7e575c40b661b582c301ef7ac-v13642507b4fc1f8d234172bf8129942da2c2ca26",
+        "digest": "sha256:a34a4bc06379f766515b48dbf63b1d6e206d9ba2582ef8819cacfb18060b6e07",
+        "indexDigest": "sha256:9c3f34d800fee351b489d69a87eac2382c701a16dff4d62e990c889940392edd",
+        "configDigest": "sha256:7dc927e92094f908405eae41e10f2218faa6afc886140054ca8ee44003e9dace",
+        "pinnedReference": "ghcr.io/scaleapi/swe-bench_pro-v2@sha256:a34a4bc06379f766515b48dbf63b1d6e206d9ba2582ef8819cacfb18060b6e07",
+        "os": "linux",
+        "architecture": "amd64"
+      },
+      "artifactSHA256": {
+        "environment/Dockerfile": "10245c18412ec46a3156389345ef1a9e16d8bf12be4e99d20e8fc2fddb58abe1",
+        "instruction.md": "651c88ffd43716c457750bd7d7356c5bb8216ce3faaa6122f7e049a9e84864ce",
+        "solution/gold_patch.diff": "f2621321d45a65c074ec924f87c7afcef78e0ee5be1f6e01defc281eb60d15df",
+        "solution/solve.sh": "6d7497394937410135791cc64ba2f32ad48a94daf6308f0f4c64c74d24c50f97",
+        "task.toml": "3c3d0d5d79f29ab28e69c2e46112b378398f7961f3e037ff9d456849bbe6e2dc",
+        "tests/config.json": "b50dc9b98201fbb41c40abf0cc9ded46f7aa1a12b867d9c069b899e686744e82",
+        "tests/parser.py": "303ceda2c97816c27383b767baa9e2f28f8e9b0cebed4dd5d6159c6760770b66",
+        "tests/run_script.sh": "fb718e857bfa0f770097ed6a1278935ccb52c256db782f13b8e70ae9db4a5b9f",
+        "tests/test.sh": "b6f26eecd87c1696a3702ee115d31f9d42f4704cf2116419cd879f66b60976d0",
+        "tests/test_patch.patch": "8b824ba12bffdd8432e2add0a86b75ff7ad8c4e26de86ef0761a92d5788dc049"
+      },
+      "referenceAndTestPatchMatchDataset": true,
+      "repoSnapshotURL": "https://github.com/internetarchive/openlibrary/tree/69cb6f271d8eb461baf163260f8e43e7420793e7",
+      "referenceVerificationStatus": "pending actual container execution"
+    },
+    {
+      "instanceId": "instance_internetarchive__openlibrary-f3b26c2c0721f8713353fe4b341230332e30008d-v0f5aece3601a5b4419f7ccec1dbda2071be28ee4",
+      "repo": "internetarchive/openlibrary",
+      "baseCommit": "471ffcf05c6b9ceaf879eb95d3a86ccf8232123b",
+      "languageAsUpstream": "python",
+      "label": "导入元数据有效性",
+      "split": "development",
+      "smoke": false,
+      "hard51": false,
+      "instructionURL": "https://raw.githubusercontent.com/scaleapi/SWE-bench_Pro-os/66f92766bba642462d4bbe5479e83f91f9211862/v2/tasks/instance_internetarchive__openlibrary-f3b26c2c0721f8713353fe4b341230332e30008d-v0f5aece3601a5b4419f7ccec1dbda2071be28ee4/instruction.md",
+      "instructionBytes": 4714,
+      "testScope": {
+        "failToPassCount": 8,
+        "passToPassCount": 44,
+        "regressionCoverageNote": "upstream P2P list preserved by verifier"
+      },
+      "image": {
+        "tagReference": "ghcr.io/scaleapi/swe-bench_pro-v2:instance_internetarchive__openlibrary-f3b26c2c0721f8713353fe4b341230332e30008d-v0f5aece3601a5b4419f7ccec1dbda2071be28ee4",
+        "digest": "sha256:abba4f8109939a30660ef18fb76d6575b7bac20359aff89e4e4c34d107cde194",
+        "indexDigest": "sha256:d52a5d40964230c43504a7b441dc7f38688b9185a28cb0855f99b3823e809f4f",
+        "configDigest": "sha256:e944c1fdd0dbed54315dd65deb2be95c2e0260e582b44362f26850e0c162cc45",
+        "pinnedReference": "ghcr.io/scaleapi/swe-bench_pro-v2@sha256:abba4f8109939a30660ef18fb76d6575b7bac20359aff89e4e4c34d107cde194",
+        "os": "linux",
+        "architecture": "amd64"
+      },
+      "artifactSHA256": {
+        "environment/Dockerfile": "155e0f9e07249d37828c6403e5f0a18e948b2402db08130e686358cd7ab9b201",
+        "instruction.md": "33fc3dbe0e41e6d267b57d3ec129f54e0d9f65b9901487eb37dfb59819951e32",
+        "solution/gold_patch.diff": "a8e0f03d74529d3a16b07cf6d1b458f07feeba93658753a3c7fef290c72f8848",
+        "solution/solve.sh": "6d7497394937410135791cc64ba2f32ad48a94daf6308f0f4c64c74d24c50f97",
+        "task.toml": "d025decbabb203ac95150dbf70a0df05afb15431a8cc66c42f4945ddf516bb56",
+        "tests/config.json": "5142a5d9f2dcc827286a0ce775259f1180487697b09681caf1aedd0140ea0163",
+        "tests/parser.py": "14451c49d5f347978407553041b1de3dba0d63be6b8bd6abeaa7aaf807e6e613",
+        "tests/run_script.sh": "7b1c1159e658aa0f60bc1fb7ff73dcd6d5f261e99e55b93520131b74443a451d",
+        "tests/test.sh": "b6f26eecd87c1696a3702ee115d31f9d42f4704cf2116419cd879f66b60976d0",
+        "tests/test_patch.patch": "f5b1b9ffa7706c71119d488cba7bc71ebb1ee321bb9deb1a26cde3992ea3020d"
+      },
+      "referenceAndTestPatchMatchDataset": true,
+      "repoSnapshotURL": "https://github.com/internetarchive/openlibrary/tree/471ffcf05c6b9ceaf879eb95d3a86ccf8232123b",
+      "referenceVerificationStatus": "pending actual container execution"
+    },
+    {
+      "instanceId": "instance_internetarchive__openlibrary-b67138b316b1e9c11df8a4a8391fe5cc8e75ff9f-ve8c8d62a2b60610a3c4631f5f23ed866bada9818",
+      "repo": "internetarchive/openlibrary",
+      "baseCommit": "d8518f64d954113c9363335eb25201befa2de6f2",
+      "languageAsUpstream": "python",
+      "label": "MARC 880 字段抽取",
+      "split": "holdout",
+      "smoke": false,
+      "hard51": true,
+      "instructionURL": "https://raw.githubusercontent.com/scaleapi/SWE-bench_Pro-os/66f92766bba642462d4bbe5479e83f91f9211862/v2/tasks/instance_internetarchive__openlibrary-b67138b316b1e9c11df8a4a8391fe5cc8e75ff9f-ve8c8d62a2b60610a3c4631f5f23ed866bada9818/instruction.md",
+      "instructionBytes": 10910,
+      "testScope": {
+        "failToPassCount": 11,
+        "passToPassCount": 53,
+        "regressionCoverageNote": "upstream P2P list preserved by verifier"
+      },
+      "image": {
+        "tagReference": "ghcr.io/scaleapi/swe-bench_pro-v2:instance_internetarchive__openlibrary-b67138b316b1e9c11df8a4a8391fe5cc8e75ff9f-ve8c8d62a2b60610a3c4631f5f23ed866bada9818",
+        "digest": "sha256:db698fbb2f50522f181849bd38245f448f3feb287b5d6ebabcf527bf3da901d2",
+        "indexDigest": "sha256:d1869bd5a264044c7b58a948422e2d6b457385e34077bafaa68191bc5be46440",
+        "configDigest": "sha256:944d196922f8c7306a9dca54b7807e8f32a1e8728514b27798bcdfff5e2868e6",
+        "pinnedReference": "ghcr.io/scaleapi/swe-bench_pro-v2@sha256:db698fbb2f50522f181849bd38245f448f3feb287b5d6ebabcf527bf3da901d2",
+        "os": "linux",
+        "architecture": "amd64"
+      },
+      "artifactSHA256": {
+        "environment/Dockerfile": "bec2c585a04333237452cb7bc07788eac1dae02f7add6fc632ae5ddfba9ede46",
+        "instruction.md": "f335c2f35598b25cfff340a02dce6af59dc87bc0b7f78e3ab75ec90d62c5e97a",
+        "solution/gold_patch.diff": "4aab66eae6a5e4375aec5a922dd9652ee215aa51afb5cb94a601f79fdeef9c90",
+        "solution/solve.sh": "6d7497394937410135791cc64ba2f32ad48a94daf6308f0f4c64c74d24c50f97",
+        "task.toml": "0b643381c712578447362f55f15ae770abdbfcdb68d536e877ea0e0fb549c1bf",
+        "tests/config.json": "b71b1e53affaf4b58f2dc6c3a352bc9d63bca17ae346b36ab23678d1ed886220",
+        "tests/parser.py": "d8167fbf57e7abc29ea6f97708fbf74bdc559a695cf254cf32206eca0726d549",
+        "tests/run_script.sh": "1ca04a777141fde51b2ddc9f35171f7df3531645c4909954d73febe6f89cd6d2",
+        "tests/test.sh": "b6f26eecd87c1696a3702ee115d31f9d42f4704cf2116419cd879f66b60976d0",
+        "tests/test_patch.patch": "21a27a98c6209b5f9cad05034865951cc99ed66364f9415e4194923c6d6fad89"
+      },
+      "referenceAndTestPatchMatchDataset": true,
+      "repoSnapshotURL": "https://github.com/internetarchive/openlibrary/tree/d8518f64d954113c9363335eb25201befa2de6f2",
+      "referenceVerificationStatus": "pending actual container execution"
+    },
+    {
+      "instanceId": "instance_navidrome__navidrome-ee21f3957e0de91624427e93c62b8ee390de72e3",
+      "repo": "navidrome/navidrome",
+      "baseCommit": "a1551074bbabbf0a71c2201e1938a31e678e82cf",
+      "languageAsUpstream": "go",
+      "label": "用户属性操作的上下文依赖",
+      "split": "holdout",
+      "smoke": false,
+      "hard51": false,
+      "instructionURL": "https://raw.githubusercontent.com/scaleapi/SWE-bench_Pro-os/66f92766bba642462d4bbe5479e83f91f9211862/v2/tasks/instance_navidrome__navidrome-ee21f3957e0de91624427e93c62b8ee390de72e3/instruction.md",
+      "instructionBytes": 2139,
+      "testScope": {
+        "failToPassCount": 15,
+        "passToPassCount": 0,
+        "regressionCoverageNote": "upstream P2P list is empty; do not infer full regression coverage"
+      },
+      "image": {
+        "tagReference": "ghcr.io/scaleapi/swe-bench_pro-v2:instance_navidrome__navidrome-ee21f3957e0de91624427e93c62b8ee390de72e3",
+        "digest": "sha256:8fa184e0b63d68961756193d7483577dda74838400cf652df2a35152755cf0b7",
+        "indexDigest": "sha256:741f19cd911496e2c687b29549ace63f0c08ccd6c09e18fc3cd31a6d3c42f1b7",
+        "configDigest": "sha256:ff1f306a1ff44c5df5292671c826161bcd0b02d4f944814433e0a1d8e49334be",
+        "pinnedReference": "ghcr.io/scaleapi/swe-bench_pro-v2@sha256:8fa184e0b63d68961756193d7483577dda74838400cf652df2a35152755cf0b7",
+        "os": "linux",
+        "architecture": "amd64"
+      },
+      "artifactSHA256": {
+        "environment/Dockerfile": "0fc961eeac154f1ea6990abe62b2db25a444e4a4fdc13192befc2b6a0fda156d",
+        "instruction.md": "3db969eaa2c91a9b1e0d2085674e63aaf03aade15c289903e6e5bd5a16fbcb52",
+        "solution/gold_patch.diff": "a6ce9231a6322050bd41f495d4328d3e9e70fa9c289a85f0895a495ba2d6cb73",
+        "solution/solve.sh": "6d7497394937410135791cc64ba2f32ad48a94daf6308f0f4c64c74d24c50f97",
+        "task.toml": "6d60623c0c950995d2cb96bf9abb2b7f4bbef25031a1626cd937bc828692c51a",
+        "tests/config.json": "3481c41467e7f14adda8c00e7b361680fdece93de99a100911cf6e25dd5b8b00",
+        "tests/parser.py": "b1c0279417bc528109d5022e6ac4e0ba27899b09dfc7500e020be0754ee21039",
+        "tests/run_script.sh": "c5a93b1ae1d6d11fb689e7f0ea84b650e349ec309ccf560e88bf0fd56428216d",
+        "tests/test.sh": "b6f26eecd87c1696a3702ee115d31f9d42f4704cf2116419cd879f66b60976d0",
+        "tests/test_patch.patch": "97bf51063afd23d492594e4ae3f3d528dc6345f2a2d4ac44d6d196a7f8d15662"
+      },
+      "referenceAndTestPatchMatchDataset": true,
+      "repoSnapshotURL": "https://github.com/navidrome/navidrome/tree/a1551074bbabbf0a71c2201e1938a31e678e82cf",
+      "referenceVerificationStatus": "pending actual container execution"
+    },
+    {
+      "instanceId": "instance_navidrome__navidrome-874b17b8f614056df0ef021b5d4f977341084185",
+      "repo": "navidrome/navidrome",
+      "baseCommit": "5808b9fb718eaec4d0e72f02bebb811ca7bc8ca0",
+      "languageAsUpstream": "go",
+      "label": "修改密码前校验当前密码",
+      "split": "holdout",
+      "smoke": false,
+      "hard51": true,
+      "instructionURL": "https://raw.githubusercontent.com/scaleapi/SWE-bench_Pro-os/66f92766bba642462d4bbe5479e83f91f9211862/v2/tasks/instance_navidrome__navidrome-874b17b8f614056df0ef021b5d4f977341084185/instruction.md",
+      "instructionBytes": 4241,
+      "testScope": {
+        "failToPassCount": 1,
+        "passToPassCount": 0,
+        "regressionCoverageNote": "upstream P2P list is empty; do not infer full regression coverage"
+      },
+      "image": {
+        "tagReference": "ghcr.io/scaleapi/swe-bench_pro-v2:instance_navidrome__navidrome-874b17b8f614056df0ef021b5d4f977341084185",
+        "digest": "sha256:3f506b30838750b681489f4e7a476379ebe4d9d4acc67b9bbb0299c6531841dc",
+        "indexDigest": "sha256:1ab46edcfd597014f7eaed7b2b56e3bcc0ea43de33df1a48d0cb38528bc65f6b",
+        "configDigest": "sha256:4b9f2a0fc7ae832cf98d2b8e7d9cfc26bf47f250d657712ef1ae31d48c47388d",
+        "pinnedReference": "ghcr.io/scaleapi/swe-bench_pro-v2@sha256:3f506b30838750b681489f4e7a476379ebe4d9d4acc67b9bbb0299c6531841dc",
+        "os": "linux",
+        "architecture": "amd64"
+      },
+      "artifactSHA256": {
+        "environment/Dockerfile": "ed69c1a0997696dd06124863f92869c6757bf14fb9d01a73ed2a01e97d62e82d",
+        "instruction.md": "f97cd8e6d174d974c35b00e8d033d758e9774712452fe03077d9e3638d73391f",
+        "solution/gold_patch.diff": "6108a065d462942c36f04c2f27f21b062b31152c563ec96ae628011d35946fd7",
+        "solution/solve.sh": "6d7497394937410135791cc64ba2f32ad48a94daf6308f0f4c64c74d24c50f97",
+        "task.toml": "962105e6cbf11b50aa6508f336c15f137fd8a65f229b82b92a307e2caf6306ac",
+        "tests/config.json": "c6e519f12c1251743a66bb7cf066a099bbbd1347d76a530f012bf7f2d537e907",
+        "tests/parser.py": "b1c0279417bc528109d5022e6ac4e0ba27899b09dfc7500e020be0754ee21039",
+        "tests/run_script.sh": "2edf94c06b2c060b1e627a66193bc28db11fc441f49808db2fa6894f2b3b0a64",
+        "tests/test.sh": "b6f26eecd87c1696a3702ee115d31f9d42f4704cf2116419cd879f66b60976d0",
+        "tests/test_patch.patch": "e9ac8512811f2a994f47f3441b2be4993c63f9ec250194da0c3e34585e111b1c"
+      },
+      "referenceAndTestPatchMatchDataset": true,
+      "repoSnapshotURL": "https://github.com/navidrome/navidrome/tree/5808b9fb718eaec4d0e72f02bebb811ca7bc8ca0",
+      "referenceVerificationStatus": "pending actual container execution"
+    },
+    {
+      "instanceId": "instance_protonmail__webclients-cba6ebbd0707caa524ffee51c62b197f6122c902",
+      "repo": "protonmail/webclients",
+      "baseCommit": "369593a83c05f81cd7c69b69c2a4bfc96b0d8783",
+      "languageAsUpstream": "js",
+      "label": "设备名称的根链接查询",
+      "split": "holdout",
+      "smoke": false,
+      "hard51": false,
+      "instructionURL": "https://raw.githubusercontent.com/scaleapi/SWE-bench_Pro-os/66f92766bba642462d4bbe5479e83f91f9211862/v2/tasks/instance_protonmail__webclients-cba6ebbd0707caa524ffee51c62b197f6122c902/instruction.md",
+      "instructionBytes": 1821,
+      "testScope": {
+        "failToPassCount": 1,
+        "passToPassCount": 2,
+        "regressionCoverageNote": "upstream P2P list preserved by verifier"
+      },
+      "image": {
+        "tagReference": "ghcr.io/scaleapi/swe-bench_pro-v2:instance_protonmail__webclients-cba6ebbd0707caa524ffee51c62b197f6122c902",
+        "digest": "sha256:303e62b020025ebfdcba1ba247b7113746f0a5ccf2d86db7e9d8efa6dc136d85",
+        "indexDigest": null,
+        "configDigest": "sha256:ffcfe374173ab9d40f97ddc30c59c988e7f97ef0affb0fcf423f31d18909403f",
+        "pinnedReference": "ghcr.io/scaleapi/swe-bench_pro-v2@sha256:303e62b020025ebfdcba1ba247b7113746f0a5ccf2d86db7e9d8efa6dc136d85",
+        "os": "linux",
+        "architecture": "amd64"
+      },
+      "artifactSHA256": {
+        "environment/Dockerfile": "861231a8d493e9b8d990088cdd01c32f386b0238bbb583bb6149e2f6918cf6e8",
+        "instruction.md": "7aa6a61e0e181cee21073e197b4ea52bda212db72ff7a7aecaab504c3a59d5db",
+        "solution/gold_patch.diff": "0fb33645a6a65d12f9fef56b26127646cb126f582df7fec6662136d2789d10e6",
+        "solution/solve.sh": "6d7497394937410135791cc64ba2f32ad48a94daf6308f0f4c64c74d24c50f97",
+        "task.toml": "8aeea47920a0d450647b633df87ed274dacf837f404806541f6b31cba225c8b6",
+        "tests/config.json": "7b69731a06dabb84dac9c719520764a078f196e127543be1b8f2f0f836981e20",
+        "tests/parser.py": "b9ab810bdad23626e75fd4e831e5cbb93656775b107904c147353b27eec1c2e2",
+        "tests/run_script.sh": "9310a87b6e012c3fa937de4cb10fd4d72a69df9555f37bf2a338cc494ec238c6",
+        "tests/test.sh": "b6f26eecd87c1696a3702ee115d31f9d42f4704cf2116419cd879f66b60976d0",
+        "tests/test_patch.patch": "f5d41d6b45c77c97e01b68db7bf0f8a27c7d5b51c8db0b6e1ae074d0ce93d194"
+      },
+      "referenceAndTestPatchMatchDataset": true,
+      "repoSnapshotURL": "https://github.com/protonmail/webclients/tree/369593a83c05f81cd7c69b69c2a4bfc96b0d8783",
+      "referenceVerificationStatus": "pending actual container execution"
+    },
+    {
+      "instanceId": "instance_protonmail__webclients-1917e37f5d9941a3459ce4b0177e201e2d94a622",
+      "repo": "protonmail/webclients",
+      "baseCommit": "78e30c07b399db1aac8608275fe101e9d349534f",
+      "languageAsUpstream": "js",
+      "label": "图片代理中的远程图片",
+      "split": "development",
+      "smoke": false,
+      "hard51": false,
+      "instructionURL": "https://raw.githubusercontent.com/scaleapi/SWE-bench_Pro-os/66f92766bba642462d4bbe5479e83f91f9211862/v2/tasks/instance_protonmail__webclients-1917e37f5d9941a3459ce4b0177e201e2d94a622/instruction.md",
+      "instructionBytes": 4964,
+      "testScope": {
+        "failToPassCount": 3,
+        "passToPassCount": 1,
+        "regressionCoverageNote": "upstream P2P list preserved by verifier"
+      },
+      "image": {
+        "tagReference": "ghcr.io/scaleapi/swe-bench_pro-v2:instance_protonmail__webclients-1917e37f5d9941a3459ce4b0177e201e2d94a622",
+        "digest": "sha256:7e1702109e2dbe8657c5345d5d55e3ac4146d6ca67233c7db6ad695733ce00c4",
+        "indexDigest": null,
+        "configDigest": "sha256:3ff2f876879a1a2ac9aaf5513a74c3baa42ce998c57a4ba0015e9cdfdc7ed563",
+        "pinnedReference": "ghcr.io/scaleapi/swe-bench_pro-v2@sha256:7e1702109e2dbe8657c5345d5d55e3ac4146d6ca67233c7db6ad695733ce00c4",
+        "os": "linux",
+        "architecture": "amd64"
+      },
+      "artifactSHA256": {
+        "environment/Dockerfile": "6cba734a127a5b82b20f18960ca4627282230f8ba627193ff9869001a7388d20",
+        "instruction.md": "71348be1a8d12614a7f2a1b85342136ad9f2c80cc4ad9d019bbc4efb15b2c5da",
+        "solution/gold_patch.diff": "c019ea8783c501dc0bc14c66cf9933f060f0c53d4d37aa8135f1db2543875ac6",
+        "solution/solve.sh": "6d7497394937410135791cc64ba2f32ad48a94daf6308f0f4c64c74d24c50f97",
+        "task.toml": "ecec18057c564186e02dbb6dd82761d87fb465db2ba5d3ab18c953c1bc8168d7",
+        "tests/config.json": "5b4b844854d7d6505fea515d2085b3ae801277ce91ba5b79d5262c0eb92bdf99",
+        "tests/parser.py": "ed9fdce7768825057db4726a21a7545863df541ec25e64e0cd6c566097534142",
+        "tests/run_script.sh": "11d00d8f7dbe86bbccbcae84466db6da990fa22a3ad76a65387817dddfdfed50",
+        "tests/test.sh": "b6f26eecd87c1696a3702ee115d31f9d42f4704cf2116419cd879f66b60976d0",
+        "tests/test_patch.patch": "f684e8f31343cc94154a92adb303d51b0ca6767afc96f3e6ff92f485bcf44e33"
+      },
+      "referenceAndTestPatchMatchDataset": true,
+      "repoSnapshotURL": "https://github.com/protonmail/webclients/tree/78e30c07b399db1aac8608275fe101e9d349534f",
+      "referenceVerificationStatus": "pending actual container execution"
+    },
+    {
+      "instanceId": "instance_protonmail__webclients-e65cc5f33719e02e1c378146fb981d27bc24bdf4",
+      "repo": "protonmail/webclients",
+      "baseCommit": "bd293dcc05b75ecca4a648edd7ae237ec48c1454",
+      "languageAsUpstream": "js",
+      "label": "邮箱列表刷新与过期状态",
+      "split": "development",
+      "smoke": false,
+      "hard51": true,
+      "instructionURL": "https://raw.githubusercontent.com/scaleapi/SWE-bench_Pro-os/66f92766bba642462d4bbe5479e83f91f9211862/v2/tasks/instance_protonmail__webclients-e65cc5f33719e02e1c378146fb981d27bc24bdf4/instruction.md",
+      "instructionBytes": 5579,
+      "testScope": {
+        "failToPassCount": 3,
+        "passToPassCount": 0,
+        "regressionCoverageNote": "upstream P2P list is empty; do not infer full regression coverage"
+      },
+      "image": {
+        "tagReference": "ghcr.io/scaleapi/swe-bench_pro-v2:instance_protonmail__webclients-e65cc5f33719e02e1c378146fb981d27bc24bdf4",
+        "digest": "sha256:61c22479df649f471ab2ed603deffaf7c290c96ff0b1fe725a62f588d7f4dc9d",
+        "indexDigest": null,
+        "configDigest": "sha256:7d2fd3ae2995ae351f821b82d810fbca373b6dd7857563b6cb348e55c5dfdd05",
+        "pinnedReference": "ghcr.io/scaleapi/swe-bench_pro-v2@sha256:61c22479df649f471ab2ed603deffaf7c290c96ff0b1fe725a62f588d7f4dc9d",
+        "os": "linux",
+        "architecture": "amd64"
+      },
+      "artifactSHA256": {
+        "environment/Dockerfile": "32cc4c10ce13651033efc63c536849d80647649c2a65e6e7ebe2f9fcfeb8d189",
+        "instruction.md": "9fc5e6dacf38b7fb6c798afcc692151fb7136637e966f71ac56da295757456fb",
+        "solution/gold_patch.diff": "160c7d05b1c7e05df763d8ca1c0a897ee0fe20ce8a6a7a1c282a31e32b385f2e",
+        "solution/solve.sh": "6d7497394937410135791cc64ba2f32ad48a94daf6308f0f4c64c74d24c50f97",
+        "task.toml": "ec3c190976efd03d3ec2ba75fca12a5b91f639654b9e7a39f51905605602eaeb",
+        "tests/config.json": "47b7561ba12c9423f9800b819c83524dbdb1485871048417222945f79e3b1d71",
+        "tests/parser.py": "ed9fdce7768825057db4726a21a7545863df541ec25e64e0cd6c566097534142",
+        "tests/run_script.sh": "11d00d8f7dbe86bbccbcae84466db6da990fa22a3ad76a65387817dddfdfed50",
+        "tests/test.sh": "b6f26eecd87c1696a3702ee115d31f9d42f4704cf2116419cd879f66b60976d0",
+        "tests/test_patch.patch": "aed33267a1d2fa1a5a984b7b51094676e83032bffd5c248093def6691b4bb244"
+      },
+      "referenceAndTestPatchMatchDataset": true,
+      "repoSnapshotURL": "https://github.com/protonmail/webclients/tree/bd293dcc05b75ecca4a648edd7ae237ec48c1454",
+      "referenceVerificationStatus": "pending actual container execution"
+    },
+    {
+      "instanceId": "instance_qutebrowser__qutebrowser-a84ecfb80a00f8ab7e341372560458e3f9cfffa2-v2ef375ac784985212b1805e1d0431dc8f1b3c171",
+      "repo": "qutebrowser/qutebrowser",
+      "baseCommit": "c9380605a1240748769c012403520323b4d2c3be",
+      "languageAsUpstream": "python",
+      "label": "空命令输入错误",
+      "split": "development",
+      "smoke": true,
+      "hard51": false,
+      "instructionURL": "https://raw.githubusercontent.com/scaleapi/SWE-bench_Pro-os/66f92766bba642462d4bbe5479e83f91f9211862/v2/tasks/instance_qutebrowser__qutebrowser-a84ecfb80a00f8ab7e341372560458e3f9cfffa2-v2ef375ac784985212b1805e1d0431dc8f1b3c171/instruction.md",
+      "instructionBytes": 2683,
+      "testScope": {
+        "failToPassCount": 3,
+        "passToPassCount": 28,
+        "regressionCoverageNote": "upstream P2P list preserved by verifier"
+      },
+      "image": {
+        "tagReference": "ghcr.io/scaleapi/swe-bench_pro-v2:instance_qutebrowser__qutebrowser-a84ecfb80a00f8ab7e341372560458e3f9cfffa2-v2ef375ac784985212b1805e1d0431dc8f1b3c171",
+        "digest": "sha256:777139c826336455432484f4393ce5095ce1f80541b77a6ce891b8d1d22eb5c2",
+        "indexDigest": "sha256:451eb1f5e60c1d395e927a6e8dfc60cd506350e5bce7cde175011a1b006eaadc",
+        "configDigest": "sha256:9fed5dd4b32a67ab6510e010035a8615a1e1d27b1f397ee7dde42ce3b919955d",
+        "pinnedReference": "ghcr.io/scaleapi/swe-bench_pro-v2@sha256:777139c826336455432484f4393ce5095ce1f80541b77a6ce891b8d1d22eb5c2",
+        "os": "linux",
+        "architecture": "amd64"
+      },
+      "artifactSHA256": {
+        "environment/Dockerfile": "9089ae0d51c54c9f9581b29f7ed32c8a41e48cda9b02e515f6b33596601d6d64",
+        "instruction.md": "7fe71b33c94388df555d75838d629348a2d69ff3d4f3cdffd9499b974a2f769b",
+        "solution/gold_patch.diff": "31579603cfc79b9e9ffa028ace19b2396400c002d4eea273b58bc8f85b557882",
+        "solution/solve.sh": "6d7497394937410135791cc64ba2f32ad48a94daf6308f0f4c64c74d24c50f97",
+        "task.toml": "3cdda740c47783d31625817a0ab7c8dbfa0377e7213bee2999e3a939cbe19715",
+        "tests/config.json": "e9945ee378668ca5f3f2abda72a4e4580306086942f49d809f5597e0dd80f356",
+        "tests/parser.py": "eedbb04d9f71f140c4af38043d3bddb0fc6374799d2b84c95c5b8c8214efd4d6",
+        "tests/run_script.sh": "3d56cf4e07b5f0fe2f78edc6c759fa2bcb9d2422af64d51b91dc0d676c8f1505",
+        "tests/test.sh": "b6f26eecd87c1696a3702ee115d31f9d42f4704cf2116419cd879f66b60976d0",
+        "tests/test_patch.patch": "173960581324dc66f59996eb967fff8eaf9b741aed0c56346e894004e62bd642"
+      },
+      "referenceAndTestPatchMatchDataset": true,
+      "repoSnapshotURL": "https://github.com/qutebrowser/qutebrowser/tree/c9380605a1240748769c012403520323b4d2c3be",
+      "referenceVerificationStatus": "pending actual container execution"
+    },
+    {
+      "instanceId": "instance_qutebrowser__qutebrowser-c09e1439f145c66ee3af574386e277dd2388d094-v2ef375ac784985212b1805e1d0431dc8f1b3c171",
+      "repo": "qutebrowser/qutebrowser",
+      "baseCommit": "ea60bcfc2ae1e018559031a4c8a26b29caec1c59",
+      "languageAsUpstream": "python",
+      "label": "进程成功输出的生命周期",
+      "split": "holdout",
+      "smoke": false,
+      "hard51": true,
+      "instructionURL": "https://raw.githubusercontent.com/scaleapi/SWE-bench_Pro-os/66f92766bba642462d4bbe5479e83f91f9211862/v2/tasks/instance_qutebrowser__qutebrowser-c09e1439f145c66ee3af574386e277dd2388d094-v2ef375ac784985212b1805e1d0431dc8f1b3c171/instruction.md",
+      "instructionBytes": 2684,
+      "testScope": {
+        "failToPassCount": 5,
+        "passToPassCount": 100,
+        "regressionCoverageNote": "upstream P2P list preserved by verifier"
+      },
+      "image": {
+        "tagReference": "ghcr.io/scaleapi/swe-bench_pro-v2:instance_qutebrowser__qutebrowser-c09e1439f145c66ee3af574386e277dd2388d094-v2ef375ac784985212b1805e1d0431dc8f1b3c171",
+        "digest": "sha256:f2d98fc1a5c7fdb7a90fb16001e8b79a5a9ff86b0290bbcfbfd9c274b40c6ddb",
+        "indexDigest": "sha256:a67d0f526e5ea0fd7feadab688cb31865a3029c62c89fbf7439f26d14f488127",
+        "configDigest": "sha256:c7948ed3fc6d8fbc6fbf0d42414886fff2e8a8b91315cbec91dc5f16fca30c5d",
+        "pinnedReference": "ghcr.io/scaleapi/swe-bench_pro-v2@sha256:f2d98fc1a5c7fdb7a90fb16001e8b79a5a9ff86b0290bbcfbfd9c274b40c6ddb",
+        "os": "linux",
+        "architecture": "amd64"
+      },
+      "artifactSHA256": {
+        "environment/Dockerfile": "42b5271fdd0032656246857d6bdfeea017fb7590fe1b75e7c5aaf75010630089",
+        "instruction.md": "8d42bdcc4b79b34a3f3e265f98901f4a5ee980cf76953ddde6e721a0b1f70411",
+        "solution/gold_patch.diff": "9a5adbba1dddb3cf7ea7349714d30cf2814c1ffb1757f27b88385489e1af47dd",
+        "solution/solve.sh": "6d7497394937410135791cc64ba2f32ad48a94daf6308f0f4c64c74d24c50f97",
+        "task.toml": "5ce863f36fc4132e57b174538448a5cd239ce2fce93cc0aa612d3e00924dd027",
+        "tests/config.json": "5ddd3bf2da2f8be41695af3d9d45ec1088f97939a50d0b251c4219821c0bf65e",
+        "tests/parser.py": "eedbb04d9f71f140c4af38043d3bddb0fc6374799d2b84c95c5b8c8214efd4d6",
+        "tests/run_script.sh": "3d56cf4e07b5f0fe2f78edc6c759fa2bcb9d2422af64d51b91dc0d676c8f1505",
+        "tests/test.sh": "b6f26eecd87c1696a3702ee115d31f9d42f4704cf2116419cd879f66b60976d0",
+        "tests/test_patch.patch": "fb22c8030c340594f9b3554af4f64ab438dd7cdcc57534222d8e97c18a7745d8"
+      },
+      "referenceAndTestPatchMatchDataset": true,
+      "repoSnapshotURL": "https://github.com/qutebrowser/qutebrowser/tree/ea60bcfc2ae1e018559031a4c8a26b29caec1c59",
+      "referenceVerificationStatus": "pending actual container execution"
+    },
+    {
+      "instanceId": "instance_tutao__tutanota-f3ffe17af6e8ab007e8d461355057ad237846d9d-vbc0d9ba8f0071fbe982809910959a6ff8884dbbf",
+      "repo": "tutao/tutanota",
+      "baseCommit": "376d4f298af944bda3e3207ab03de0fcbfc13b2f",
+      "languageAsUpstream": "ts",
+      "label": "跨类熵管理耦合",
+      "split": "holdout",
+      "smoke": false,
+      "hard51": false,
+      "instructionURL": "https://raw.githubusercontent.com/scaleapi/SWE-bench_Pro-os/66f92766bba642462d4bbe5479e83f91f9211862/v2/tasks/instance_tutao__tutanota-f3ffe17af6e8ab007e8d461355057ad237846d9d-vbc0d9ba8f0071fbe982809910959a6ff8884dbbf/instruction.md",
+      "instructionBytes": 6954,
+      "testScope": {
+        "failToPassCount": 3,
+        "passToPassCount": 0,
+        "regressionCoverageNote": "upstream P2P list is empty; do not infer full regression coverage"
+      },
+      "image": {
+        "tagReference": "ghcr.io/scaleapi/swe-bench_pro-v2:instance_tutao__tutanota-f3ffe17af6e8ab007e8d461355057ad237846d9d-vbc0d9ba8f0071fbe982809910959a6ff8884dbbf",
+        "digest": "sha256:9fbd2bdfb0304289cfae9960f979a8c86772813f4abfcb54ec62e19da35687d3",
+        "indexDigest": null,
+        "configDigest": "sha256:d80f388676501ab90c86de939408a558bc90e7fb213fd3e42e9a49501b6d2bc8",
+        "pinnedReference": "ghcr.io/scaleapi/swe-bench_pro-v2@sha256:9fbd2bdfb0304289cfae9960f979a8c86772813f4abfcb54ec62e19da35687d3",
+        "os": "linux",
+        "architecture": "amd64"
+      },
+      "artifactSHA256": {
+        "environment/Dockerfile": "769e90f599518682ffbfa6148f341f92350c871d81257daaf43054a9d13b976d",
+        "instruction.md": "e8bf735d7c2526f6507788642ec0f3c9bfe417ce65bce9b947ebe025a351c5f8",
+        "solution/gold_patch.diff": "3ca07bcc34802e70dcda6b5201ef84bae74e10d62ed3affacf73514f26947f94",
+        "solution/solve.sh": "6d7497394937410135791cc64ba2f32ad48a94daf6308f0f4c64c74d24c50f97",
+        "task.toml": "1617803a10b972b3f7395e9b6ba3dbc6bb6098de6d34e695ec1ae8603e010a2d",
+        "tests/config.json": "009eaf0cd59512d81ff73b3f54a5411a151e72712734f93cef8c7b487c02c9a8",
+        "tests/parser.py": "1749948281124b500bd97e1792175a40a88e2bd39f7b955d4a7067dde75e8608",
+        "tests/run_script.sh": "ec84b3b7a7ee2374459c3490cb240d9f922fc99e548b49a7a7d16bb3b7444488",
+        "tests/test.sh": "b6f26eecd87c1696a3702ee115d31f9d42f4704cf2116419cd879f66b60976d0",
+        "tests/test_patch.patch": "90e9e8b3853513a38bc2fcd7a27c40f275c826c198224519e53b513fef0da0ad"
+      },
+      "referenceAndTestPatchMatchDataset": true,
+      "repoSnapshotURL": "https://github.com/tutao/tutanota/tree/376d4f298af944bda3e3207ab03de0fcbfc13b2f",
+      "referenceVerificationStatus": "pending actual container execution"
+    }
+  ]
+}
