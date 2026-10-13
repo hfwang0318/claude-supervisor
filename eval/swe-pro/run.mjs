@@ -3,7 +3,7 @@ import { resolve, join } from 'node:path'
 import { createHash } from 'node:crypto'
 import { MODEL } from './gateway.mjs'
 import { openModelNetwork, runAgent, treeHash } from './agent.mjs'
-import { grade, readyPair, verifyArtifacts, command } from './docker.mjs'
+import { grade, readyPair, verifyArtifacts, command, prepareTask } from './docker.mjs'
 import { schedule, validateResume, identityValid, summarizeUsage, boundedMap } from './schedule.mjs'
 
 const arg = (name, fallback) => { const i = process.argv.indexOf(`--${name}`); return i < 0 ? fallback : process.argv[i + 1] }
@@ -24,7 +24,7 @@ if (infoResult.exitCode !== 0) throw Error('Docker daemon unavailable')
 const info = JSON.parse(infoResult.stdout)
 if (concurrency === 2 && info.MemTotal < 8.5 * 1024 ** 3) throw Error('two jobs require at least 8.5 GiB Docker VM memory')
 const environment = { dockerVersion: info.ServerVersion, architecture: info.Architecture, cpus: info.NCPU, memoryBytes: info.MemTotal }
-const config = { schemaVersion: 1, manifestSHA256: hash(manifestPath), runtime: identity, environment, model: MODEL, sideModel: MODEL, reasoning: 'default', seed: 53, repetitions: 1, arms: ['existing', 'facts'], timeoutMs: 3_000_000, concurrency, costUSD: 'unknown', adapterSHA256: createHash('sha256').update(readdirSync(resolve('eval/swe-pro')).filter(n => n.endsWith('.mjs')).sort().map(n => `${n}:${hash(resolve('eval/swe-pro', n))}`).join('\n')).digest('hex') }
+const config = { schemaVersion: 1, manifestSHA256: hash(manifestPath), runtime: identity, environment, preparationPolicy: 'per-task-calibration-in-worker-slots', model: MODEL, sideModel: MODEL, reasoning: 'default', seed: 53, repetitions: 1, arms: ['existing', 'facts'], timeoutMs: 3_000_000, concurrency, costUSD: 'unknown', adapterSHA256: createHash('sha256').update(readdirSync(resolve('eval/swe-pro')).filter(n => n.endsWith('.mjs')).sort().map(n => `${n}:${hash(resolve('eval/swe-pro', n))}`).join('\n')).digest('hex') }
 mkdirSync(out, { recursive: true })
 const configPath = join(out, 'experiment.json')
 if (existsSync(configPath)) validateResume(JSON.parse(readFileSync(configPath)), config)
@@ -37,6 +37,7 @@ const interrupt = () => { interrupted = true; controller.abort() }
 process.once('SIGINT', interrupt)
 process.once('SIGTERM', interrupt)
 const results = []
+const preparations = new Map()
 const persistResults = () => writeFileSync(join(out, 'results.json'), JSON.stringify(results.filter(Boolean), null, 2))
 await boundedMap(jobs, concurrency, async ({ task, mode }, index) => {
   const dir = join(out, task.instanceId, mode), resultPath = join(dir, 'result.json')
@@ -44,9 +45,8 @@ await boundedMap(jobs, concurrency, async ({ task, mode }, index) => {
   if (existsSync(dir)) throw Error(`unfinished attempt retained: ${task.instanceId}/${mode}; review it before restarting`)
   mkdirSync(dir, { recursive: true })
   const result = { task: task.instanceId, repo: task.repo, split: task.split, mode, costUSD: 'unknown', status: 'environment-error', functionalSuccess: null }
-  const readyPath = join(readiness, task.instanceId, 'readiness.json')
-  let ready
-  try { ready = JSON.parse(readFileSync(readyPath)) } catch {}
+  if (!preparations.has(task.instanceId)) preparations.set(task.instanceId, prepareTask(task, tasksRoot, join(readiness, task.instanceId), { signal: controller.signal, progress: phase => console.log(new Date().toISOString(), task.repo, 'environment', phase) }))
+  const ready = await preparations.get(task.instanceId)
   if (!ready || ready.task !== task.instanceId || ready.image !== task.image.pinnedReference || !readyPair(ready.empty, ready.reference)) result.error = 'empty/reference readiness not satisfied'
   else {
     verifyArtifacts(task, tasksRoot)

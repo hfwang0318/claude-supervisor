@@ -54,13 +54,43 @@ export const requiredTests = config => {
   return JSON.parse(execFileSync('python3', ['-c', script], { input: JSON.stringify(config), encoding: 'utf8', timeout: 2000, maxBuffer: 1024 * 1024 }))
 }
 
+export const prepareTask = async (task, tasksRoot, out, { exec = command, signal, progress = () => {} } = {}) => {
+  verifyArtifacts(task, tasksRoot)
+  mkdirSync(out, { recursive: true })
+  const path = join(out, 'readiness.json')
+  if (existsSync(path)) {
+    try {
+      const cached = JSON.parse(readFileSync(path))
+      if (cached.task === task.instanceId && cached.image === task.image.pinnedReference && readyPair(cached.empty, cached.reference)) return cached
+    } catch {}
+  }
+  progress('pull')
+  const pulled = await exec(['pull', '--platform', 'linux/amd64', task.image.pinnedReference], { timeoutMs: 1_800_000, signal, log: join(out, 'pull.log') })
+  if (pulled.exitCode !== 0 || pulled.cancelled || pulled.timedOut) {
+    const receipt = { task: task.instanceId, image: task.image.pinnedReference, ready: false, status: pulled.cancelled ? 'cancelled' : pulled.timedOut ? 'pull-timeout' : 'pull-error', error: pulled.stderr?.slice(-1000) }
+    writeFileSync(path, JSON.stringify(receipt, null, 2))
+    return receipt
+  }
+  progress('empty patch')
+  const empty = await grade(task, tasksRoot, '', join(out, 'empty'), { exec, signal })
+  progress('reference patch')
+  const reference = await grade(task, tasksRoot, readFileSync(join(tasksRoot, task.instanceId, 'solution/gold_patch.diff'), 'utf8'), join(out, 'reference'), { exec, signal })
+  const receipt = { task: task.instanceId, image: task.image.pinnedReference, empty, reference, ready: readyPair(empty, reference) }
+  writeFileSync(path, JSON.stringify(receipt, null, 2))
+  progress(`ready: ${receipt.ready}`)
+  return receipt
+}
+
 export const grade = async (task, tasksRoot, patch, out, { exec = command, skipArtifactCheck = false, signal, calibrated = false } = {}) => {
   if (!skipArtifactCheck) verifyArtifacts(task, tasksRoot)
   if (!/^ghcr\.io\/scaleapi\/swe-bench_pro-v2@sha256:[a-f0-9]{64}$/.test(task.image.pinnedReference) && exec === command) throw Error('unpinned image')
+  // Never merge docker cp output into a previous verifier directory. Every
+  // scoring attempt owns fresh paths, including free preparation retries.
+  out = join(out, `attempt-${randomUUID()}`)
   mkdirSync(out, { recursive: true })
   const name = `dss-grade-${randomUUID()}`
   const started = Date.now()
-  const receipt = { task: task.instanceId, image: task.image.pinnedReference, baseCommit: task.baseCommit, patchSHA256: createHash('sha256').update(patch).digest('hex'), status: 'environment-error', reward: null }
+  const receipt = { task: task.instanceId, image: task.image.pinnedReference, baseCommit: task.baseCommit, artifactRoot: out, patchSHA256: createHash('sha256').update(patch).digest('hex'), status: 'environment-error', reward: null }
   const checked = async (args, options) => {
     const r = await exec(args, options)
     if (r.exitCode !== 0 || r.timedOut) throw Error(`docker ${args[0]} failed: ${r.stderr.slice(-1000)}`)

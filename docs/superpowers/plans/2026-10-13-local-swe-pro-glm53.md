@@ -9,7 +9,7 @@ Authority: the user's request to establish the local Docker environment and run 
 - Agent sees original instruction and clean repository only. Hidden verifier and gold patches stay on the host until a fresh grading container is created. No Docker socket or host workspace mounts in the agent container.
 - Agent network permits only a dedicated model gateway. Disable web tools, external plugins, MCP, personal/project settings and stronger model aliases. Gateway restricts route and model, keeps provider credentials on the host, and records actual response model and usage without request contents or credentials.
 - Never grade an agent-modified environment. Kill the agent container after capturing its tracked and new-file git patch; apply that patch strictly to a fresh pinned image and run the unchanged official verifier.
-- Empty patch must score zero and reference patch one before paid runs for each task. Environment failures are distinct from model failures; timeout/unknown does not certify success. Actual unreconciled dollar cost stays unknown.
+- Empty patch must score zero and reference patch one before paid runs for each task. Preparation, model execution and fresh grading share the same two slots; cold tasks are calibrated on demand in the fixed schedule, with no model-outcome-based selection. Environment failures are distinct from model failures; timeout/unknown does not certify success. Actual unreconciled dollar cost stays unknown.
 - Preserve images and reproducible receipts, no global Docker prune or destructive cleanup. Raw logs, task materialization and credentials remain ignored. No merge or push.
 
 ### Task 1: Verified materialization and independent Docker grading
