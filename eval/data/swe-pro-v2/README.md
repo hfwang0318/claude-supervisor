@@ -49,6 +49,7 @@ node eval/swe-pro/run.mjs --tasks-root /absolute/path/to/materialized-subset --r
 每次验收和模型运行前重新核验。免费机制回归已加入 `node scripts/check.mjs`，不需要启动 Docker。
 宿主需要 Node、Python 3、Git、Docker；模型运行还需要当前 Claude settings 的有效路由及 key helper。
 
-对比固定 seed=53，一次 existing/一次 facts，共60项，单任务50分钟，单并发。
+对比固定 seed=53，一次 existing/一次 facts，共60项，单任务50分钟。`--jobs 1|2` 默认2，
+双槽需要 Docker VM 至少8.5GiB内存；保持每任务4GiB上限，内存不足时显式使用 `--jobs 1`。
 断开/取消用量保留 unknown 和已观测下界；本机 CLI 的未知计价口径不作为实际费用。
 恢复运行必须保持配置/实现/runtime不变；未完成的付费 attempt 会保留并要求先审阅，避免自动重复收费。

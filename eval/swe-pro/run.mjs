@@ -3,8 +3,8 @@ import { resolve, join } from 'node:path'
 import { createHash } from 'node:crypto'
 import { MODEL } from './gateway.mjs'
 import { openModelNetwork, runAgent, treeHash } from './agent.mjs'
-import { grade, readyPair, verifyArtifacts } from './docker.mjs'
-import { schedule, validateResume, identityValid, summarizeUsage } from './schedule.mjs'
+import { grade, readyPair, verifyArtifacts, command } from './docker.mjs'
+import { schedule, validateResume, identityValid, summarizeUsage, boundedMap } from './schedule.mjs'
 
 const arg = (name, fallback) => { const i = process.argv.indexOf(`--${name}`); return i < 0 ? fallback : process.argv[i + 1] }
 const manifestPath = resolve('eval/data/swe-pro-v2/subset-v1.json')
@@ -17,7 +17,14 @@ const identity = JSON.parse(readFileSync(join(runtime, 'identity.json')))
 const hash = path => createHash('sha256').update(readFileSync(path)).digest('hex')
 for (const mode of ['existing', 'facts']) if (treeHash(join(runtime, `plugin-${mode}`)) !== identity.pluginHashes[mode]) throw Error('frozen plugin changed')
 if (hash(join(runtime, 'gateway.mjs')) !== identity.gatewaySHA256 || hash(join(runtime, 'node')) !== identity.nodeSHA256 || hash(join(runtime, 'claude')) !== identity.claudeSHA256) throw Error('frozen runtime changed')
-const config = { schemaVersion: 1, manifestSHA256: hash(manifestPath), runtime: identity, model: MODEL, sideModel: MODEL, reasoning: 'default', seed: 53, repetitions: 1, arms: ['existing', 'facts'], timeoutMs: 3_000_000, concurrency: 1, costUSD: 'unknown', adapterSHA256: createHash('sha256').update(readdirSync(resolve('eval/swe-pro')).filter(n => n.endsWith('.mjs')).sort().map(n => `${n}:${hash(resolve('eval/swe-pro', n))}`).join('\n')).digest('hex') }
+const concurrency = Number(arg('jobs', '2'))
+if (![1, 2].includes(concurrency)) throw Error('concurrency must be 1 or 2')
+const infoResult = await command(['info', '--format', '{{json .}}'])
+if (infoResult.exitCode !== 0) throw Error('Docker daemon unavailable')
+const info = JSON.parse(infoResult.stdout)
+if (concurrency === 2 && info.MemTotal < 8.5 * 1024 ** 3) throw Error('two jobs require at least 8.5 GiB Docker VM memory')
+const environment = { dockerVersion: info.ServerVersion, architecture: info.Architecture, cpus: info.NCPU, memoryBytes: info.MemTotal }
+const config = { schemaVersion: 1, manifestSHA256: hash(manifestPath), runtime: identity, environment, model: MODEL, sideModel: MODEL, reasoning: 'default', seed: 53, repetitions: 1, arms: ['existing', 'facts'], timeoutMs: 3_000_000, concurrency, costUSD: 'unknown', adapterSHA256: createHash('sha256').update(readdirSync(resolve('eval/swe-pro')).filter(n => n.endsWith('.mjs')).sort().map(n => `${n}:${hash(resolve('eval/swe-pro', n))}`).join('\n')).digest('hex') }
 mkdirSync(out, { recursive: true })
 const configPath = join(out, 'experiment.json')
 if (existsSync(configPath)) validateResume(JSON.parse(readFileSync(configPath)), config)
@@ -30,10 +37,10 @@ const interrupt = () => { interrupted = true; controller.abort() }
 process.once('SIGINT', interrupt)
 process.once('SIGTERM', interrupt)
 const results = []
-for (const { task, mode } of jobs) {
-  if (interrupted) break
+const persistResults = () => writeFileSync(join(out, 'results.json'), JSON.stringify(results.filter(Boolean), null, 2))
+await boundedMap(jobs, concurrency, async ({ task, mode }, index) => {
   const dir = join(out, task.instanceId, mode), resultPath = join(dir, 'result.json')
-  if (existsSync(resultPath)) { results.push(JSON.parse(readFileSync(resultPath))); continue }
+  if (existsSync(resultPath)) { results[index] = JSON.parse(readFileSync(resultPath)); return }
   if (existsSync(dir)) throw Error(`unfinished attempt retained: ${task.instanceId}/${mode}; review it before restarting`)
   mkdirSync(dir, { recursive: true })
   const result = { task: task.instanceId, repo: task.repo, split: task.split, mode, costUSD: 'unknown', status: 'environment-error', functionalSuccess: null }
@@ -67,9 +74,9 @@ for (const { task, mode } of jobs) {
     finally { if (network) await network.close() }
   }
   writeFileSync(resultPath, JSON.stringify(result, null, 2))
-  results.push(result)
-  writeFileSync(join(out, 'results.json'), JSON.stringify(results, null, 2))
-  console.log(new Date().toISOString(), task.repo, mode, result.status, results.length + '/' + jobs.length)
-}
-writeFileSync(join(out, 'results.json'), JSON.stringify(results, null, 2))
-console.log(JSON.stringify({ finished: results.length, planned: jobs.length, interrupted, arms: Object.fromEntries(['existing', 'facts'].map(mode => { const rows = results.filter(r => r.mode === mode); return [mode, { passed: rows.filter(r => r.functionalSuccess === true).length, failed: rows.filter(r => r.functionalSuccess === false).length, unknown: rows.filter(r => r.functionalSuccess === null).length }] })) }, null, 2))
+  results[index] = result
+  persistResults()
+  console.log(new Date().toISOString(), task.repo, mode, result.status, results.filter(Boolean).length + '/' + jobs.length)
+}, { signal: controller.signal, onError: interrupt })
+persistResults()
+console.log(JSON.stringify({ finished: results.filter(Boolean).length, planned: jobs.length, interrupted, arms: Object.fromEntries(['existing', 'facts'].map(mode => { const rows = results.filter(r => r?.mode === mode); return [mode, { passed: rows.filter(r => r.functionalSuccess === true).length, failed: rows.filter(r => r.functionalSuccess === false).length, unknown: rows.filter(r => r.functionalSuccess === null).length }] })) }, null, 2))

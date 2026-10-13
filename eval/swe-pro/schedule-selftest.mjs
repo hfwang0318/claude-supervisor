@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { schedule, validateResume, identityValid, summarizeUsage } from './schedule.mjs'
+import { schedule, validateResume, identityValid, summarizeUsage, boundedMap } from './schedule.mjs'
 const tasks = Array.from({ length: 30 }, (_, n) => ({ instanceId: `case-${n}` }))
 const jobs = schedule(tasks, 53)
 assert.equal(jobs.length, 60)
@@ -20,4 +20,26 @@ const complete = summarizeUsage([{ requestId: 'r', type: 'request', maxOutput: 1
 assert.equal(complete.complete, true)
 assert.equal(complete.input, 15)
 assert.equal(complete.output, 3)
+let active = 0, peak = 0
+const starts = []
+const mapped = await boundedMap([0, 1, 2, 3, 4], 2, async value => {
+  starts.push(value); active++; peak = Math.max(peak, active)
+  await new Promise(ok => setTimeout(ok, 10)); active--; return value * 2
+})
+assert.equal(peak, 2)
+assert.deepEqual(starts, [0, 1, 2, 3, 4])
+assert.deepEqual(mapped, [0, 2, 4, 6, 8])
+const controller = new AbortController(), cancelledStarts = []
+await boundedMap([0, 1, 2, 3], 2, async value => { cancelledStarts.push(value); await new Promise(ok => setTimeout(ok, 10)); controller.abort() }, { signal: controller.signal })
+assert.equal(cancelledStarts.length, 2)
+assert.throws(() => boundedMap([], 0, () => {}), /concurrency/)
+let cleaned = false
+const errorStarts = []
+await assert.rejects(boundedMap([0, 1, 2, 3], 2, async value => {
+  errorStarts.push(value)
+  if (value === 0) { await new Promise(ok => setTimeout(ok, 5)); throw Error('controlled failure') }
+  await new Promise(ok => setTimeout(ok, 15)); cleaned = true
+}), /controlled failure/)
+assert.equal(cleaned, true)
+assert.deepEqual(errorStarts, [0, 1])
 console.log('SWE Pro schedule self-tests passed')

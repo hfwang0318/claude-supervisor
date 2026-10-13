@@ -19,3 +19,21 @@ export const summarizeUsage = events => {
   const completeField = key => requests.length > 0 && observations.every(rows => rows.some(e => Number.isFinite(e[key]) && (['message_delta', 'response'].includes(e.type) || e.type === 'message_start' && key !== 'output' && (key !== 'input' || e.input > 0))))
   return { complete: completeField('input') && completeField('output'), ...Object.fromEntries(fields.map(key => [key, completeField(key) ? observed[key] : null])), observed, requests: requests.length }
 }
+export const boundedMap = (items, concurrency, run, { signal, onError = () => {} } = {}) => {
+  if (!Number.isSafeInteger(concurrency) || concurrency < 1) throw Error('invalid concurrency')
+  return (async () => {
+    const results = new Array(items.length)
+    let next = 0, failure
+    const worker = async () => {
+      while (!signal?.aborted && !failure) {
+        const index = next++
+        if (index >= items.length) return
+        try { results[index] = await run(items[index], index) }
+        catch (error) { failure = error; onError(error); return }
+      }
+    }
+    await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, worker))
+    if (failure) throw failure
+    return results
+  })()
+}
