@@ -19,3 +19,15 @@
 不将上游代码自动归入本项目的MIT授权内容。
 
 详情与30项列表见 `docs/research/2026-10-13-swe-pro-v2-subset-v1.md`。
+
+## 使用官方工具物化任务
+
+本目录提供30项及development/holdout/smoke的独立ID列表，均来自同一JSON清单。
+检出上游固定commit后，可用其原有工具创建任务目录（无需改写原题或verifier）：
+
+```sh
+python3 v2/tooling/make_subset.py v2/tasks /absolute/path/to/instance-ids.txt /absolute/path/to/materialized-subset
+```
+
+该命令在上游SWE-bench_Pro-os checkout中运行。`smoke-ids.txt`可替代全部ID列表。
+模型评测仍需容器环境与本项目插件运行适配；此处未执行materialization或容器任务。
