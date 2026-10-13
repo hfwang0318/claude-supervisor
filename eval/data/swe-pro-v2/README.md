@@ -1,15 +1,17 @@
 # SWE-bench Pro V2 固定子集 v1
 
-已固定30个真实仓库任务的来源和选择清单；尚未接入新的模型评测器。
+已固定30个真实仓库任务的来源和选择清单，并接入本机 Docker 评测适配器。
 选择：20个开发回归、10个保留评估；6个开发任务用于快速检查；普通20、HARD-51共10。
 原始需求、任务配置、verifier、参考/测试patch均用官方SHA-256锁定，镜像用linux/amd64平台digest锁定。
 完整仓库、镜像层、gold patch及verifier没有复制进本项目源代码目录。
 
-**可用性边界：**元数据/镜像descriptor核验通过，不等于容器验收通过。还未拉镜像层，
-也没有在本环境运行空patch和参考patch。正式模型运行数为0。当前glm-5.2路由仍需核验。
+**可用性边界：**清单中的 readiness/models 是冻结时的来源记录，不会用后续运行结果改写。
+2026-10-13 已开始拉取固定镜像、执行空/参考patch容器验收；GLM-5.3 实际身份及完整
+Claude 运行时预检通过。正式轮次及逐任务就绪状态以 `docs/evals/2026-10-13-local-swe-pro-glm53.md`
+和对应运行收据为准。元数据核验、免费自测、环境验收均不等于模型工程质量。
 
-`subset-v1.json` 的文件级hash在本目录 `SHA256SUMS`。源码在本项目保持原状，现有
-`eval/run.mjs --suite assist` 仍是原四任务；这个清单目前不会被旧runner自动加载。
+`subset-v1.json` 的文件级hash在本目录 `SHA256SUMS`。现有 `eval/run.mjs --suite assist`
+仍是原四任务；真实仓库使用独立的 `eval/swe-pro/` 适配器。
 
 运行前需要真实仓库/容器评测适配：主模型只见原始instruction及干净repo；官方verifier和
 参考解答在评价侧。模型patch最终在新环境中重放评分。每条F2P/P2P保留原样；9条P2P为空的
@@ -30,4 +32,23 @@ python3 v2/tooling/make_subset.py v2/tasks /absolute/path/to/instance-ids.txt /a
 ```
 
 该命令在上游SWE-bench_Pro-os checkout中运行。`smoke-ids.txt`可替代全部ID列表。
-模型评测仍需容器环境与本项目插件运行适配；此处未执行materialization或容器任务。
+本机适配器保留官方 verifier 原样，主模型容器只挂载只读的 Linux 运行时和冻结插件；
+任务材料（尤其 gold/tests）不挂载进去。模型通过内部 Docker 网络上的受限网关访问
+当前 Claude 路由，主/旁路明确固定 GLM-5.3。凭据只在宿主进程中使用。
+
+已物化任务和运行时后，从本项目 checkout 运行：
+
+```sh
+node eval/swe-pro/readiness.mjs --tasks-root /absolute/path/to/materialized-subset --out eval/results/swe-pro-glm53/readiness
+node eval/swe-pro/run.mjs --tasks-root /absolute/path/to/materialized-subset --runtime /absolute/path/to/frozen-linux-runtime --readiness eval/results/swe-pro-glm53/readiness --out eval/results/swe-pro-glm53/comparison
+```
+
+运行时目录包含经过官方 checksum 核验的 Claude 2.1.295 linux-x64 binary、Linux Node
+22.23.3 binary、官方 manifest。`freezeRuntime(root, runtime)`（`eval/swe-pro/agent.mjs`）
+复制并锁定两臂插件和网关，生成 `identity.json`；同目录不能重新冻结。任务 artifacts 在
+每次验收和模型运行前重新核验。免费机制回归已加入 `node scripts/check.mjs`，不需要启动 Docker。
+宿主需要 Node、Python 3、Git、Docker；模型运行还需要当前 Claude settings 的有效路由及 key helper。
+
+对比固定 seed=53，一次 existing/一次 facts，共60项，单任务50分钟，单并发。
+断开/取消用量保留 unknown 和已观测下界；本机 CLI 的未知计价口径不作为实际费用。
+恢复运行必须保持配置/实现/runtime不变；未完成的付费 attempt 会保留并要求先审阅，避免自动重复收费。
