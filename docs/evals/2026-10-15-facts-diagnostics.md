@@ -44,3 +44,13 @@
 | 新 Ansible 42355d1 | file-limit | 范围 lib/ansible 包含 lib/ansible/config/ansible_builtin_runtime.yml，文件 375,893 bytes，超过 256 KiB |
 
 原来工作的临时修改／全部版本没有重建，因此这三条是固定 base 上可重复的拒绝机制证据；不能据此宣称逐字节重放了旧工作区。Ansible 的结果与新版实际 file-limit 原因一致，问题在选择范围包含超限来源，不需要放宽安全限制。重放容器均清理，正在运行的模型未中断，原基线与新冻结 runtime 没有改动。暂不凭猜测增加重试或新模块；继续收集完整失败并集中的诊断、独立验收及真实用量。
+
+## 供应商并发约束与保留回执续跑
+
+完整失败并集开始后，8 并发出现供应商 429。Router 原始错误 body 的固定 code 为 1302（rate_limit_error／并发限制），与历史 1308 额度耗尽不同；原始拒绝和内部重试记录保留，不能把这些影响归为模型能力或费用为零。
+
+2026-10-14 19:27Z，向唯一活动 monitor 发送 SIGUSR2，只停止新派发。此前已派发 9 次，已开始的模型与官方评分继续自然结束；没有取消任务、改变 runtime、重启 Docker、提高预算或购买额度。provider-resume.py 等待旧控制器释放独占锁并确认所有旧容器清理后，以同一 experiment／out／runtime／adapter／capacity 路径继续仅未派发项，保留所有已有通过、失败或未知回执。
+
+配置上限仍为 8，但新签发许可的实际 admission 上限为 4，供应商约束优先于空闲内存。独立操作控制器保留原资源阈值与过期机制，trace 记录 helper SHA、provider cap、issuer 和每份许可 SHA。未改冻结 adapter；原 experiment 字节与已存在结果的 SHA 在续跑前后比较，延迟按这两段实际 admission 条件说明。
+
+无 Docker／模型调用的控制器行为测试：配置最大 8，持续 17 秒高可用内存、低 swap 输入，四次发布均为 4，终止发布 0，退出 0；没有因空闲内存恢复到 8。等待与续跑状态分别写 provider-handoff-status.json 与 delivery-status.json。真实 1308 时停止进入剩余派发并等待恢复；不重跑已接受模型回执。
