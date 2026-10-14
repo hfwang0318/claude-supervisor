@@ -199,3 +199,12 @@ is an executable and `DSS_ARGS` is parsed as quoted arguments; `DSS_ARGV` accept
 an explicit JSON string array. Neither is executed as shell code. Full launch,
 host-context isolation and complete usage still need live validation before
 reporting model quality/cost or admission to confirmation experiments.
+## Frozen incremental SWE-bench Pro comparisons
+
+`node eval/swe-pro/run.mjs --selection <selection.json> --baseline-summary <summary.json> --dry-run`
+validates a frozen failure/unknown union and prints both-mode scheduling without
+Docker or a model runtime. Live execution requires a fresh explicit `--out` and
+the usual frozen `--tasks-root`, `--runtime`, `--readiness` and `--jobs 1|2`.
+Incremental summaries separate historical skipped cases from this version's
+results and produce `next-selection.json` only after the round finishes. See
+[the protocol](../docs/evals/2026-10-14-incremental-comparison.md).

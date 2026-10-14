@@ -82,6 +82,10 @@ Claude Code 自带一个旁路代理 "You should know"，看着 Claude 干活，
 `taskTimeoutMs`（首轮 180000）；A/B 都用 `--arms on`，分别选择模式并使用全新结果目录。
 真实质量/费用增益尚未证实，见[筛查报告](docs/evals/2026-10-12-core-assistance-pilot.md)。
 
+本地 SWE-bench Pro runner 支持 `--selection` 和 `--baseline-summary` 的冻结增量对比，
+可用 `--dry-run` 免费预览。只对失败或未知用例重跑两种模式；历史双侧通过项不计入新版
+成绩。基线校验、全新输出目录和下一轮清单见[增量对比策略](docs/evals/2026-10-14-incremental-comparison.md)。
+
 ## 问题状态
 
 `resolution=open|fixed|unknown`、`disclosed`、`contested` 分别表示事实状态、是否告知、是否争议。

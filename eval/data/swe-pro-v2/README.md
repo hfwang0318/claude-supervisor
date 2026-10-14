@@ -22,6 +22,11 @@ Claude 运行时预检通过。正式轮次及逐任务就绪状态以 `docs/eva
 
 详情与30项列表见 `docs/research/2026-10-13-swe-pro-v2-subset-v1.md`。
 
+后续开发遵循用户指定的[增量对比策略](../../../docs/evals/2026-10-14-incremental-comparison.md)：
+下一轮仅重测 `failure-union-v1.json` 中任一模式失败的5个用例，两种模式各一次，共10项；
+双侧均成功的25项跳过。执行入口接受 `--selection` 和 `--baseline-summary`，可用
+`--dry-run` 免费验证固定范围；不传增量参数时保留完整30项。示例见上述策略文档。
+
 ## 使用官方工具物化任务
 
 本目录提供30项及development/holdout/smoke的独立ID列表，均来自同一JSON清单。

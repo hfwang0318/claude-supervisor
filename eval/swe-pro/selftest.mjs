@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync } from 'node:
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createHash } from 'node:crypto'
-import { verifyArtifacts, classifyGrade, readyPair, grade, requiredTests, prepareTask } from './docker.mjs'
+import { verifyArtifacts, classifyGrade, readyPair, grade, requiredTests, prepareTask, calibrationIdentity } from './docker.mjs'
 
 const root = mkdtempSync(join(tmpdir(), 'swe-pro-test-'))
 try {
@@ -39,7 +39,9 @@ try {
   writeFileSync(join(root, 'case', 'instruction.md'), 'original')
   const prepared = join(root, 'prepared')
   mkdirSync(prepared)
-  const cache = { task: task.instanceId, image: task.image.pinnedReference, empty: { status: 'failed', reward: 0 }, reference: { status: 'passed', reward: 1 }, ready: true }
+  const cache = { task: task.instanceId, image: task.image.pinnedReference, calibration: calibrationIdentity(task), empty: { status: 'failed', reward: 0 }, reference: { status: 'passed', reward: 1 }, ready: true }
+  writeFileSync(join(prepared, 'readiness.json'), JSON.stringify({ ...cache, calibration: undefined }))
+  assert.equal((await prepareTask(task, root, prepared, { exec: async () => ({ exitCode: 1, stderr: 'controlled pull error' }) })).ready, false, 'unbound historical calibration cannot be reused')
   writeFileSync(join(prepared, 'readiness.json'), JSON.stringify(cache))
   let invoked = 0
   assert.equal((await prepareTask(task, root, prepared, { exec: async () => { invoked++; return { exitCode: 1, stderr: 'controlled pull error' } } })).ready, true)
@@ -47,6 +49,14 @@ try {
   writeFileSync(join(prepared, 'readiness.json'), JSON.stringify({ ...cache, image: 'different' }))
   assert.equal((await prepareTask(task, root, prepared, { exec: async () => { invoked++; return { exitCode: 1, stderr: 'controlled pull error' } } })).ready, false)
   assert.equal(invoked, 1)
+  for (const calibration of [
+    { ...cache.calibration, baseCommit: 'other' },
+    { ...cache.calibration, graderSHA256: 'other' },
+    { ...cache.calibration, artifactSHA256: { 'instruction.md': 'other' } }
+  ]) {
+    writeFileSync(join(prepared, 'readiness.json'), JSON.stringify({ ...cache, calibration }))
+    assert.equal((await prepareTask(task, root, prepared, { exec: async () => ({ exitCode: 1, stderr: 'controlled pull error' }) })).ready, false, 'changed source, base or grader invalidates calibration')
+  }
   mkdirSync(join(root, 'case/tests'), { recursive: true })
   writeFileSync(join(root, 'case/tests/config.json'), JSON.stringify({ fail_to_pass: ['target'], pass_to_pass: [] }))
   const reused = join(root, 'reused')

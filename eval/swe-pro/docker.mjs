@@ -47,6 +47,12 @@ export const classifyGrade = ({ reward, exitCode, timedOut, cancelled, evidence,
 }
 
 export const readyPair = (empty, reference) => reference?.status === 'passed' && reference.reward === 1 && (empty?.status === 'failed' && empty.reward === 0 || empty?.status === 'environment-error' && empty.rawReward === '0' && empty.parsedTests === 0 && empty.requiredTests > 0 && empty.verifierExitCode === 1 && !empty.evidenceError)
+export const calibrationIdentity = task => ({
+  task: task.instanceId, image: task.image.pinnedReference, baseCommit: task.baseCommit,
+  artifactSHA256: Object.fromEntries(Object.entries(task.artifactSHA256).sort(([a], [b]) => a.localeCompare(b))),
+  graderSHA256: createHash('sha256').update(readFileSync(new URL(import.meta.url))).digest('hex')
+})
+export const readyForTask = (task, receipt) => receipt?.task === task.instanceId && receipt.image === task.image.pinnedReference && JSON.stringify(receipt.calibration) === JSON.stringify(calibrationIdentity(task)) && readyPair(receipt.empty, receipt.reference)
 export const requiredTests = config => {
   // Official task configs contain both JSON arrays and Python string-list
   // literals. ast.literal_eval parses data only; never execute task strings.
@@ -61,7 +67,7 @@ export const prepareTask = async (task, tasksRoot, out, { exec = command, signal
   if (existsSync(path)) {
     try {
       const cached = JSON.parse(readFileSync(path))
-      if (cached.task === task.instanceId && cached.image === task.image.pinnedReference && readyPair(cached.empty, cached.reference)) return cached
+      if (readyForTask(task, cached)) return cached
     } catch {}
   }
   progress('pull')
@@ -75,7 +81,7 @@ export const prepareTask = async (task, tasksRoot, out, { exec = command, signal
   const empty = await grade(task, tasksRoot, '', join(out, 'empty'), { exec, signal })
   progress('reference patch')
   const reference = await grade(task, tasksRoot, readFileSync(join(tasksRoot, task.instanceId, 'solution/gold_patch.diff'), 'utf8'), join(out, 'reference'), { exec, signal })
-  const receipt = { task: task.instanceId, image: task.image.pinnedReference, empty, reference, ready: readyPair(empty, reference) }
+  const receipt = { task: task.instanceId, image: task.image.pinnedReference, calibration: calibrationIdentity(task), empty, reference, ready: readyPair(empty, reference) }
   writeFileSync(path, JSON.stringify(receipt, null, 2))
   progress(`ready: ${receipt.ready}`)
   return receipt

@@ -1,20 +1,43 @@
-import { readFileSync, writeFileSync, mkdirSync, existsSync, cpSync, readdirSync } from 'node:fs'
+import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync } from 'node:fs'
 import { resolve, join } from 'node:path'
 import { createHash } from 'node:crypto'
 import { MODEL } from './gateway.mjs'
 import { openModelNetwork, runAgent, treeHash } from './agent.mjs'
-import { grade, readyPair, verifyArtifacts, command, prepareTask } from './docker.mjs'
-import { schedule, validateResume, identityValid, summarizeUsage, boundedMap } from './schedule.mjs'
+import { grade, readyForTask, verifyArtifacts, command, prepareTask } from './docker.mjs'
+import { schedule, identityValid, summarizeUsage, boundedMap } from './schedule.mjs'
+import { selectIncremental, summarizeIncremental, nextSelection } from './incremental.mjs'
+import { freezeExperiment, validateResult } from './run-state.mjs'
 
 const arg = (name, fallback) => { const i = process.argv.indexOf(`--${name}`); return i < 0 ? fallback : process.argv[i + 1] }
-const manifestPath = resolve('eval/data/swe-pro-v2/subset-v1.json')
-const manifest = JSON.parse(readFileSync(manifestPath))
+const valueFlags = ['manifest', 'selection', 'baseline-summary', 'tasks-root', 'runtime', 'readiness', 'out', 'jobs']
+const seenFlags = new Set()
+for (let i = 2; i < process.argv.length; i++) {
+  const flag = process.argv[i]
+  if (seenFlags.has(flag)) throw Error(`duplicate argument: ${flag}`)
+  seenFlags.add(flag)
+  if (flag === '--dry-run') continue
+  if (!valueFlags.some(name => flag === `--${name}`)) throw Error(`unknown argument: ${flag}`)
+  if (!process.argv[i + 1] || process.argv[i + 1].startsWith('--')) throw Error(`missing value: ${flag}`)
+  i++
+}
+const hash = path => createHash('sha256').update(readFileSync(path)).digest('hex')
+const manifestPath = resolve(arg('manifest', 'eval/data/swe-pro-v2/subset-v1.json'))
+const manifestBytes = readFileSync(manifestPath), manifest = JSON.parse(manifestBytes)
+const selectionPath = arg('selection', null), baselinePath = arg('baseline-summary', null)
+if (!!selectionPath !== !!baselinePath) throw Error('--selection and --baseline-summary must be provided together')
+const incremental = selectionPath ? selectIncremental(manifestBytes, readFileSync(resolve(selectionPath)), readFileSync(resolve(baselinePath))) : null
+const jobs = schedule(incremental?.tasks ?? manifest.tasks, 53)
+if (process.argv.includes('--dry-run')) {
+  console.log(JSON.stringify({ manifestSHA256: hash(manifestPath), selection: incremental ? { name: incremental.name, selectionSHA256: incremental.selectionSHA256, baselineSummarySHA256: incremental.baselineSummarySHA256 } : null, planned: jobs.length, jobs: jobs.map(j => ({ task: j.task.instanceId, mode: j.mode })), skipped: incremental?.skipped ?? [] }, null, 2))
+  process.exit(0)
+}
+if (jobs.length === 0) throw Error('no remaining tasks; no model execution needed')
 const tasksRoot = resolve(arg('tasks-root', '.superpowers/sdd/2026-10-13-local-swe-pro-glm53/tasks'))
 const runtime = resolve(arg('runtime', '.superpowers/sdd/2026-10-13-local-swe-pro-glm53/runtime'))
 const readiness = resolve(arg('readiness', 'eval/results/swe-pro-glm53/readiness'))
+if (incremental && !arg('out', null)) throw Error('incremental execution requires a new explicit --out directory')
 const out = resolve(arg('out', 'eval/results/swe-pro-glm53/comparison'))
 const identity = JSON.parse(readFileSync(join(runtime, 'identity.json')))
-const hash = path => createHash('sha256').update(readFileSync(path)).digest('hex')
 for (const mode of ['existing', 'facts']) if (treeHash(join(runtime, `plugin-${mode}`)) !== identity.pluginHashes[mode]) throw Error('frozen plugin changed')
 if (hash(join(runtime, 'gateway.mjs')) !== identity.gatewaySHA256 || hash(join(runtime, 'node')) !== identity.nodeSHA256 || hash(join(runtime, 'claude')) !== identity.claudeSHA256) throw Error('frozen runtime changed')
 const concurrency = Number(arg('jobs', '2'))
@@ -25,29 +48,36 @@ const info = JSON.parse(infoResult.stdout)
 if (concurrency === 2 && info.MemTotal < 8.5 * 1024 ** 3) throw Error('two jobs require at least 8.5 GiB Docker VM memory')
 const environment = { dockerVersion: info.ServerVersion, architecture: info.Architecture, cpus: info.NCPU, memoryBytes: info.MemTotal }
 const config = { schemaVersion: 1, manifestSHA256: hash(manifestPath), runtime: identity, environment, preparationPolicy: 'per-task-calibration-in-worker-slots', model: MODEL, sideModel: MODEL, reasoning: 'default', seed: 53, repetitions: 1, arms: ['existing', 'facts'], timeoutMs: 3_000_000, concurrency, costUSD: 'unknown', adapterSHA256: createHash('sha256').update(readdirSync(resolve('eval/swe-pro')).filter(n => n.endsWith('.mjs')).sort().map(n => `${n}:${hash(resolve('eval/swe-pro', n))}`).join('\n')).digest('hex') }
-mkdirSync(out, { recursive: true })
-const configPath = join(out, 'experiment.json')
-if (existsSync(configPath)) validateResume(JSON.parse(readFileSync(configPath)), config)
-else writeFileSync(configPath, JSON.stringify(config, null, 2))
-const jobs = schedule(manifest.tasks, config.seed)
+if (incremental) config.incremental = { name: incremental.name, selectionSHA256: incremental.selectionSHA256, baselineSummarySHA256: incremental.baselineSummarySHA256, tasks: incremental.tasks.map(t => t.instanceId), skipped: incremental.skipped }
+const frozen = freezeExperiment(out, config, jobs)
 writeFileSync(join(out, 'schedule.json'), JSON.stringify(jobs.map(j => ({ task: j.task.instanceId, mode: j.mode })), null, 2))
 let interrupted = false
 const controller = new AbortController()
 const interrupt = () => { interrupted = true; controller.abort() }
 process.once('SIGINT', interrupt)
 process.once('SIGTERM', interrupt)
-const results = []
+const results = jobs.map(({ task, mode }) => frozen.completed.get(`${task.instanceId}/${mode}`))
 const preparations = new Map()
-const persistResults = () => writeFileSync(join(out, 'results.json'), JSON.stringify(results.filter(Boolean), null, 2))
+const persistResults = () => {
+  const rows = results.filter(Boolean)
+  // Validate before replacing aggregate files, including resumed result receipts.
+  const summary = incremental ? summarizeIncremental(incremental, rows) : null
+  writeFileSync(join(out, 'results.json'), JSON.stringify(rows, null, 2))
+  if (summary) {
+    const summaryBytes = JSON.stringify(summary, null, 2)
+    writeFileSync(join(out, 'summary-incremental.json'), summaryBytes)
+    if (summary.complete) writeFileSync(join(out, 'next-selection.json'), JSON.stringify(nextSelection(incremental.name, summaryBytes), null, 2))
+  }
+}
 await boundedMap(jobs, concurrency, async ({ task, mode }, index) => {
   const dir = join(out, task.instanceId, mode), resultPath = join(dir, 'result.json')
-  if (existsSync(resultPath)) { results[index] = JSON.parse(readFileSync(resultPath)); return }
+  if (results[index]) return
   if (existsSync(dir)) throw Error(`unfinished attempt retained: ${task.instanceId}/${mode}; review it before restarting`)
   mkdirSync(dir, { recursive: true })
-  const result = { task: task.instanceId, repo: task.repo, split: task.split, mode, costUSD: 'unknown', status: 'environment-error', functionalSuccess: null }
+  const result = { task: task.instanceId, repo: task.repo, split: task.split, mode, experimentSHA256: frozen.fingerprint, costUSD: 'unknown', status: 'environment-error', functionalSuccess: null }
   if (!preparations.has(task.instanceId)) preparations.set(task.instanceId, prepareTask(task, tasksRoot, join(readiness, task.instanceId), { signal: controller.signal, progress: phase => console.log(new Date().toISOString(), task.repo, 'environment', phase) }))
   const ready = await preparations.get(task.instanceId)
-  if (!ready || ready.task !== task.instanceId || ready.image !== task.image.pinnedReference || !readyPair(ready.empty, ready.reference)) result.error = 'empty/reference readiness not satisfied'
+  if (!readyForTask(task, ready)) result.error = 'empty/reference readiness not satisfied'
   else {
     verifyArtifacts(task, tasksRoot)
     console.log(new Date().toISOString(), task.repo, mode, 'starting')
@@ -73,6 +103,7 @@ await boundedMap(jobs, concurrency, async ({ task, mode }, index) => {
     } catch (error) { result.error = error.message }
     finally { if (network) await network.close() }
   }
+  validateResult(result, task, mode, frozen.fingerprint)
   writeFileSync(resultPath, JSON.stringify(result, null, 2))
   results[index] = result
   persistResults()

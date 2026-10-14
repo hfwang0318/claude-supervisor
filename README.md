@@ -97,6 +97,13 @@ checks. The four-task `assist` suite needs a frozen `--experiment` config with
 `--arms on` with different mode configs and fresh result directories. Live quality
 and cost gains remain unproven; see [the pilot report](docs/evals/2026-10-12-core-assistance-pilot.md).
 
+The local SWE-bench Pro runner supports frozen incremental comparisons using
+`--selection` and `--baseline-summary`, with a free `--dry-run` preview. It reruns
+both modes only for cases that failed or remain unknown; historical cases that
+passed in both modes are excluded from the new score. See the
+[incremental comparison protocol](docs/evals/2026-10-14-incremental-comparison.md)
+for baseline validation, fresh output directories and next-round selection.
+
 ## Issue state
 
 `resolution=open|fixed|unknown`, `disclosed` and `contested` track separate facts.
