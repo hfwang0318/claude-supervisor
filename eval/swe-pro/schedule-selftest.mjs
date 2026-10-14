@@ -29,6 +29,12 @@ const mapped = await boundedMap([0, 1, 2, 3, 4], 2, async value => {
 assert.equal(peak, 2)
 assert.deepEqual(starts, [0, 1, 2, 3, 4])
 assert.deepEqual(mapped, [0, 2, 4, 6, 8])
+active = 0; peak = 0
+await boundedMap([0, 1, 2, 3, 4, 5], 4, async () => {
+  active++; peak = Math.max(peak, active)
+  await new Promise(ok => setTimeout(ok, 10)); active--
+})
+assert.equal(peak, 4, 'four slots execute simultaneously without dispatching a fifth')
 const controller = new AbortController(), cancelledStarts = []
 await boundedMap([0, 1, 2, 3], 2, async value => { cancelledStarts.push(value); await new Promise(ok => setTimeout(ok, 10)); controller.abort() }, { signal: controller.signal })
 assert.equal(cancelledStarts.length, 2)

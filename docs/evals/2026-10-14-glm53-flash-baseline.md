@@ -1,6 +1,6 @@
 # GLM-5.3-Flash 新基线与开发回归
 
-状态：用户已选择主模型／审查模型均为 GLM-5.3-Flash；实现与免费检查进行中，尚无完整模型基线。
+状态：主模型／审查模型均为 GLM-5.3-Flash；实现与免费检查已完成，完整模型基线执行中。
 
 ## 目的与模型身份
 
@@ -27,7 +27,7 @@ Flash 官方输入／缓存／输出积分系数为 2.3／0.56／8；GLM-5.3 为
 两组只改变 assistance_mode，保留局部事实能力和现有监督预算；execution_mode off，probe／recovery 不启用。
 
 统一 Claude Code 2.1.295、Linux Node 22.23.3 及 GNU loader 包装；seed 53、default reasoning。
-最多两个 worker，各 1 CPU／4096 MiB；agent／独立 grader 各 50 分钟，无自动付费任务重试。
+最初两个 worker，用户随后授权把剩余工作提高到四个，各 1 CPU／4096 MiB；agent／独立 grader 各 50 分钟，无自动付费任务重试。
 agent 只见原始 instruction 和干净仓库、隔离配置、无 MCP／web／其他 agent 工具、仅模型网关 egress。
 完整捕获相对不可变 base 的 patch（含模型自行提交的改动），销毁 worker 后在全新评分容器重放。
 成功需 hash 绑定的空 patch／参考 patch 校准及官方全部必需测试通过；环境错误保留 unknown。
@@ -38,7 +38,7 @@ agent 只见原始 instruction 和干净仓库、隔离配置、无 MCP／web／
 
 ## 后续回归规则
 
-完成后生成 `baseline/summary-baseline.json`，以及绑定其字节 hash 的两类选择文件：
+本轮最终汇总输出为 `baseline-four-workers/`，旧阶段保持原样。完成后生成 `summary-baseline.json`，以及绑定其字节 hash 的两类选择文件：
 
 - `failure-selection.json`：任一组失败或未知的并集，两组各一次。以后开发“全量回归”是此集合全量；
   完成后以同轮结果生成 `next-selection.json`。历史双通过项跳过，不能算作新版得分。
@@ -50,10 +50,34 @@ agent 只见原始 instruction 和干净仓库、隔离配置、无 MCP／web／
 
 ```sh
 node eval/swe-pro/run.mjs --dry-run
-node eval/swe-pro/run.mjs --selection eval/results/swe-pro-glm53-flash/baseline/failure-selection.json --baseline-summary eval/results/swe-pro-glm53-flash/baseline/summary-baseline.json --dry-run
-node eval/swe-pro/run.mjs --selection eval/results/swe-pro-glm53-flash/baseline/quick-selection.json --baseline-summary eval/results/swe-pro-glm53-flash/baseline/summary-baseline.json --dry-run
+node eval/swe-pro/run.mjs --selection eval/results/swe-pro-glm53-flash/baseline-four-workers/failure-selection.json --baseline-summary eval/results/swe-pro-glm53-flash/baseline-four-workers/summary-baseline.json --dry-run
+node eval/swe-pro/run.mjs --selection eval/results/swe-pro-glm53-flash/baseline-four-workers/quick-selection.json --baseline-summary eval/results/swe-pro-glm53-flash/baseline-four-workers/summary-baseline.json --dry-run
 ```
 
 ## 验证与结果
 
-待模型基线完整结束后填写。不得将免费机制检查或运行开始标记为基线完成。
+`node scripts/check.mjs` 通过：149 个 host tests、类型／manifest 校验、真实进程隔离检查、各套 scorer self-tests 和 6 组 SWE 适配器检查。
+30 题离线插件启动检查通过；30 题空 patch／官方参考 patch 的 hash 绑定校准及 300 份任务材料校验通过。
+最小付费路由检查的请求、返回及 Router 访问／用量标签均为 Flash；64-token 请求仅有 thinking，256-token 请求返回 OK。
+这些检查验证机制、环境与路由，完整模型结果仍待全部结束。
+
+首轮因供应商五小时额度于 16:24–16:28 返回 429／1308，16:28:39 停止；供应商提示恢复时间为北京时间 17:12:38。
+原始 `baseline/` 的 7 份记录保持不变。新的 `baseline-resumed/` 保留 4 份已独立评分记录，仅排除没有任何成功模型响应／补丁的 3 份基础设施尝试：
+Element Web facts 全部为额度拒绝；Ansible／Vuls facts 在免费环境校准期间被中断，尚未启动模型。
+18:46 在相同冻结配置下继续剩余 56 次首个有效尝试，已完成的通过／失败任务不重跑。
+其中 OpenLibrary b671 existing 的失败 patch 已由官方测试评分，但 agent 曾收到 5 次额度拒绝，不能只归因于模型能力；原始记录及此限制单独保留。
+额度拒绝调用的费用为 unknown。实验 fingerprint 为 `19420bcf3cc77abf03093c7d4de48cb884a2f8c5e052f6ca46ee5446af09de9d`。
+
+用户指出 macOS 可以利用交换空间，并授权继续提高并发。实测宿主机 16 GiB、Docker 8.72 GiB／约 1 GiB VM swap；每任务上限仍为 4 GiB。
+并发上限提高到 4，显式允许内存峰值超额配置并监测资源／OOM／供应商额度；不声称资源峰值已有保证。
+切换时原阶段保留 22 次尝试（15 pass／5 fail／2 unknown），剩余 38 次在新阶段首次执行。
+2 个未知为切换时取消的 Element Web 404c／ProtonMail cba6 facts：已有模型响应、未产生补丁，轨迹及空 patch 保留，不自动重跑或算作模型能力失败。
+续跑校验原始 adapter hash，并逐字节验证执行、评分、网关及其他非调度模块不变；原始回执保留原 fingerprint／原路径，绑定到新配置。
+仅并发和调度实现发生变化，不合并为单一配置下的延迟；汇总记录两阶段及其尝试数。
+以下免费预览会验证来源，输出 inherited 22／planned 38，不调用模型或 Docker：
+
+```sh
+node eval/swe-pro/run.mjs --continue-from eval/results/swe-pro-glm53-flash/baseline-resumed --continue-adapter eval/results/swe-pro-glm53-flash/adapter-two-workers --out eval/results/swe-pro-glm53-flash/baseline-four-workers --jobs 4 --allow-memory-overcommit --dry-run
+```
+
+最终统计待模型基线完整结束后填写，不得将免费检查或部分模型结果标记为基线完成。

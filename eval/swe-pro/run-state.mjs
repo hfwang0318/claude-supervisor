@@ -15,14 +15,19 @@ export const validateResult = (row, task, mode, fingerprint) => {
 
 // Run before worker dispatch: a later invalid receipt must not allow earlier
 // missing jobs to spend model calls first.
-export const freezeExperiment = (out, config, jobs) => {
+export const freezeExperiment = (out, config, jobs, continuation) => {
   const configPath = join(out, 'experiment.json'), previous = existsSync(configPath)
   if (previous) validateResume(JSON.parse(readFileSync(configPath)), config)
   else if (existsSync(out) && readdirSync(out).length) throw Error('nonempty output directory has unbound results; choose a new directory')
   const fingerprint = createHash('sha256').update(JSON.stringify(config)).digest('hex')
-  const completed = new Map()
+  if (Boolean(config.continuation) !== Boolean(continuation) || continuation && JSON.stringify(config.continuation) !== JSON.stringify(continuation.identity)) throw Error('unbound continuation receipts')
+  const completed = new Map(continuation?.completed)
   for (const { task, mode } of jobs) {
     const dir = join(out, task.instanceId, mode), path = join(dir, 'result.json')
+    if (completed.has(`${task.instanceId}/${mode}`)) {
+      if (existsSync(dir)) throw Error('continued receipt has a duplicate local attempt')
+      continue
+    }
     if (existsSync(path)) {
       const row = JSON.parse(readFileSync(path))
       validateResult(row, task, mode, fingerprint)

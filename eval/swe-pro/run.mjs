@@ -1,22 +1,24 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync } from 'node:fs'
-import { resolve, join } from 'node:path'
+import { resolve, join, dirname } from 'node:path'
 import { createHash } from 'node:crypto'
 import { MODEL, MODEL_POLICY, assertEvaluationModel } from './gateway.mjs'
-import { openModelNetwork, runAgent, treeHash } from './agent.mjs'
+import { openModelNetwork, runAgent, treeHash, NODE_IMAGE } from './agent.mjs'
 import { grade, readyForTask, verifyArtifacts, command, prepareTask } from './docker.mjs'
 import { schedule, identityValid, summarizeUsage, boundedMap } from './schedule.mjs'
 import { nextSelection } from './incremental.mjs'
 import { selectRegression, summarizeBaseline, baselineSelections, summarizeRegression } from './regression.mjs'
 import { freezeExperiment, validateResult } from './run-state.mjs'
+import { loadContinuation, validateConcurrency, adapterFingerprint } from './continuation.mjs'
+import { fileURLToPath } from 'node:url'
 
 const arg = (name, fallback) => { const i = process.argv.indexOf(`--${name}`); return i < 0 ? fallback : process.argv[i + 1] }
-const valueFlags = ['manifest', 'selection', 'baseline-summary', 'tasks-root', 'runtime', 'readiness', 'out', 'jobs']
+const valueFlags = ['manifest', 'selection', 'baseline-summary', 'tasks-root', 'runtime', 'readiness', 'out', 'jobs', 'continue-from', 'continue-adapter']
 const seenFlags = new Set()
 for (let i = 2; i < process.argv.length; i++) {
   const flag = process.argv[i]
   if (seenFlags.has(flag)) throw Error(`duplicate argument: ${flag}`)
   seenFlags.add(flag)
-  if (flag === '--dry-run') continue
+  if (['--dry-run', '--allow-memory-overcommit'].includes(flag)) continue
   if (!valueFlags.some(name => flag === `--${name}`)) throw Error(`unknown argument: ${flag}`)
   if (!process.argv[i + 1] || process.argv[i + 1].startsWith('--')) throw Error(`missing value: ${flag}`)
   i++
@@ -25,13 +27,19 @@ const hash = path => createHash('sha256').update(readFileSync(path)).digest('hex
 const manifestPath = resolve(arg('manifest', 'eval/data/swe-pro-v2/subset-v1.json'))
 const manifestBytes = readFileSync(manifestPath), manifest = JSON.parse(manifestBytes)
 const selectionPath = arg('selection', null), baselinePath = arg('baseline-summary', null)
+const continuationPath = arg('continue-from', null)
+const continuationAdapter = arg('continue-adapter', null)
+if (!!continuationPath !== !!continuationAdapter) throw Error('--continue-from and --continue-adapter must be provided together')
+if (continuationPath && (selectionPath || !arg('out', null))) throw Error('continuation requires a full baseline and a new explicit --out')
 if (!!selectionPath !== !!baselinePath) throw Error('--selection and --baseline-summary must be provided together')
 const models = { model: MODEL, sideModel: MODEL }
 const incremental = selectionPath ? selectRegression(manifestBytes, readFileSync(resolve(selectionPath)), readFileSync(resolve(baselinePath)), models) : null
 if (!incremental) summarizeBaseline(manifestBytes, [], models)
 const jobs = schedule(incremental?.tasks ?? manifest.tasks, 53)
 if (process.argv.includes('--dry-run')) {
-  console.log(JSON.stringify({ manifestSHA256: hash(manifestPath), selection: incremental ? { name: incremental.name, selectionSHA256: incremental.selectionSHA256, baselineSummarySHA256: incremental.baselineSummarySHA256 } : null, planned: jobs.length, jobs: jobs.map(j => ({ task: j.task.instanceId, mode: j.mode })), skipped: incremental?.skipped ?? [] }, null, 2))
+  const preview = continuationPath ? loadContinuation(continuationPath, { ...JSON.parse(readFileSync(join(resolve(continuationPath), 'experiment.json'))), ...models, manifestSHA256: hash(manifestPath), adapterSHA256: adapterFingerprint(dirname(fileURLToPath(import.meta.url))) }, jobs, { sourceAdapter: continuationAdapter }) : undefined
+  const remaining = jobs.filter(j => !preview?.completed.has(`${j.task.instanceId}/${j.mode}`))
+  console.log(JSON.stringify({ manifestSHA256: hash(manifestPath), selection: incremental ? { name: incremental.name, selectionSHA256: incremental.selectionSHA256, baselineSummarySHA256: incremental.baselineSummarySHA256 } : null, planned: remaining.length, ...(preview ? { cohortPlanned: jobs.length, inherited: preview.completed.size } : {}), jobs: remaining.map(j => ({ task: j.task.instanceId, mode: j.mode })), skipped: incremental?.skipped ?? [] }, null, 2))
   process.exit(0)
 }
 if (jobs.length === 0) throw Error('no remaining tasks; no model execution needed')
@@ -46,15 +54,24 @@ if (identity.model !== MODEL || identity.sideModel !== MODEL) throw Error('froze
 for (const mode of ['existing', 'facts']) if (treeHash(join(runtime, `plugin-${mode}`)) !== identity.pluginHashes[mode]) throw Error('frozen plugin changed')
 if (hash(join(runtime, 'gateway.mjs')) !== identity.gatewaySHA256 || hash(join(runtime, 'node')) !== identity.nodeSHA256 || hash(join(runtime, 'claude')) !== identity.claudeSHA256) throw Error('frozen runtime changed')
 const concurrency = Number(arg('jobs', '2'))
-if (![1, 2].includes(concurrency)) throw Error('concurrency must be 1 or 2')
 const infoResult = await command(['info', '--format', '{{json .}}'])
 if (infoResult.exitCode !== 0) throw Error('Docker daemon unavailable')
 const info = JSON.parse(infoResult.stdout)
-if (concurrency === 2 && info.MemTotal < 8.5 * 1024 ** 3) throw Error('two jobs require at least 8.5 GiB Docker VM memory')
+const overcommit = process.argv.includes('--allow-memory-overcommit')
+let swapBytes = 0
+if (concurrency > 2) {
+  const memory = await command(['run', '--rm', '--network', 'none', '--memory', '64m', '--cpus', '0.25', NODE_IMAGE, 'cat', '/proc/meminfo'])
+  if (memory.exitCode !== 0) throw Error('Docker VM swap probe failed')
+  swapBytes = Number(memory.stdout.match(/^SwapTotal:\s+(\d+) kB$/m)?.[1]) * 1024
+}
+validateConcurrency(concurrency, { memoryBytes: info.MemTotal, swapBytes, cpus: info.NCPU }, overcommit)
 const environment = { dockerVersion: info.ServerVersion, architecture: info.Architecture, cpus: info.NCPU, memoryBytes: info.MemTotal }
 const config = { schemaVersion: 1, manifestSHA256: hash(manifestPath), runtime: identity, environment, preparationPolicy: 'per-task-calibration-in-worker-slots', model: MODEL, sideModel: MODEL, modelPolicy: MODEL_POLICY, reasoning: 'default', seed: 53, repetitions: 1, arms: ['existing', 'facts'], timeoutMs: 3_000_000, concurrency, costUSD: 'unknown', adapterSHA256: createHash('sha256').update(readdirSync(resolve('eval/swe-pro')).filter(n => n.endsWith('.mjs')).sort().map(n => `${n}:${hash(resolve('eval/swe-pro', n))}`).join('\n')).digest('hex') }
 if (incremental) config.incremental = { kind: incremental.kind, name: incremental.name, selectionSHA256: incremental.selectionSHA256, baselineSummarySHA256: incremental.baselineSummarySHA256, tasks: incremental.tasks.map(t => t.instanceId), skipped: incremental.skipped }
-const frozen = freezeExperiment(out, config, jobs)
+if (concurrency > 2) config.memoryPolicy = { overcommit, swapBytes, monitoringRequired: true, perTaskMemoryBytes: 4 * 1024 ** 3 }
+const continuation = continuationPath ? loadContinuation(continuationPath, config, jobs, { sourceAdapter: continuationAdapter }) : undefined
+if (continuation) config.continuation = continuation.identity
+const frozen = freezeExperiment(out, config, jobs, continuation)
 writeFileSync(join(out, 'schedule.json'), JSON.stringify(jobs.map(j => ({ task: j.task.instanceId, mode: j.mode })), null, 2))
 let interrupted = false
 const controller = new AbortController()
@@ -66,7 +83,7 @@ const preparations = new Map()
 const persistResults = () => {
   const rows = results.filter(Boolean)
   // Validate before replacing aggregate files, including resumed result receipts.
-  const summaryIdentity = { ...models, experimentSHA256: frozen.fingerprint }
+  const summaryIdentity = { ...models, experimentSHA256: frozen.fingerprint, ...(continuation ? { executionPhases: [{ experimentSHA256: continuation.identity.sourceExperimentSHA256, concurrency: continuation.identity.sourceConcurrency, attempts: continuation.identity.inheritedCount }, { experimentSHA256: frozen.fingerprint, concurrency, attempts: rows.length - continuation.identity.inheritedCount }], latencyInterpretation: 'Scheduling changed between phases; report latency by phase, not as one uniform configuration.' } : {}) }
   const summary = incremental ? summarizeRegression(incremental, rows, summaryIdentity) : summarizeBaseline(manifestBytes, rows, summaryIdentity)
   writeFileSync(join(out, 'results.json'), JSON.stringify(rows, null, 2))
   if (summary) {
@@ -81,6 +98,7 @@ const persistResults = () => {
     }
   }
 }
+persistResults()
 await boundedMap(jobs, concurrency, async ({ task, mode }, index) => {
   const dir = join(out, task.instanceId, mode), resultPath = join(dir, 'result.json')
   if (results[index]) return

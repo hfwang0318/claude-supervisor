@@ -95,6 +95,9 @@ Claude Code 自带一个旁路代理 "You should know"，看着 Claude 干活，
 Coding Plan 官方路由政策；GLM-5.2／5.1 旧名称会上游自动升级，不能据回显建立基线。
 Flash 先完整重测 30 题／60 次；开发全量回归随后使用失败／未知并集，快速回归固定
 一个基线双通过和一个双失败任务／4 次，不能缩减失败集合。见[Flash 协议](docs/evals/2026-10-14-glm53-flash-baseline.md)。
+默认两并发；三／四并发需要 `--allow-memory-overcommit`、Docker VM swap 和足够 CPU／内存，
+单题限制保持不变。通过 `--continue-from`、`--continue-adapter` 和全新 `--out` 显式切换调度，
+保留全部已尝试结果（含未知），不自动重跑。原始 adapter 绑定不变的执行／评分代码；不同阶段的延迟分开报告。
 
 ## 问题状态
 

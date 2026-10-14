@@ -119,6 +119,12 @@ establish their own baseline. A fresh full 30-task baseline (60 attempts) starts
 on Flash. Development regressions then use the failure/unknown union; quick
 regressions use exactly one baseline double pass and one double failure (four
 attempts), without shrinking the union. See [the Flash protocol](docs/evals/2026-10-14-glm53-flash-baseline.md).
+The default is two workers. Three or four require `--allow-memory-overcommit`,
+Docker VM swap and sufficient CPU/memory; each task keeps its original limits.
+An explicit `--continue-from` with `--continue-adapter` and a new `--out` can
+change scheduling while retaining every terminal attempt, including unknowns.
+The original adapter binds unchanged execution/grading code, and phase latency
+is reported separately.
 
 ## Issue state
 
