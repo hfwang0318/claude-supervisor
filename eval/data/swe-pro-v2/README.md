@@ -22,10 +22,11 @@ Claude 运行时预检通过。正式轮次及逐任务就绪状态以 `docs/eva
 
 详情与30项列表见 `docs/research/2026-10-13-swe-pro-v2-subset-v1.md`。
 
-后续开发遵循用户指定的[增量对比策略](../../../docs/evals/2026-10-14-incremental-comparison.md)：
-下一轮仅重测 `failure-union-v1.json` 中任一模式失败的5个用例，两种模式各一次，共10项；
-双侧均成功的25项跳过。执行入口接受 `--selection` 和 `--baseline-summary`，可用
-`--dry-run` 免费验证固定范围；不传增量参数时保留完整30项。示例见上述策略文档。
+2026-10-14 用户更新评测策略：主／旁路均切换为 `zhipu/glm-5.2`，先重跑完整 30 题／60 次建立新基线。
+后续开发全量回归使用新基线的失败／未知并集；快速回归固定一个双通过和一个双失败任务／4 次。
+GLM-5.3 的 `failure-union-v1.json` 仅作历史记录，不能用于 GLM-5.2 新基线。
+入口仍接受 `--selection`、`--baseline-summary` 及免费 `--dry-run`；具体收据与命令见
+[GLM-5.2 协议](../../../docs/evals/2026-10-14-glm52-baseline.md)。
 
 ## 使用官方工具物化任务
 
@@ -39,13 +40,13 @@ python3 v2/tooling/make_subset.py v2/tasks /absolute/path/to/instance-ids.txt /a
 该命令在上游SWE-bench_Pro-os checkout中运行。`smoke-ids.txt`可替代全部ID列表。
 本机适配器保留官方 verifier 原样，主模型容器只挂载只读的 Linux 运行时和冻结插件；
 任务材料（尤其 gold/tests）不挂载进去。模型通过内部 Docker 网络上的受限网关访问
-当前 Claude 路由，主/旁路明确固定 GLM-5.3。凭据只在宿主进程中使用。
+当前 Claude 路由，主/旁路明确固定 GLM-5.2。凭据只在宿主进程中使用。
 
 已物化任务和运行时后，从本项目 checkout 运行：
 
 ```sh
-node eval/swe-pro/readiness.mjs --tasks-root /absolute/path/to/materialized-subset --out eval/results/swe-pro-glm53/readiness
-node eval/swe-pro/run.mjs --tasks-root /absolute/path/to/materialized-subset --runtime /absolute/path/to/frozen-linux-runtime --readiness eval/results/swe-pro-glm53/readiness --out eval/results/swe-pro-glm53/comparison
+node eval/swe-pro/readiness.mjs --tasks-root /absolute/path/to/materialized-subset --out eval/results/swe-pro-glm52/readiness
+node eval/swe-pro/run.mjs --tasks-root /absolute/path/to/materialized-subset --runtime /absolute/path/to/frozen-linux-runtime --readiness eval/results/swe-pro-glm52/readiness --out eval/results/swe-pro-glm52/baseline
 ```
 
 运行时目录包含经过官方 checksum 核验的 Claude 2.1.295 linux-x64 binary、Linux Node

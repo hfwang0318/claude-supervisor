@@ -112,6 +112,11 @@ both modes only for cases that failed or remain unknown; historical cases that
 passed in both modes are excluded from the new score. See the
 [incremental comparison protocol](docs/evals/2026-10-14-incremental-comparison.md)
 for baseline validation, fresh output directories and next-round selection.
+The current evaluation main and side models both use `zhipu/glm-5.2`. A model
+change requires a fresh full 30-task baseline (60 attempts). Development regressions
+then use its failure/unknown union; quick regressions use exactly one baseline
+double pass and one double failure (four attempts). Quick results cannot shrink
+the union. See [the GLM-5.2 protocol](docs/evals/2026-10-14-glm52-baseline.md).
 
 ## Issue state
 

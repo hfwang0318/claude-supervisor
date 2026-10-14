@@ -44,7 +44,7 @@ export const freezeRuntime = (root, runtime) => {
     writeFileSync(file, JSON.stringify(config, null, 2))
   }
   cpSync(join(root, 'eval/swe-pro/gateway.mjs'), join(runtime, 'gateway.mjs'))
-  const receipt = { claudeVersion: manifest.version, claudeSHA256: manifest.platforms['linux-x64'].checksum, nodeSHA256: createHash('sha256').update(readFileSync(join(runtime, 'node'))).digest('hex'), nodeImage: NODE_IMAGE, pluginHashes: Object.fromEntries(['existing', 'facts'].map(mode => [mode, treeHash(join(runtime, `plugin-${mode}`))])), gatewaySHA256: createHash('sha256').update(readFileSync(join(runtime, 'gateway.mjs'))).digest('hex') }
+  const receipt = { model: MODEL, sideModel: MODEL, claudeVersion: manifest.version, claudeSHA256: manifest.platforms['linux-x64'].checksum, nodeSHA256: createHash('sha256').update(readFileSync(join(runtime, 'node'))).digest('hex'), nodeImage: NODE_IMAGE, pluginHashes: Object.fromEntries(['existing', 'facts'].map(mode => [mode, treeHash(join(runtime, `plugin-${mode}`))])), gatewaySHA256: createHash('sha256').update(readFileSync(join(runtime, 'gateway.mjs'))).digest('hex') }
   writeFileSync(join(runtime, 'identity.json'), JSON.stringify(receipt, null, 2))
   return receipt
 }

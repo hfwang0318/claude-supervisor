@@ -5,7 +5,8 @@ import { MODEL } from './gateway.mjs'
 import { openModelNetwork, runAgent, treeHash } from './agent.mjs'
 import { grade, readyForTask, verifyArtifacts, command, prepareTask } from './docker.mjs'
 import { schedule, identityValid, summarizeUsage, boundedMap } from './schedule.mjs'
-import { selectIncremental, summarizeIncremental, nextSelection } from './incremental.mjs'
+import { nextSelection } from './incremental.mjs'
+import { selectRegression, summarizeBaseline, baselineSelections, summarizeRegression } from './regression.mjs'
 import { freezeExperiment, validateResult } from './run-state.mjs'
 
 const arg = (name, fallback) => { const i = process.argv.indexOf(`--${name}`); return i < 0 ? fallback : process.argv[i + 1] }
@@ -25,7 +26,9 @@ const manifestPath = resolve(arg('manifest', 'eval/data/swe-pro-v2/subset-v1.jso
 const manifestBytes = readFileSync(manifestPath), manifest = JSON.parse(manifestBytes)
 const selectionPath = arg('selection', null), baselinePath = arg('baseline-summary', null)
 if (!!selectionPath !== !!baselinePath) throw Error('--selection and --baseline-summary must be provided together')
-const incremental = selectionPath ? selectIncremental(manifestBytes, readFileSync(resolve(selectionPath)), readFileSync(resolve(baselinePath))) : null
+const models = { model: MODEL, sideModel: MODEL }
+const incremental = selectionPath ? selectRegression(manifestBytes, readFileSync(resolve(selectionPath)), readFileSync(resolve(baselinePath)), models) : null
+if (!incremental) summarizeBaseline(manifestBytes, [], models)
 const jobs = schedule(incremental?.tasks ?? manifest.tasks, 53)
 if (process.argv.includes('--dry-run')) {
   console.log(JSON.stringify({ manifestSHA256: hash(manifestPath), selection: incremental ? { name: incremental.name, selectionSHA256: incremental.selectionSHA256, baselineSummarySHA256: incremental.baselineSummarySHA256 } : null, planned: jobs.length, jobs: jobs.map(j => ({ task: j.task.instanceId, mode: j.mode })), skipped: incremental?.skipped ?? [] }, null, 2))
@@ -33,11 +36,12 @@ if (process.argv.includes('--dry-run')) {
 }
 if (jobs.length === 0) throw Error('no remaining tasks; no model execution needed')
 const tasksRoot = resolve(arg('tasks-root', '.superpowers/sdd/2026-10-13-local-swe-pro-glm53/tasks'))
-const runtime = resolve(arg('runtime', '.superpowers/sdd/2026-10-13-local-swe-pro-glm53/runtime'))
-const readiness = resolve(arg('readiness', 'eval/results/swe-pro-glm53/readiness'))
+const runtime = resolve(arg('runtime', 'eval/results/swe-pro-glm52/runtime'))
+const readiness = resolve(arg('readiness', 'eval/results/swe-pro-glm52/readiness'))
 if (incremental && !arg('out', null)) throw Error('incremental execution requires a new explicit --out directory')
-const out = resolve(arg('out', 'eval/results/swe-pro-glm53/comparison'))
+const out = resolve(arg('out', 'eval/results/swe-pro-glm52/baseline'))
 const identity = JSON.parse(readFileSync(join(runtime, 'identity.json')))
+if (identity.model !== MODEL || identity.sideModel !== MODEL) throw Error('frozen runtime model identities differ from current main/side models')
 for (const mode of ['existing', 'facts']) if (treeHash(join(runtime, `plugin-${mode}`)) !== identity.pluginHashes[mode]) throw Error('frozen plugin changed')
 if (hash(join(runtime, 'gateway.mjs')) !== identity.gatewaySHA256 || hash(join(runtime, 'node')) !== identity.nodeSHA256 || hash(join(runtime, 'claude')) !== identity.claudeSHA256) throw Error('frozen runtime changed')
 const concurrency = Number(arg('jobs', '2'))
@@ -48,7 +52,7 @@ const info = JSON.parse(infoResult.stdout)
 if (concurrency === 2 && info.MemTotal < 8.5 * 1024 ** 3) throw Error('two jobs require at least 8.5 GiB Docker VM memory')
 const environment = { dockerVersion: info.ServerVersion, architecture: info.Architecture, cpus: info.NCPU, memoryBytes: info.MemTotal }
 const config = { schemaVersion: 1, manifestSHA256: hash(manifestPath), runtime: identity, environment, preparationPolicy: 'per-task-calibration-in-worker-slots', model: MODEL, sideModel: MODEL, reasoning: 'default', seed: 53, repetitions: 1, arms: ['existing', 'facts'], timeoutMs: 3_000_000, concurrency, costUSD: 'unknown', adapterSHA256: createHash('sha256').update(readdirSync(resolve('eval/swe-pro')).filter(n => n.endsWith('.mjs')).sort().map(n => `${n}:${hash(resolve('eval/swe-pro', n))}`).join('\n')).digest('hex') }
-if (incremental) config.incremental = { name: incremental.name, selectionSHA256: incremental.selectionSHA256, baselineSummarySHA256: incremental.baselineSummarySHA256, tasks: incremental.tasks.map(t => t.instanceId), skipped: incremental.skipped }
+if (incremental) config.incremental = { kind: incremental.kind, name: incremental.name, selectionSHA256: incremental.selectionSHA256, baselineSummarySHA256: incremental.baselineSummarySHA256, tasks: incremental.tasks.map(t => t.instanceId), skipped: incremental.skipped }
 const frozen = freezeExperiment(out, config, jobs)
 writeFileSync(join(out, 'schedule.json'), JSON.stringify(jobs.map(j => ({ task: j.task.instanceId, mode: j.mode })), null, 2))
 let interrupted = false
@@ -61,12 +65,19 @@ const preparations = new Map()
 const persistResults = () => {
   const rows = results.filter(Boolean)
   // Validate before replacing aggregate files, including resumed result receipts.
-  const summary = incremental ? summarizeIncremental(incremental, rows) : null
+  const summaryIdentity = { ...models, experimentSHA256: frozen.fingerprint }
+  const summary = incremental ? summarizeRegression(incremental, rows, summaryIdentity) : summarizeBaseline(manifestBytes, rows, summaryIdentity)
   writeFileSync(join(out, 'results.json'), JSON.stringify(rows, null, 2))
   if (summary) {
     const summaryBytes = JSON.stringify(summary, null, 2)
-    writeFileSync(join(out, 'summary-incremental.json'), summaryBytes)
-    if (summary.complete) writeFileSync(join(out, 'next-selection.json'), JSON.stringify(nextSelection(incremental.name, summaryBytes), null, 2))
+    writeFileSync(join(out, `summary-${summary.kind}.json`), summaryBytes)
+    if (summary.complete && summary.kind === 'incremental') writeFileSync(join(out, 'next-selection.json'), JSON.stringify(nextSelection(incremental.name, summaryBytes), null, 2))
+    if (summary.complete && summary.kind === 'baseline') {
+      const selections = baselineSelections('glm52-baseline', summaryBytes)
+      writeFileSync(join(out, 'failure-selection.json'), JSON.stringify(selections.incremental, null, 2))
+      writeFileSync(join(out, 'quick-selection.json'), JSON.stringify(selections.quick, null, 2))
+      if (!selections.quick) console.log('Quick selection unavailable: baseline has no double pass or double failure; no substituted task.')
+    }
   }
 }
 await boundedMap(jobs, concurrency, async ({ task, mode }, index) => {

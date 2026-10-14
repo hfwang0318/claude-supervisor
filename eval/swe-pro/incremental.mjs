@@ -76,6 +76,7 @@ export const summarizeIncremental = (plan, results) => {
 
 export const nextSelection = (name, summaryBytes) => {
   const summary = JSON.parse(summaryBytes)
+  if (summary.kind === 'quick') throw Error('quick results cannot freeze the next failure union')
   if (!summary.complete) throw Error('incomplete round cannot freeze the next selection')
   return {
     schemaVersion: 1, name: `${name}-next`, purpose: 'incremental development comparison; not a full benchmark score',

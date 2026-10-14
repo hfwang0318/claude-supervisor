@@ -8,9 +8,9 @@ import { pathToFileURL } from 'node:url'
 import { StringDecoder } from 'node:string_decoder'
 import { randomUUID } from 'node:crypto'
 
-export const MODEL = 'zhipu/glm-5.3[1m]'
-export const allowedRequest = (method, path, body) => method === 'POST' && /^\/v1\/messages(?:\/count_tokens)?(?:\?beta=true)?$/.test(path) && [MODEL, 'zhipu/glm-5.3'].includes(body?.model) && (path.split('?')[0].endsWith('/count_tokens') || (Number.isSafeInteger(body.max_tokens) && body.max_tokens > 0 && body.max_tokens <= 32768))
-export const actualModelAllowed = model => ['glm-5.3', MODEL].includes(model)
+export const MODEL = 'zhipu/glm-5.2'
+export const allowedRequest = (method, path, body) => method === 'POST' && /^\/v1\/messages(?:\/count_tokens)?(?:\?beta=true)?$/.test(path) && body?.model === MODEL && (path.split('?')[0].endsWith('/count_tokens') || (Number.isSafeInteger(body.max_tokens) && body.max_tokens > 0 && body.max_tokens <= 32768))
+export const actualModelAllowed = model => ['glm-5.2', MODEL].includes(model)
 export const auditEvent = event => {
   const message = event.type === 'message_start' ? event.message : event
   const usage = message?.usage ?? event.usage ?? {}
