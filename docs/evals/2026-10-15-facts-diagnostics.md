@@ -28,3 +28,19 @@
 回归冻结源码提交 `6bc9946`，独立 runtime／adapter／readiness 与新结果位于 `eval/results/facts-diagnostics-flash/`，父基线 SHA 保持绑定。快速四次通过完整审计后自动继续完整 24 次失败／未知并集；遇额度拒绝保留轨迹并在下一阶段前停止，不购买额度或重跑已接受回执。
 
 新版 inspector 的两组真文件自测另在冻结 Linux Node v22.23.3 下完成，退出 0；只启动了无网络的轻量自测容器并已清理。快速回归于 2026-10-15 02:38 CST 启动，四个首轮任务同时运行，初始实际网关记录均为 Flash、未见 429；这些启动记录不代表任务已通过。
+
+## 快速回归完成与额外检索复现
+
+2026-10-15 03:14 CST，固定两题／四次全部通过，完整 quick audit 核对四份回执、模型身份、patch、runtime／adapter／父汇总绑定与官方必需测试。NodeBB 8ca65b0 两组继续通过；Ansible 42355d1 从父基线双失败变为本次双通过。两条 facts 轨迹仍未投递事实包（NodeBB selection deadline，Ansible inspection file-limit），所以不能把通过或变化归因于新增监督。快速结果不更新失败集合；单一控制器已继续原 12 题／24 次全量开发回归。
+
+先前“旧请求缺失”只针对评测输出目录。额外检查发现 Router 的近期完整回执仍保留部分响应；通过网关请求时间、非流式 maxOutput=4048、输入／输出用量一一对齐，使用真实 parseFactRequest 验证并提取合法选择。仅保存规范化请求与原 body SHA，不复制原始回复、thinking 或凭据；恢复了两条旧基线选择及本次 Ansible 选择，另三条旧记录已无法匹配。
+
+同一 pinned task image 的 base commit 上，使用原 inspector 加只读位置诊断、无网络、0.25 CPU／256 MiB 做三次免费重放：
+
+| 选择 | 复现拒绝 | 具体观察 |
+| --- | --- | --- |
+| 旧 OpenLibrary fdbc0d8 | selected-file-limit | 三个检索范围内匹配的文件超过六个 |
+| 旧 Qutebrowser a84ecfb | source-missing | 选择了不存在的 tests/unit/commands/test_cmdexc.py |
+| 新 Ansible 42355d1 | file-limit | 范围 lib/ansible 包含 lib/ansible/config/ansible_builtin_runtime.yml，文件 375,893 bytes，超过 256 KiB |
+
+原来工作的临时修改／全部版本没有重建，因此这三条是固定 base 上可重复的拒绝机制证据；不能据此宣称逐字节重放了旧工作区。Ansible 的结果与新版实际 file-limit 原因一致，问题在选择范围包含超限来源，不需要放宽安全限制。重放容器均清理，正在运行的模型未中断，原基线与新冻结 runtime 没有改动。暂不凭猜测增加重试或新模块；继续收集完整失败并集中的诊断、独立验收及真实用量。
