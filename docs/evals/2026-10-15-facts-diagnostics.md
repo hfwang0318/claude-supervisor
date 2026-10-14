@@ -54,3 +54,7 @@
 配置上限仍为 8，但新签发许可的实际 admission 上限为 4，供应商约束优先于空闲内存。独立操作控制器保留原资源阈值与过期机制，trace 记录 helper SHA、provider cap、issuer 和每份许可 SHA。未改冻结 adapter；原 experiment 字节与已存在结果的 SHA 在续跑前后比较，延迟按这两段实际 admission 条件说明。
 
 无 Docker／模型调用的控制器行为测试：配置最大 8，持续 17 秒高可用内存、低 swap 输入，四次发布均为 4，终止发布 0，退出 0；没有因空闲内存恢复到 8。等待与续跑状态分别写 provider-handoff-status.json 与 delivery-status.json。真实 1308 时停止进入剩余派发并等待恢复；不重跑已接受模型回执。
+
+## 本轮交付完成
+
+2026-10-15 06:42 CST，quick4 与 incremental24 已全部结束并审计。完整失败并集中两组均 7/12 通过、5/12 失败，0 事实包；6 个 selection deadline、2 个 inspection source-missing、1 个 file-limit，另 3 条 facts 轨迹未观察到 FACTS_JOB。原九份回执和 experiment 字节未变，四并发续跑未新增网关 429，0 付费重跑、0 人为取消、未观察到 OOM。收尾重新核对两阶段审计、155 个宿主测试与全部工程检查。结果、配对变化、费用 unknown、阶段调度和历史限制详见[完整回归交付报告](2026-10-15-facts-diagnostics-results.md)。本次授权范围结束，probe/recovery 继续关闭，不自动启动下一轮。
