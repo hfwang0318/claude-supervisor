@@ -4,8 +4,15 @@ const usage = { input_tokens: 30, output_tokens: 20, cache_read_input_tokens: 0,
 const options = { assistance_mode: 'facts', execution_mode: 'off', verifier_model: 'fixture' }
 const view = { facts: [{ id: 'f1', path: 'app.cjs', startLine: 1, quote: 'exports.day = require("./utils.cjs").parseDate', fileHash: 'a'.repeat(64) }], files: [{ path: 'app.cjs', fileHash: 'a'.repeat(64) }], manifestHash: 'b'.repeat(64), incomplete: false }
 const packet = JSON.stringify({ kind: 'location', question: 'Where is parseDate loaded?', requirementQuote: 'Fix parseDate', factIds: ['f1'], observationIds: [], explanation: 'The candidate may not be the entry used.', nextCheck: null, requiresMainJudgment: true })
-const world = (on: Parameters<TestBody>[1]) => {
-  mock.store(on)
+const world = (on: Parameters<TestBody>[1], beforeStoreSet?: (key: string, value: unknown) => Promise<void>) => {
+  if (!beforeStoreSet) mock.store(on)
+  else {
+    const values = new Map<string, unknown>()
+    on('store.get', (_$, e) => ({ value: values.get(e.key) }))
+    on('store.set', async (_$, e) => { await beforeStoreSet(e.key, e.value); values.set(e.key, JSON.parse(JSON.stringify(e.value))); return { value: undefined } })
+    on('store.delete', (_$, e) => { values.delete(e.key); return { value: undefined } })
+    on('store.keys', () => ({ value: [...values.keys()] }))
+  }
   const clock = mock.clock(on, { now: Date.UTC(2026, 9, 12) })
   const state = { calls: 0, reads: 0, validations: 0, outputTokens: 20, logs: [] as string[], pauseStatus: false, inStatus: false, waitStatus: undefined as Promise<void> | undefined, valid: true, incomplete: false, outputs: ['{"paths":["app.cjs"],"terms":["parseDate"]}', packet], wait: undefined as Promise<void> | undefined, rows: [{ role: 'assistant', text: '', toolUses: [{ tool: 'Read', input: { file_path: '/p/util.cjs' }, text: 'exports.parseDate = s => Number(s.slice(-2))' }] }] }
   on('session.id', () => ({ value: 'facts-session' }))
@@ -28,7 +35,7 @@ const world = (on: Parameters<TestBody>[1]) => {
   on('process.run', (_$, e) => {
     const request = JSON.parse(e.init?.stdin ?? '{}')
     let result: unknown
-    if (request.action === 'inspect') { state.reads++; result = { ...view, incomplete: state.incomplete } }
+    if (request.action === 'inspect') { state.reads++; result = { ...view, incomplete: state.incomplete, ...(request.request.searchPaths ? { searchScope: { paths: request.request.searchPaths, terms: request.request.terms } } : {}) } }
     else if (request.action === 'validate-facts') { state.validations++; result = state.valid }
     else throw Error('facts mode must never capture or execute')
     return { value: { exitCode: 0, stdout: JSON.stringify(result), stderr: '', isStdoutTruncated: false, isStderrTruncated: false } } as never
@@ -137,5 +144,39 @@ test('host-shaped trailing tool results preserve the first eligible facts job', 
   const { state } = world(on); await start($)
   state.rows.push({ role: 'user', text: '', toolUses: [] })
   expect((await batch($)).additionalContext?.join('\n')).toContain('app.cjs:1')
+  expect(state.calls).toBe(2)
+})
+test('a scoped request carries local source facts and its limits through the real hook', { options }, async ($, on) => {
+  const { state } = world(on); await start($)
+  state.outputs = ['{"paths":[],"terms":["parseDate"],"searchPaths":["app.cjs"]}', packet]
+  const result = (await batch($)).additionalContext?.join('\n') ?? ''
+  expect(result).toContain('require("./utils.cjs")')
+  expect(result).toContain('outside this search scope remains unknown')
+  expect(state.calls).toBe(2)
+  expect((await batch($)).additionalContext).toEqual(['host context'])
+})
+test('incomplete inspection records only its stage and does not spend another model call', { options }, async ($, on) => {
+  const { state } = world(on); await start($); state.incomplete = true
+  expect((await batch($)).additionalContext).toEqual(['host context'])
+  await batch($)
+  expect(state.calls).toBe(1)
+  expect(state.logs.some(l => l.includes('FACTS_JOB') && l.includes('"stage":"inspection"') && l.includes('"result":"unknown"'))).toBe(true)
+})
+test('a stalled stage diagnostic write cannot hold a prepared facts packet', { options }, async ($, on) => {
+  let release: () => void = () => {}, stalled = false, settled = false
+  const hold = new Promise<void>(r => { release = r })
+  const { state, clock } = world(on, async (key, value) => {
+    if (key === 'history' && Array.isArray(value) && value.at(-1)?.kind === 'assistance-attempt') { stalled = true; await hold }
+  })
+  await start($)
+  const pending = batch($).then(result => { settled = true; return result })
+  for (let n = 0; n < 100 && !stalled; n++) await clock.advance(10)
+  for (let n = 0; n < 10 && !settled; n++) await clock.advance(10)
+  const returnedWhileStalled = settled
+  release()
+  const result = await pending
+  expect(stalled).toBe(true)
+  expect(returnedWhileStalled).toBe(true)
+  expect(result.additionalContext?.join('\n')).toContain('app.cjs:1')
   expect(state.calls).toBe(2)
 })

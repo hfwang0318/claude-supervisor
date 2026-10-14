@@ -10,12 +10,15 @@ const pathOK = (path: unknown): path is string => typeof path === 'string' && pa
 const textOK = (text: unknown, max = 2048): text is string => typeof text === 'string' && text.trim().length > 0 && bytesOf(text) <= max && redact(text) === text
 export const parseFactRequest = (text: string): FactRequest | null => {
   const value = objectOf(text)
-  if (!value || !keys(value, ['paths', 'terms']) || !Array.isArray(value.paths) || value.paths.length > 6 || !value.paths.every(pathOK) || !Array.isArray(value.terms) || value.terms.length > 2 || !value.terms.every(t => textOK(t, 128) && !/[\x00-\x1f]/.test(t)) || value.paths.length + value.terms.length === 0) return null
-  return { paths: [...new Set(value.paths)], terms: [...new Set(value.terms)] }
+  if (!value || !keys(value, ['paths', 'terms', 'searchPaths']) || !Array.isArray(value.paths) || value.paths.length > 6 || !value.paths.every(pathOK) || !Array.isArray(value.terms) || value.terms.length > 2 || !value.terms.every(t => textOK(t, 128) && !/[\x00-\x1f]/.test(t)) || value.paths.length + value.terms.length === 0) return null
+  if (value.searchPaths !== undefined && (!Array.isArray(value.searchPaths) || value.searchPaths.length < 1 || value.searchPaths.length > 6 || !value.searchPaths.every(pathOK) || !value.terms.length)) return null
+  return { paths: [...new Set(value.paths)], terms: [...new Set(value.terms)], ...(Array.isArray(value.searchPaths) ? { searchPaths: [...new Set(value.searchPaths)] as string[] } : {}) }
 }
 export const buildAssistPacket = (input: AssistInput, view: FactView, text: string): AssistPacket | null => {
   const value = objectOf(text)
   if (!value || view.incomplete || !view.manifestHash || !view.files.length || !keys(value, ['kind', 'question', 'requirementQuote', 'factIds', 'observationIds', 'explanation', 'nextCheck', 'requiresMainJudgment'])) return null
+  const scope = view.searchScope
+  if (scope !== undefined && (!scope || !keys(scope, ['paths', 'terms']) || !Array.isArray(scope.paths) || !scope.paths.length || scope.paths.length > 6 || !scope.paths.every(pathOK) || !Array.isArray(scope.terms) || !scope.terms.length || scope.terms.length > 2 || !scope.terms.every(t => textOK(t, 128) && !/[\x00-\x1f]/.test(t)))) return null
   if (value.kind !== 'location' || value.requiresMainJudgment !== true || !textOK(value.question) || !textOK(value.requirementQuote) || !input.asked.includes(value.requirementQuote) || !textOK(value.explanation) || value.nextCheck !== null && !textOK(value.nextCheck)) return null
   if (!Array.isArray(value.factIds) || value.factIds.length < 1 || value.factIds.length > 64 || !value.factIds.every(id => typeof id === 'string' && view.facts.some(f => f.id === id && pathOK(f.path) && f.startLine > 0 && textOK(f.quote, 32768) && view.files.some(file => file.path === f.path && file.fileHash === f.fileHash))) || !Array.isArray(value.observationIds) || value.observationIds.length !== 0) return null
   const sources = view.facts.filter(f => value.factIds instanceof Array && value.factIds.includes(f.id))
@@ -26,6 +29,7 @@ export const assistNote = (packet: AssistPacket, view: FactView) => [
   '[deepseek-supervisor] Read-only location facts (advisory; main model decides).',
   `Requirement: ${packet.requirementQuote}`,
   `Question: ${packet.question}`,
+  ...(view.searchScope ? [`Literal search scope: ${view.searchScope.paths.join(', ')}; terms: ${view.searchScope.terms.join(', ')}. Explicitly selected files may also be included; anything outside this search scope remains unknown.`] : []),
   ...view.facts.filter(f => packet.factIds.includes(f.id)).map(f => `${f.path}:${f.startLine} [sha256 ${f.fileHash}]\n${f.quote}`),
   `Unverified explanation: ${packet.explanation}`,
   packet.nextCheck === null ? '' : `Suggested next check (not executed): ${packet.nextCheck}`,

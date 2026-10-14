@@ -75,6 +75,12 @@ Claude Code 自带一个旁路代理 "You should know"，看着 Claude 干活，
 每段引文带路径、行号及 SHA-256；检索期间与投递前核对来源版本。批次变化、新提示、off
 和取消会丢弃旧反馈。解释及建议检查标记为待验证。此模式不执行或导入项目代码。
 
+事实选择支持最多 6 个相对 `searchPaths`（文件或目录），将大仓库的字面搜索限定在明确范围。
+`paths: []` 时，选中的搜索文件只返回匹配原文行，仍读取并重验整文件 hash。所有范围共享原
+额度，范围超限整体拒绝；范围及搜索词纳入 manifest hash，并在反馈中注明范围之外未知。
+省略 `searchPaths` 保留原全仓库搜索。`FACTS_JOB` 只记录任务阶段和状态，范围不足不追加
+重试，也不认证正确性。
+
 默认仍是 `assistance_mode=existing`；`probe`、`recovery` 仅预留，目前只保留确定性规则。
 `execution_mode` 独立控制原副本执行器，不表示允许旁路写真实目录。
 免费检查用 `node eval/selftest-assist.mjs`、`node scripts/selftest-assist.mjs`。

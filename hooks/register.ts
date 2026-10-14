@@ -255,31 +255,40 @@ const locationFacts = async ($: EngineInterface, list: Rows): Promise<PreparedFa
     return !job.signal.aborted && sameBinding(binding, s.coordinator.binding) && await isOn($) && await $.clock.now() < deadlineMs
   }
   let finished = false
+  let stage: 'selection' | 'inspection' | 'packet' = 'selection'
+  let outcome: 'unknown' | 'abstained' | 'invalid' | 'prepared' = 'unknown'
   try {
     if (!await current()) return null
     const firstPrompt = factRequestPrompt(input.asked, symptom)
     const first = await ask($, firstPrompt, deadlineMs - await $.clock.now(), job.signal)
     if (!first?.isAnswered || !await current()) return null
     const request = parseFactRequest(first.text)
-    if (!request) return null
+    if (!request) { outcome = first.text.trim() === 'null' ? 'abstained' : 'invalid'; return null }
+    stage = 'inspection'
     const view = await host.inspectFacts(request, deadlineMs)
     if (view.incomplete || !await current()) return null
+    stage = 'packet'
     const secondPrompt = assistPacketPrompt(input, view)
     if (bytesOf(firstPrompt) + bytesOf(secondPrompt) > 65536) return null
     const second = await ask($, secondPrompt, deadlineMs - await $.clock.now(), job.signal)
     if (!second?.isAnswered || !await current()) return null
     const packet = buildAssistPacket(input, view, second.text)
-    if (!packet || !await current()) return null
+    if (!packet) { outcome = second.text.trim() === 'null' ? 'abstained' : 'invalid'; return null }
+    if (!await current()) return null
     const note = assistNote(packet, view)
     if (bytesOf(note) > 32768) return null
     finished = s.coordinator.finish(id, binding, 'succeeded', await $.clock.now())
     if (!finished) return null
+    outcome = 'prepared'
     return { id, packet, view, note, signal: job.signal, deadlineMs }
   } catch (error) {
     await remember($, { kind: 'assistance', binding, result: 'unknown', reason: redact(String(error)) })
     return null
   } finally {
     if (!finished) s.coordinator.finish(id, binding, 'failed', await $.clock.now())
+    const event = { kind: 'assistance-attempt', binding, jobId: id, stage, result: outcome }
+    void remember($, event)
+    say($, `FACTS_JOB ${JSON.stringify({ jobId: id, stage, result: outcome })}`)
   }
 }
 

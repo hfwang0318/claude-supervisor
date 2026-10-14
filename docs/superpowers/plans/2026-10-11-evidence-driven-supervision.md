@@ -16,6 +16,8 @@
 
 **实施状态（2026-10-13）：**任务 0＋1 的代码、免费检查和修正版 16 次正式筛查已交付；144 个宿主测试通过。existing 与 facts 功能/约束/诚实均 8/8，facts 没有旁路请求或事实包，未证实核心能力增益，完整费用 unknown。任务 2、3 的继续条件未满足。预检和缺陷版本探索额外开销均保留，详见[实施与筛查报告](../../evals/2026-10-12-core-assistance-pilot.md)。
 
+**任务 1 续做（2026-10-14）：**完整真实仓库对比已完成；按未见有效介入时“修正／缩小定位能力”的原规则，本轮修复大仓库全局字面搜索撞限的机制缺口。新增可选局部搜索范围、范围标记及阶段记录，旧预算和安全边界保持。只读真实源码回放不能代替主模型收益证据；后续比较按[5 项增量策略](../../evals/2026-10-14-incremental-comparison.md)执行，进展见[局部事实记录](../../evals/2026-10-14-scoped-location-facts.md)。
+
 ## Global Constraints
 
 - 旁路强弱关系不限，默认使用当前主模型；不通过模型 ID 认证排序，不依赖更强备用模型。
@@ -81,8 +83,8 @@
 
 ```ts
 type SourceFact = { id: string; path: string; startLine: number; quote: string; fileHash: string }
-type FactRequest = { paths: string[]; terms: string[] }
-type FactView = { facts: SourceFact[]; manifestHash: string; incomplete: boolean }
+type FactRequest = { paths: string[]; terms: string[]; searchPaths?: string[] }
+type FactView = { facts: SourceFact[]; manifestHash: string; incomplete: boolean; searchScope?: { paths: string[]; terms: string[] } }
 type AssistInput = { binding: Binding; asked: string; recentFacts: SourceFact[]; symptom: string }
 type AssistPacket = {
   binding: Binding; kind: 'location' | 'probe' | 'recovery'; question: string
@@ -125,6 +127,13 @@ type AssistPacket = {
 - [x] 完成任务 0 的 16 次筛查，审计首个错误定位、实际新增事实、主模型采纳动作、独立验收、错误干预及全部开销。
 
 **继续条件：** 至少 2 个不同目标任务有完整实例：旁路提供缺失的有效事实，主模型改变路径，独立验收成功；同时汇报 A 的结果，不能把 B 成功自动归因给旁路。若 A 也成功，仅路径变短就只能报告效率信号；扩大试验还需全部结果有质量或实际开销的方向性改善。未见信号或错误事实诱导回归，先修正/缩小定位能力，不直接叠加恢复模块。16 次只决定方向，不证明统计显著性或通用增益。
+
+任务 1 的局部检索续做检查：
+
+- [x] 先复现：相同调用源码增加 201 个无关文件后，全局检索整体拒绝；新增失败测试后支持最多 6 个明确 `searchPaths`（文件或目录）中的 2 个字面词。省略该字段保留原行为；不能依靠只扫描目录前缀认证完整。
+- [x] 长文件可只返回匹配原文行，但仍读取、绑定和重验整文件；不放宽 200 条目、2MiB、256KiB 单文件、32KiB 返回和 6 个事实文件限制。范围元数据纳入 manifest hash，并向旁路和主模型说明范围之外未知。
+- [x] 检查重叠范围、越界／秘密路径、symlink、来源修改、过期和非法范围；保留一次任务、两次调用、30 秒预算。用只含阶段与状态的 `FACTS_JOB` 日志区分选择、检索和组包中止，不保留模型回复或新建重试循环。
+- [ ] 完成全套检查与一次独立审查，冻结新版本后只执行既定 5×2 增量比较；新增有效事实、采纳动作和隐藏验收必须逐项审计，不以免费回放代替收益结论。
 
 ## 6. 任务 2：有需求来源的复现或区分实验（定位筛查后，1–2 天）
 

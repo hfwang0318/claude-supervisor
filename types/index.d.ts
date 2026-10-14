@@ -1,7 +1,7 @@
 export type SourceFact = { id: string; path: string; startLine: number; quote: string; fileHash: string }
-export type FactRequest = { paths: string[]; terms: string[] }
+export type FactRequest = { paths: string[]; terms: string[]; searchPaths?: string[] }
 // Host-owned source hashes include searched files, not just returned matches.
-export type FactView = { facts: SourceFact[]; files: { path: string; fileHash: string }[]; manifestHash: string; incomplete: boolean }
+export type FactView = { facts: SourceFact[]; files: { path: string; fileHash: string }[]; manifestHash: string; incomplete: boolean; searchScope?: { paths: string[]; terms: string[] }; directories?: { path: string; entriesHash: string; version: string }[] }
 export type AssistInput = { binding: Binding; asked: string; recentFacts: SourceFact[]; symptom: string }
 export type AssistPacket = {
   binding: Binding; kind: 'location' | 'probe' | 'recovery'; question: string

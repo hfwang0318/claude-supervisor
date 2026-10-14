@@ -88,6 +88,15 @@ are checked during inspection and before delivery; changed batches, new prompts,
 off and cancellation discard old results. Explanations and suggested checks remain
 unverified. The host neither executes nor imports project code for this mode.
 
+Fact selection can include up to 6 relative `searchPaths` (files or directories)
+to bound literal searches in a large repository. With `paths: []`, a selected
+search file returns only matching original lines; its complete contents still
+contribute to its hash and version checks. Limits remain shared across all scopes,
+and a scope that exceeds them is rejected. Search scope and terms are hash-bound
+and shown in feedback; absence outside that scope remains unknown. Omitting
+`searchPaths` preserves whole-project search. `FACTS_JOB` records only the attempt
+stage and outcome; an incomplete view never causes a retry or a correctness verdict.
+
 `assistance_mode=existing` remains the default. `probe` and `recovery` are reserved
 and currently run only record rules. `execution_mode` separately controls the
 existing independent executor and does not enable real-directory side writes.

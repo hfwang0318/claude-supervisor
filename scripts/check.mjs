@@ -31,6 +31,7 @@ if (!flags.includes('--pure')) {
   run('TypeScript', process.execPath, ['node_modules/typescript/bin/tsc', '-p', '.'])
   run('host tests', 'claude', ['plugin', 'test', '.'], true)
   run('real read-only facts', process.execPath, ['scripts/selftest-assist.mjs'])
+  run('real scoped facts', process.execPath, ['scripts/selftest-scoped-facts.mjs'])
   run('real workspace/process isolation', process.execPath, ['scripts/selftest-workspace.mjs'])
 }
 if (!flags.includes('--host')) {

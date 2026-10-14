@@ -31,6 +31,19 @@ test('fact requests are bounded literal searches and reject unsafe paths', async
   expect(parseFactRequest('{"paths":[],"terms":["a","b","c"]}')).toBeNull()
   expect(parseFactRequest('{"paths":[],"terms":[]}')).toBeNull()
 })
+test('local search scopes remain explicit and reject unsafe or meaningless ranges', async () => {
+  const request = { paths: [], terms: ['parseDate'], searchPaths: ['src/date', 'src/date'] }
+  expect(parseFactRequest(JSON.stringify(request))).toEqual({ paths: [], terms: ['parseDate'], searchPaths: ['src/date'] })
+  for (const searchPaths of [['../x'], ['/etc'], ['.env'], ['dir/../x'], [], Array(7).fill('src')]) expect(parseFactRequest(JSON.stringify({ ...request, searchPaths }))).toBeNull()
+  expect(parseFactRequest(JSON.stringify({ ...request, terms: [] }))).toBeNull()
+})
+test('local search feedback exposes scope and never implies repository-wide absence', async () => {
+  const scoped = { ...view, searchScope: { paths: ['app.cjs'], terms: ['parseDate'] } }
+  const p = buildAssistPacket(input, scoped, JSON.stringify(packet))!
+  expect(assistNote(p, scoped)).toContain('app.cjs')
+  expect(assistNote(p, scoped)).toContain('outside this search scope remains unknown')
+  for (const paths of [['../x'], ['.env'], []]) expect(buildAssistPacket(input, { ...scoped, searchScope: { ...scoped.searchScope, paths } }, JSON.stringify(packet))).toBeNull()
+})
 test('observable candidate without call context or API errors trigger; simple reads and known imports do not', async () => {
   const read = (text: string) => [{ role: 'assistant', text: '', toolUses: [{ tool: 'Read', input: { file_path: '/p/util.cjs' }, text }] }]
   expect(assistSignal(input.asked, read('exports.parseDate = s => Number(s.slice(-2))'), '/p')).not.toBeNull()
