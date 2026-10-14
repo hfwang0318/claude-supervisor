@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "name": "swe-pro-v2-glm53-failure-union-v1",
+  "purpose": "incremental development comparison; not a full benchmark score",
+  "baselineReport": "docs/evals/2026-10-13-local-swe-pro-glm53.md",
+  "baselineSummarySHA256": "6e7719db76f68cc3dbd909bfb3c6ce06719f72089843a97105862883d0ddd63c",
+  "manifestSHA256": "1d3260043ef0589d44483bc46243e4331233bb13b2952cf71e92cb228eb0d628",
+  "selection": "union of failed tasks in the completed effective comparison, including compatibility supplement",
+  "arms": ["existing", "facts"],
+  "taskCount": 5,
+  "plannedAttempts": 10,
+  "skippedBothPassed": 25,
+  "tasks": [
+    {
+      "instanceId": "instance_flipt-io__flipt-c1728053367c753688f114ec26e703c8fdeda125",
+      "repo": "flipt-io/flipt",
+      "baseline": {"existing": "passed", "facts": "failed"}
+    },
+    {
+      "instanceId": "instance_internetarchive__openlibrary-b67138b316b1e9c11df8a4a8391fe5cc8e75ff9f-ve8c8d62a2b60610a3c4631f5f23ed866bada9818",
+      "repo": "internetarchive/openlibrary",
+      "baseline": {"existing": "failed", "facts": "passed"}
+    },
+    {
+      "instanceId": "instance_protonmail__webclients-e65cc5f33719e02e1c378146fb981d27bc24bdf4",
+      "repo": "protonmail/webclients",
+      "baseline": {"existing": "failed", "facts": "failed"}
+    },
+    {
+      "instanceId": "instance_qutebrowser__qutebrowser-c09e1439f145c66ee3af574386e277dd2388d094-v2ef375ac784985212b1805e1d0431dc8f1b3c171",
+      "repo": "qutebrowser/qutebrowser",
+      "baseline": {"existing": "passed", "facts": "failed"}
+    },
+    {
+      "instanceId": "instance_tutao__tutanota-f3ffe17af6e8ab007e8d461355057ad237846d9d-vbc0d9ba8f0071fbe982809910959a6ff8884dbbf",
+      "repo": "tutao/tutanota",
+      "baseline": {"existing": "failed", "facts": "passed"}
+    }
+  ]
+}
