@@ -26,3 +26,5 @@
 补充原始网关对齐：按非流式、maxOutput=4048 的请求 ID 与 SIDE_CALL/FACTS_JOB 时间对照，14 个 selection unknown 在约 30 秒处以 upstream-error 结束（其中一次先有 429 后再中止），与 SDK 30 秒调用时限一致；另一个仅有三次 429 拒绝。五个 answered selector 的网关耗时为 18.56–26.295 秒。此对齐能定位多数选择中止的时间边界，仍不能恢复五个检索请求或断定具体检索拒绝条件。新版记录将区分 deadline 与固定检索原因。
 
 回归冻结源码提交 `6bc9946`，独立 runtime／adapter／readiness 与新结果位于 `eval/results/facts-diagnostics-flash/`，父基线 SHA 保持绑定。快速四次通过完整审计后自动继续完整 24 次失败／未知并集；遇额度拒绝保留轨迹并在下一阶段前停止，不购买额度或重跑已接受回执。
+
+新版 inspector 的两组真文件自测另在冻结 Linux Node v22.23.3 下完成，退出 0；只启动了无网络的轻量自测容器并已清理。快速回归于 2026-10-15 02:38 CST 启动，四个首轮任务同时运行，初始实际网关记录均为 Flash、未见 429；这些启动记录不代表任务已通过。
