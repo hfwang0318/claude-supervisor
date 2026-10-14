@@ -22,3 +22,7 @@
 这些是机制与诊断证据，尚未证明有效事实投递或质量收益。下一步使用新冻结 runtime，固定 NodeBB 8ca65b0 与 Ansible 42355d1，各两组一次；再保持完整 12 题失败／未知并集的开发回归。原回执不覆盖，费用缺失仍 unknown。
 
 独立审查提出两项重要诊断问题：截止时间抛错误记 service-error，以及正常取消／off 先匹配 stale-binding。单次修复中先确认新增 deadline 异常与取消／off 断言失败，再让 Coordinator 传递固定中止原因，异常路径重验当前状态；155 个宿主测试及完整工程检查再次通过。没有未处理重要问题，也没有扩大模块范围。
+
+补充原始网关对齐：按非流式、maxOutput=4048 的请求 ID 与 SIDE_CALL/FACTS_JOB 时间对照，14 个 selection unknown 在约 30 秒处以 upstream-error 结束（其中一次先有 429 后再中止），与 SDK 30 秒调用时限一致；另一个仅有三次 429 拒绝。五个 answered selector 的网关耗时为 18.56–26.295 秒。此对齐能定位多数选择中止的时间边界，仍不能恢复五个检索请求或断定具体检索拒绝条件。新版记录将区分 deadline 与固定检索原因。
+
+回归冻结源码提交 `6bc9946`，独立 runtime／adapter／readiness 与新结果位于 `eval/results/facts-diagnostics-flash/`，父基线 SHA 保持绑定。快速四次通过完整审计后自动继续完整 24 次失败／未知并集；遇额度拒绝保留轨迹并在下一阶段前停止，不购买额度或重跑已接受回执。
