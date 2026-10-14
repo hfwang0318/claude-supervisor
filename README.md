@@ -128,6 +128,9 @@ evidence pauses new work; running model tasks and graders finish. Three safe
 samples raise admission one slot, up to the configured maximum. The resource
 trace and each task's lease hash retain the evidence; overcommit is still not a
 memory reservation guarantee. Repeated `SIGUSR2` requests gracefully drain the queue.
+After active work and grading finish, an explicitly authorized VM memory change
+can use `--allow-vm-memory-change` in a new continuation. It binds old/new memory
+and environments; CPU, platform, model, task limits and grading remain fixed.
 An explicit `--continue-from` with `--continue-adapter` and a new `--out` can
 change scheduling while retaining every terminal attempt, including unknowns.
 The original adapter binds unchanged execution/grading code, and phase latency

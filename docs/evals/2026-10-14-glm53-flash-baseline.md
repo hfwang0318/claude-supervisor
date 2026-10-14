@@ -84,8 +84,11 @@ node eval/swe-pro/run.mjs --continue-from eval/results/swe-pro-glm53-flash/basel
 
 ## 持续资源监测与自适应调度
 
-继续使用固定 Linux 镜像、VM 内存与原有单题限制。当前 macOS Docker Desktop 4.87.0 的只读重启判断
-确认增加 VM 内存／swap 需要重启；测试期间不应用这些设置。容器上限可热更新，但不会增大 VM。
+继续使用固定 Linux 镜像与原有单题限制。当前 macOS Docker Desktop 4.87.0 的只读重启判断
+确认增加 VM 内存／swap 需要重启；已开始的任务运行期间不应用这些设置。容器上限可热更新，但不会增大 VM。
+用户随后明确授权：这些任务和评分全部结束后，Docker VM 从配置的 9 GiB 提高到 12 GiB，再执行剩余任务。
+通过新阶段的 `--allow-vm-memory-change` 显式允许且只允许 VM 内存变化，记录实际前后 MemTotal／完整环境；
+CPU、平台、模型、单题限制与评分不变。原回执保留原环境 fingerprint，不重跑已完成题目。
 
 后续队列以六并发起步、八并发为上限，显式允许超额配置。`capacity-monitor.mjs` 管理 runner 和
 64 MiB／0.1 CPU、无网络、只读探针，五秒读取一次 VM 可用内存和 swap。至少 4 GiB 可用且 swap
@@ -96,10 +99,10 @@ node eval/swe-pro/run.mjs --continue-from eval/results/swe-pro-glm53-flash/basel
 新调度器的 `SIGUSR2` 可重复安全地停止新派发并等待已有任务完成；`SIGINT`／`SIGTERM` 保留显式取消。
 旧四并发调度器不支持该信号，迁移只在模型和独立评分自然结束、剩余全为免费准备时停止旧派发器。
 仅显式排除无 gateway／agent／patch 的免费准备回执，原始回执 hash 仍绑定；任何付费失败或未知均保留。
-递归来源校验绑定原两并发、四并发 adapter，执行／评分／模型／预算不变，延迟按阶段报告。
+递归来源校验绑定原两并发、四并发 adapter，执行／评分／模型／预算不变，延迟与资源按阶段报告。
 
 ```sh
-node eval/swe-pro/capacity-monitor.mjs --lease eval/results/swe-pro-glm53-flash/capacity-lease.json --trace eval/results/swe-pro-glm53-flash/capacity.jsonl --max 8 --initial 6 -- --tasks-root TASKS_ROOT --runtime RUNTIME --readiness READINESS --continue-from eval/results/swe-pro-glm53-flash/baseline-four-workers --continue-adapter eval/results/swe-pro-glm53-flash/adapter-four-workers --exclude-unproductive --out eval/results/swe-pro-glm53-flash/baseline-adaptive --allow-memory-overcommit
+node eval/swe-pro/capacity-monitor.mjs --lease eval/results/swe-pro-glm53-flash/capacity-lease.json --trace eval/results/swe-pro-glm53-flash/capacity.jsonl --max 8 --initial 6 -- --tasks-root TASKS_ROOT --runtime RUNTIME --readiness READINESS --continue-from eval/results/swe-pro-glm53-flash/baseline-four-workers --continue-adapter eval/results/swe-pro-glm53-flash/adapter-four-workers --exclude-unproductive --allow-vm-memory-change --out eval/results/swe-pro-glm53-flash/baseline-adaptive --allow-memory-overcommit
 ```
 
 免费验证覆盖六到八的实际 admission、降到零不取消已有任务、重复 drain 信号、过期／损坏许可、
