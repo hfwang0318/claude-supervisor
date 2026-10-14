@@ -257,9 +257,9 @@ const locationFacts = async ($: EngineInterface, list: Rows): Promise<PreparedFa
   let reason: string | null = 'unknown'
   const current = async () => {
     await selectionOf($)
-    if (!sameBinding(binding, s.coordinator.binding)) { reason = 'stale-binding'; return false }
-    if (job.signal.aborted) { reason = 'cancelled'; return false }
+    if (job.signal.aborted) { reason = job.signal.reason === 'cancelled' || job.signal.reason === 'disabled' ? job.signal.reason : 'stale-binding'; return false }
     if (!await isOn($)) { reason = 'disabled'; return false }
+    if (!sameBinding(binding, s.coordinator.binding)) { reason = 'stale-binding'; return false }
     if (await $.clock.now() >= deadlineMs) { reason = 'deadline'; return false }
     return true
   }
@@ -295,7 +295,7 @@ const locationFacts = async ($: EngineInterface, list: Rows): Promise<PreparedFa
     reason = null
     return { id, packet, view, note, signal: job.signal, deadlineMs }
   } catch (error) {
-    reason = 'service-error'
+    if (await current().catch(() => false)) reason = 'service-error'
     await remember($, { kind: 'assistance', binding, result: 'unknown', reason: redact(String(error)) })
     return null
   } finally {
@@ -891,7 +891,7 @@ export const register: Register = (on, options) => {
   on('turn.complete', async ($, e, next) => {
     const s = await runtimeOf($)
     const result = await next(e)
-    if (e.agentId === undefined && e.reason !== 'answer') s.coordinator.invalidate({ ...s.coordinator.binding, generationId: `cancel-${await $.clock.now()}-${++s.jobNumber}` })
+    if (e.agentId === undefined && e.reason !== 'answer') s.coordinator.invalidate({ ...s.coordinator.binding, generationId: `cancel-${await $.clock.now()}-${++s.jobNumber}` }, { reason: 'cancelled' })
     if (e.agentId === undefined) await takeReading($) // main-loop turns only
     // Only a turn the model finished on its own: one the person interrupted says nothing.
     // Where nobody watches, the verifier already ran before the turn could end.
@@ -938,7 +938,7 @@ export const register: Register = (on, options) => {
       if (arg === 'auto') await $.store.delete('mode')
       else await $.store.set('mode', arg)
       if (!(await isOn($))) {
-        s.coordinator.invalidate({ ...s.coordinator.binding, generationId: `off-${await $.clock.now()}-${++s.jobNumber}` })
+        s.coordinator.invalidate({ ...s.coordinator.binding, generationId: `off-${await $.clock.now()}-${++s.jobNumber}` }, { reason: 'disabled' })
         await update($, cards, () => null)
       }
       await show($)

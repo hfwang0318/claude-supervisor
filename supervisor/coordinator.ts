@@ -36,9 +36,9 @@ export class Coordinator {
     return true
   }
 
-  invalidate(binding: Binding, options: { preserveBudget?: boolean; now?: number } = {}) {
+  invalidate(binding: Binding, options: { preserveBudget?: boolean; now?: number; reason?: 'cancelled' | 'disabled' } = {}) {
     if (options.preserveBudget && this.startedAt !== null && options.now !== undefined) this.activeMs = Math.max(0, this.activeMs - Math.max(0, options.now - this.startedAt))
-    for (const job of this.jobs.values()) if (job.status === 'running') { job.status = 'cancelled'; job.controller.abort() }
+    for (const job of this.jobs.values()) if (job.status === 'running') { job.status = 'cancelled'; job.controller.abort(options.reason ?? 'stale-binding') }
     this.jobs.clear()
     this.deliveries.clear()
     this.binding = { ...binding }
@@ -70,7 +70,7 @@ export class Coordinator {
   changedWorkspace(revision: string, now: number) {
     if (this.startedAt !== null) this.activeMs = Math.max(0, this.activeMs - Math.max(0, now - this.startedAt))
     this.startedAt = null
-    for (const job of this.jobs.values()) if (job.status === 'running') { job.status = 'stale'; job.controller.abort() }
+    for (const job of this.jobs.values()) if (job.status === 'running') { job.status = 'stale'; job.controller.abort('stale-binding') }
     this.binding = { ...this.binding, workspaceRevision: revision }
   }
 

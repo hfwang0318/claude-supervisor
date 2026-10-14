@@ -14,7 +14,7 @@ const world = (on: Parameters<TestBody>[1], beforeStoreSet?: (key: string, value
     on('store.keys', () => ({ value: [...values.keys()] }))
   }
   const clock = mock.clock(on, { now: Date.UTC(2026, 9, 12) })
-  const state = { calls: 0, reads: 0, validations: 0, outputTokens: 20, logs: [] as string[], pauseStatus: false, inStatus: false, waitStatus: undefined as Promise<void> | undefined, valid: true, incomplete: false, failureReason: 'traversal-limit', processError: false, modelDelayMs: 0, outputs: ['{"paths":["app.cjs"],"terms":["parseDate"]}', packet], wait: undefined as Promise<void> | undefined, rows: [{ role: 'assistant', text: '', toolUses: [{ tool: 'Read', input: { file_path: '/p/util.cjs' }, text: 'exports.parseDate = s => Number(s.slice(-2))' }] }] }
+  const state = { calls: 0, reads: 0, validations: 0, outputTokens: 20, logs: [] as string[], pauseStatus: false, inStatus: false, waitStatus: undefined as Promise<void> | undefined, valid: true, incomplete: false, failureReason: 'traversal-limit', processError: false, processDelayMs: 0, modelDelayMs: 0, outputs: ['{"paths":["app.cjs"],"terms":["parseDate"]}', packet], wait: undefined as Promise<void> | undefined, rows: [{ role: 'assistant', text: '', toolUses: [{ tool: 'Read', input: { file_path: '/p/util.cjs' }, text: 'exports.parseDate = s => Number(s.slice(-2))' }] }] }
   on('session.id', () => ({ value: 'facts-session' }))
   on('session.model', () => ({ value: 'fixture' }))
   on('session.cwd', () => ({ value: '/p' }))
@@ -32,7 +32,8 @@ const world = (on: Parameters<TestBody>[1], beforeStoreSet?: (key: string, value
   on('classic.Stop', () => ({}) as never)
   on('prompt.submit', (_$, e) => ({ text: e.text }) as never)
   on('turn.complete', (_$, e) => ({ text: e.answer }))
-  on('process.run', (_$, e) => {
+  on('process.run', async (_$, e) => {
+    if (state.processDelayMs) await clock.advance(state.processDelayMs)
     if (state.processError) throw Error('secret=private-source-value')
     const request = JSON.parse(e.init?.stdin ?? '{}')
     let result: unknown
@@ -94,6 +95,9 @@ for (const invalidation of ['prompt', 'off', 'cancel', 'workspace']) test(`late 
   if (invalidation === 'workspace') { state.rows.push({ role: 'assistant', text: '', toolUses: [{ tool: 'Read', input: { file_path: '/p/utils.cjs' }, text: 'changed' }] }); await batch($) }
   release()
   expect((await pending).additionalContext).toEqual(['host context'])
+  const event = state.logs.find(l => l.includes('FACTS_JOB')) ?? ''
+  const expected = invalidation === 'cancel' ? 'cancelled' : invalidation === 'off' ? 'disabled' : 'stale-binding'
+  expect(JSON.parse(event.slice(event.indexOf('FACTS_JOB') + 10)).reason).toBe(expected)
 })
 test('simple change and null reply require no inspection or repeated fact job', { options }, async ($, on) => {
   const { state } = world(on); await start($)
@@ -220,4 +224,16 @@ test('an answered selection that uses the deadline is distinguished from an insp
   expect(data.reason).toBe('deadline')
   expect(data.elapsedMs).toBe(30000)
   expect(state.reads).toBe(0)
+})
+
+test('an inspection process throwing at its deadline records budget expiry rather than a service failure', { options }, async ($, on) => {
+  const { state } = world(on); await start($)
+  state.processError = true; state.processDelayMs = 30000
+  expect((await batch($)).additionalContext).toEqual(['host context'])
+  const event = state.logs.find(l => l.includes('FACTS_JOB')) ?? ''
+  const data = JSON.parse(event.slice(event.indexOf('FACTS_JOB') + 10))
+  expect(data.stage).toBe('inspection')
+  expect(data.reason).toBe('deadline')
+  expect(data.remainingMs).toBe(0)
+  expect(state.calls).toBe(1)
 })

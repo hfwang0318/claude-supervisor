@@ -14,9 +14,11 @@
 
 ## 验证
 
-- 五个新增宿主回归覆盖合法拒绝码、非法码不泄露、输出上限、服务异常不泄露、选择阶段截止时间耗尽。先在旧实现确认预期断言失败，再实现；154／154 宿主测试通过。
+- 五个新增宿主回归覆盖合法拒绝码、非法码不泄露、输出上限、服务异常不泄露、选择阶段截止时间耗尽。先在旧实现确认预期断言失败，再实现；155／155 宿主测试通过。
 - 真文件检查区分 missing、file-limit、output-limit、secret-content、invalid-request、deadline、traversal-limit、no-facts；原 scoped 检索与来源重验检查仍通过。
-- `node scripts/check.mjs`：manifest、TypeScript、154 个宿主测试、真实事实／局部事实／进程隔离、九组 scorer 与九组 SWE 适配器检查全部通过。
+- `node scripts/check.mjs`：manifest、TypeScript、155 个宿主测试、真实事实／局部事实／进程隔离、九组 scorer 与九组 SWE 适配器检查全部通过。
 - 固定 linux/amd64 NodeBB 镜像、原 Linux Node 22.23.3／Claude 2.1.295、只读挂载、无网络、1 CPU／4 GiB 下，模型无关的真实宿主进程 scoped 检索退出 0。
 
 这些是机制与诊断证据，尚未证明有效事实投递或质量收益。下一步使用新冻结 runtime，固定 NodeBB 8ca65b0 与 Ansible 42355d1，各两组一次；再保持完整 12 题失败／未知并集的开发回归。原回执不覆盖，费用缺失仍 unknown。
+
+独立审查提出两项重要诊断问题：截止时间抛错误记 service-error，以及正常取消／off 先匹配 stale-binding。单次修复中先确认新增 deadline 异常与取消／off 断言失败，再让 Coordinator 传递固定中止原因，异常路径重验当前状态；155 个宿主测试及完整工程检查再次通过。没有未处理重要问题，也没有扩大模块范围。
