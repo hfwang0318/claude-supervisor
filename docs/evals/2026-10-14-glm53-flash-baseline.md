@@ -38,7 +38,7 @@ agent 只见原始 instruction 和干净仓库、隔离配置、无 MCP／web／
 
 ## 后续回归规则
 
-本轮最终汇总输出为 `baseline-four-workers/`，旧阶段保持原样。完成后生成 `summary-baseline.json`，以及绑定其字节 hash 的两类选择文件：
+本轮最终汇总输出为 `baseline-adaptive/`，旧阶段保持原样。完成后生成 `summary-baseline.json`，以及绑定其字节 hash 的两类选择文件：
 
 - `failure-selection.json`：任一组失败或未知的并集，两组各一次。以后开发“全量回归”是此集合全量；
   完成后以同轮结果生成 `next-selection.json`。历史双通过项跳过，不能算作新版得分。
@@ -50,13 +50,13 @@ agent 只见原始 instruction 和干净仓库、隔离配置、无 MCP／web／
 
 ```sh
 node eval/swe-pro/run.mjs --dry-run
-node eval/swe-pro/run.mjs --selection eval/results/swe-pro-glm53-flash/baseline-four-workers/failure-selection.json --baseline-summary eval/results/swe-pro-glm53-flash/baseline-four-workers/summary-baseline.json --dry-run
-node eval/swe-pro/run.mjs --selection eval/results/swe-pro-glm53-flash/baseline-four-workers/quick-selection.json --baseline-summary eval/results/swe-pro-glm53-flash/baseline-four-workers/summary-baseline.json --dry-run
+node eval/swe-pro/run.mjs --selection eval/results/swe-pro-glm53-flash/baseline-adaptive/failure-selection.json --baseline-summary eval/results/swe-pro-glm53-flash/baseline-adaptive/summary-baseline.json --dry-run
+node eval/swe-pro/run.mjs --selection eval/results/swe-pro-glm53-flash/baseline-adaptive/quick-selection.json --baseline-summary eval/results/swe-pro-glm53-flash/baseline-adaptive/summary-baseline.json --dry-run
 ```
 
 ## 验证与结果
 
-`node scripts/check.mjs` 通过：149 个 host tests、类型／manifest 校验、真实进程隔离检查、各套 scorer self-tests 和 6 组 SWE 适配器检查。
+`node scripts/check.mjs` 通过：149 个 host tests、类型／manifest 校验、真实进程隔离检查、各套 scorer self-tests 和 9 组 SWE 适配器检查。
 30 题离线插件启动检查通过；30 题空 patch／官方参考 patch 的 hash 绑定校准及 300 份任务材料校验通过。
 最小付费路由检查的请求、返回及 Router 访问／用量标签均为 Flash；64-token 请求仅有 thinking，256-token 请求返回 OK。
 这些检查验证机制、环境与路由，完整模型结果仍待全部结束。
@@ -81,3 +81,27 @@ node eval/swe-pro/run.mjs --continue-from eval/results/swe-pro-glm53-flash/basel
 ```
 
 最终统计待模型基线完整结束后填写，不得将免费检查或部分模型结果标记为基线完成。
+
+## 持续资源监测与自适应调度
+
+继续使用固定 Linux 镜像、VM 内存与原有单题限制。当前 macOS Docker Desktop 4.87.0 的只读重启判断
+确认增加 VM 内存／swap 需要重启；测试期间不应用这些设置。容器上限可热更新，但不会增大 VM。
+
+后续队列以六并发起步、八并发为上限，显式允许超额配置。`capacity-monitor.mjs` 管理 runner 和
+64 MiB／0.1 CPU、无网络、只读探针，五秒读取一次 VM 可用内存和 swap。至少 4 GiB 可用且 swap
+低于 256 MiB 才允许初始六并发；连续三次充裕采样提高一个并发。可用内存低于 1.5 GiB、swap
+超过 512 MiB 或观测失败时暂停派发；已有工作继续。恢复从低并发逐步上调，不保证所有峰值都有空间。
+许可 90 秒过期、缺失／损坏／超范围时默认零；原子发布，trace 与每题回执通过许可 SHA256 对齐。
+
+新调度器的 `SIGUSR2` 可重复安全地停止新派发并等待已有任务完成；`SIGINT`／`SIGTERM` 保留显式取消。
+旧四并发调度器不支持该信号，迁移只在模型和独立评分自然结束、剩余全为免费准备时停止旧派发器。
+仅显式排除无 gateway／agent／patch 的免费准备回执，原始回执 hash 仍绑定；任何付费失败或未知均保留。
+递归来源校验绑定原两并发、四并发 adapter，执行／评分／模型／预算不变，延迟按阶段报告。
+
+```sh
+node eval/swe-pro/capacity-monitor.mjs --lease eval/results/swe-pro-glm53-flash/capacity-lease.json --trace eval/results/swe-pro-glm53-flash/capacity.jsonl --max 8 --initial 6 -- --tasks-root TASKS_ROOT --runtime RUNTIME --readiness READINESS --continue-from eval/results/swe-pro-glm53-flash/baseline-four-workers --continue-adapter eval/results/swe-pro-glm53-flash/adapter-four-workers --exclude-unproductive --out eval/results/swe-pro-glm53-flash/baseline-adaptive --allow-memory-overcommit
+```
+
+免费验证覆盖六到八的实际 admission、降到零不取消已有任务、重复 drain 信号、过期／损坏许可、
+未知资源、三次安全采样、递归原回执 hash、严格免费准备排除；真实 Docker 探针加 `--dry-run` 烟测
+退出 0、仅启动／清理自己的资源容器，不调用模型。149 个 host tests 及全部工程检查通过。

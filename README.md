@@ -119,12 +119,22 @@ establish their own baseline. A fresh full 30-task baseline (60 attempts) starts
 on Flash. Development regressions then use the failure/unknown union; quick
 regressions use exactly one baseline double pass and one double failure (four
 attempts), without shrinking the union. See [the Flash protocol](docs/evals/2026-10-14-glm53-flash-baseline.md).
-The default is two workers. Three or four require `--allow-memory-overcommit`,
+The default is two workers. Three through eight require `--allow-memory-overcommit`,
 Docker VM swap and sufficient CPU/memory; each task keeps its original limits.
+More than four also require a live `--capacity-file`. `capacity-monitor.mjs` owns
+the runner and a small read-only Linux probe, samples available memory/swap every
+five seconds, and publishes short-lived admission leases. Pressure or missing
+evidence pauses new work; running model tasks and graders finish. Three safe
+samples raise admission one slot, up to the configured maximum. The resource
+trace and each task's lease hash retain the evidence; overcommit is still not a
+memory reservation guarantee. Repeated `SIGUSR2` requests gracefully drain the queue.
 An explicit `--continue-from` with `--continue-adapter` and a new `--out` can
 change scheduling while retaining every terminal attempt, including unknowns.
 The original adapter binds unchanged execution/grading code, and phase latency
 is reported separately.
+Recursive continuations retain all original phase receipts. Explicit
+`--exclude-unproductive` can skip only environment preparation receipts with no
+gateway, agent or patch; those raw receipts remain bound and retained.
 
 ## Issue state
 
