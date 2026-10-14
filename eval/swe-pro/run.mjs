@@ -35,6 +35,10 @@ if (process.argv.includes('--dry-run')) {
   process.exit(0)
 }
 if (jobs.length === 0) throw Error('no remaining tasks; no model execution needed')
+// The configured Zhipu Coding Plan accepts this legacy name but serves GLM-5.3.
+// A response that echoes GLM-5.2 cannot attest to the executed model. Keep live
+// execution blocked until a real model/route is chosen; free previews still work.
+if (MODEL === 'zhipu/glm-5.2') throw Error('Coding Plan remaps GLM-5.2 to GLM-5.3; paid evaluation suspended until the model route is resolved')
 const tasksRoot = resolve(arg('tasks-root', '.superpowers/sdd/2026-10-13-local-swe-pro-glm53/tasks'))
 const runtime = resolve(arg('runtime', 'eval/results/swe-pro-glm52/runtime'))
 const readiness = resolve(arg('readiness', 'eval/results/swe-pro-glm52/readiness'))

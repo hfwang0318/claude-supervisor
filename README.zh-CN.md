@@ -91,7 +91,8 @@ Claude Code 自带一个旁路代理 "You should know"，看着 Claude 干活，
 本地 SWE-bench Pro runner 支持 `--selection` 和 `--baseline-summary` 的冻结增量对比，
 可用 `--dry-run` 免费预览。只对失败或未知用例重跑两种模式；历史双侧通过项不计入新版
 成绩。基线校验、全新输出目录和下一轮清单见[增量对比策略](docs/evals/2026-10-14-incremental-comparison.md)。
-当前评测主模型和旁路模型均使用 `zhipu/glm-5.2`。切换模型先建立全新 30 题基线
+请求配置主模型和旁路均为 `zhipu/glm-5.2`，但实际付费执行已阻止：智谱 Coding Plan
+会自动切换该旧名称至 GLM-5.3，响应模型字段不能证明 GLM-5.2 基线。选定真实模型／通道后先建立全新 30 题基线
 （60 次尝试）；开发全量回归随后只跑失败／未知并集，快速回归固定一个基线双通过和
 一个双失败任务（4 次尝试）。快速结果不能缩减失败集合，见[GLM-5.2 协议](docs/evals/2026-10-14-glm52-baseline.md)。
 

@@ -1,6 +1,8 @@
 # GLM-5.2 新基线与开发回归
 
-状态：实现及免费预检进行中，尚未建立完整模型基线。
+状态：实现及免费预检通过；尝试于北京时间 14:49 开始，15:14:55 停止。
+用户在官方控制台发现流量为 GLM-5.3。官方 Coding Plan 规则确认 GLM-5.2 为会自动切换
+至 GLM-5.3 的旧名称；因此本轮不能建立 GLM-5.2 基线，付费 runner 已在运行前阻止该配置。
 
 用户要求：主模型和审查／旁路模型均使用费用更低的 GLM-5.2，以监督能力效果为比较目标；
 切换模型后重测全部既定数据，建立独立新基线。此处全部数据指现有冻结的 30 题项目子集
@@ -10,7 +12,9 @@
 ## 固定条件
 
 - 主模型、所有宿主角色别名、插件 verifier_model、网关请求：`zhipu/glm-5.2`。
-  真实返回身份必须为 `glm-5.2` 或同一显式带 provider 名；禁止其他模型兜底。
+  原先只要求返回身份为 `glm-5.2` 或同一显式带 provider 名，此检查不足以证明实际执行模型。
+  智谱套餐会在上游转换旧名称；本地 fallback off 不能阻止供应商转换。后续需同时核对
+  供应商路由政策及控制台归属，禁止把兼容名称／回显当作实际模型证明。
 - 冻结原 30 题清单、原始需求／base commit／官方测试材料和 digest-pinned images。
   新运行时使用统一 GNU loader 包装，同一 Claude Code 2.1.295／Linux Node 22.23.3。
 - 两组只改变 assistance_mode；保留局部事实增强及现有预算。execution_mode off，
@@ -44,6 +48,22 @@ node eval/swe-pro/run.mjs --selection eval/results/swe-pro-glm52/baseline/quick-
 
 ## 验证与结果
 
-待免费完整检查、30 题离线预检、60 次独立结果及作用链审计完成后填写；不得将运行开始
-或机制自测标记为模型基线完成。原始轨迹／用量／patch／评分收据保存在被忽略的
-`eval/results/swe-pro-glm52/`。
+完整免费 `node scripts/check.mjs` 通过 149 host tests、类型／manifest、真实事实及隔离检查、
+全部 scorer 自测和 6 组 SWE Pro 自测。30/30 离线 plugin startup 通过。独立审查发现的
+全量重复任务晚拒绝已由 RED→GREEN 回归修正。实现冻结提交 `025773b`。
+
+付费尝试仅有 4/60 收据：facts 2 项独立评分通过（均 0 个事实包）；existing 2 项由主动停止
+保留未知。其余 56 项没有尝试，没有完整基线／回归选择文件。所有结果均为不符合指定真实
+模型要求的诊断材料，不能作为 GLM-5.2 得分或监督收益证据。容器全部清理，无自动重试。
+
+本机 Router 截至 15:12 的 167 条已完成日志，其 requested／resolved／response／usage 标签
+都为 GLM-5.2；用户提供的官方 Coding Plan 用量页归属为 GLM-5.3。官方[套餐概览](https://docs.bigmodel.cn/cn/coding-plan/overview)
+明确说明历史 GLM-5.2／5.1 请求自动切换 GLM-5.3，解释了两层记录差异。
+此前仅凭回显字段确认“实际模型是 GLM-5.2”的判断已撤回。
+
+当前阻止 paid execution，免费 `--dry-run` 仍可检查任务范围。继续需要选用套餐当前真实提供
+的 GLM-5.3-Flash（官方积分系数为 GLM-5.3 的三分之一，实际总成本仍须测量），或者提供
+实际服务 GLM-5.2 的独立 API 通道。不会自行改选其他模型或购买／启用新的计费通道。
+
+原始轨迹／用量／patch／评分、`model-route-audit.json`、`router-model-audit.json` 及
+`invalidated-baseline.json` 均保留在被忽略的 `eval/results/swe-pro-glm52/`。
