@@ -8,9 +8,14 @@ import { pathToFileURL } from 'node:url'
 import { StringDecoder } from 'node:string_decoder'
 import { randomUUID } from 'node:crypto'
 
-export const MODEL = 'zhipu/glm-5.2'
+export const MODEL = 'zhipu/glm-5.3-flash'
+export const MODEL_POLICY = { provider: 'Zhipu Coding Plan', source: 'https://docs.bigmodel.cn/cn/coding-plan/overview', checkedOn: '2026-10-14', servedModel: 'glm-5.3-flash', legacyAliasUpgrade: true }
+export const assertEvaluationModel = model => {
+  if (['zhipu/glm-5.2', 'zhipu/glm-5.1'].includes(model)) throw Error('Coding Plan remaps GLM-5.2 / GLM-5.1 to GLM-5.3; legacy names cannot establish model identity')
+  if (model !== MODEL || model !== `zhipu/${MODEL_POLICY.servedModel}`) throw Error('model is not approved for the current evaluation policy')
+}
 export const allowedRequest = (method, path, body) => method === 'POST' && /^\/v1\/messages(?:\/count_tokens)?(?:\?beta=true)?$/.test(path) && body?.model === MODEL && (path.split('?')[0].endsWith('/count_tokens') || (Number.isSafeInteger(body.max_tokens) && body.max_tokens > 0 && body.max_tokens <= 32768))
-export const actualModelAllowed = model => ['glm-5.2', MODEL].includes(model)
+export const actualModelAllowed = model => [MODEL_POLICY.servedModel, MODEL].includes(model)
 export const auditEvent = event => {
   const message = event.type === 'message_start' ? event.message : event
   const usage = message?.usage ?? event.usage ?? {}

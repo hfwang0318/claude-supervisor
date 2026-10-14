@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync } from 'node:fs'
 import { resolve, join } from 'node:path'
 import { createHash } from 'node:crypto'
-import { MODEL } from './gateway.mjs'
+import { MODEL, MODEL_POLICY, assertEvaluationModel } from './gateway.mjs'
 import { openModelNetwork, runAgent, treeHash } from './agent.mjs'
 import { grade, readyForTask, verifyArtifacts, command, prepareTask } from './docker.mjs'
 import { schedule, identityValid, summarizeUsage, boundedMap } from './schedule.mjs'
@@ -35,15 +35,12 @@ if (process.argv.includes('--dry-run')) {
   process.exit(0)
 }
 if (jobs.length === 0) throw Error('no remaining tasks; no model execution needed')
-// The configured Zhipu Coding Plan accepts this legacy name but serves GLM-5.3.
-// A response that echoes GLM-5.2 cannot attest to the executed model. Keep live
-// execution blocked until a real model/route is chosen; free previews still work.
-if (MODEL === 'zhipu/glm-5.2') throw Error('Coding Plan remaps GLM-5.2 to GLM-5.3; paid evaluation suspended until the model route is resolved')
+assertEvaluationModel(MODEL)
 const tasksRoot = resolve(arg('tasks-root', '.superpowers/sdd/2026-10-13-local-swe-pro-glm53/tasks'))
-const runtime = resolve(arg('runtime', 'eval/results/swe-pro-glm52/runtime'))
-const readiness = resolve(arg('readiness', 'eval/results/swe-pro-glm52/readiness'))
+const runtime = resolve(arg('runtime', 'eval/results/swe-pro-glm53-flash/runtime'))
+const readiness = resolve(arg('readiness', 'eval/results/swe-pro-glm53-flash/readiness'))
 if (incremental && !arg('out', null)) throw Error('incremental execution requires a new explicit --out directory')
-const out = resolve(arg('out', 'eval/results/swe-pro-glm52/baseline'))
+const out = resolve(arg('out', 'eval/results/swe-pro-glm53-flash/baseline'))
 const identity = JSON.parse(readFileSync(join(runtime, 'identity.json')))
 if (identity.model !== MODEL || identity.sideModel !== MODEL) throw Error('frozen runtime model identities differ from current main/side models')
 for (const mode of ['existing', 'facts']) if (treeHash(join(runtime, `plugin-${mode}`)) !== identity.pluginHashes[mode]) throw Error('frozen plugin changed')
@@ -55,7 +52,7 @@ if (infoResult.exitCode !== 0) throw Error('Docker daemon unavailable')
 const info = JSON.parse(infoResult.stdout)
 if (concurrency === 2 && info.MemTotal < 8.5 * 1024 ** 3) throw Error('two jobs require at least 8.5 GiB Docker VM memory')
 const environment = { dockerVersion: info.ServerVersion, architecture: info.Architecture, cpus: info.NCPU, memoryBytes: info.MemTotal }
-const config = { schemaVersion: 1, manifestSHA256: hash(manifestPath), runtime: identity, environment, preparationPolicy: 'per-task-calibration-in-worker-slots', model: MODEL, sideModel: MODEL, reasoning: 'default', seed: 53, repetitions: 1, arms: ['existing', 'facts'], timeoutMs: 3_000_000, concurrency, costUSD: 'unknown', adapterSHA256: createHash('sha256').update(readdirSync(resolve('eval/swe-pro')).filter(n => n.endsWith('.mjs')).sort().map(n => `${n}:${hash(resolve('eval/swe-pro', n))}`).join('\n')).digest('hex') }
+const config = { schemaVersion: 1, manifestSHA256: hash(manifestPath), runtime: identity, environment, preparationPolicy: 'per-task-calibration-in-worker-slots', model: MODEL, sideModel: MODEL, modelPolicy: MODEL_POLICY, reasoning: 'default', seed: 53, repetitions: 1, arms: ['existing', 'facts'], timeoutMs: 3_000_000, concurrency, costUSD: 'unknown', adapterSHA256: createHash('sha256').update(readdirSync(resolve('eval/swe-pro')).filter(n => n.endsWith('.mjs')).sort().map(n => `${n}:${hash(resolve('eval/swe-pro', n))}`).join('\n')).digest('hex') }
 if (incremental) config.incremental = { kind: incremental.kind, name: incremental.name, selectionSHA256: incremental.selectionSHA256, baselineSummarySHA256: incremental.baselineSummarySHA256, tasks: incremental.tasks.map(t => t.instanceId), skipped: incremental.skipped }
 const frozen = freezeExperiment(out, config, jobs)
 writeFileSync(join(out, 'schedule.json'), JSON.stringify(jobs.map(j => ({ task: j.task.instanceId, mode: j.mode })), null, 2))
@@ -77,7 +74,7 @@ const persistResults = () => {
     writeFileSync(join(out, `summary-${summary.kind}.json`), summaryBytes)
     if (summary.complete && summary.kind === 'incremental') writeFileSync(join(out, 'next-selection.json'), JSON.stringify(nextSelection(incremental.name, summaryBytes), null, 2))
     if (summary.complete && summary.kind === 'baseline') {
-      const selections = baselineSelections('glm52-baseline', summaryBytes)
+      const selections = baselineSelections('glm53-flash-baseline', summaryBytes)
       writeFileSync(join(out, 'failure-selection.json'), JSON.stringify(selections.incremental, null, 2))
       writeFileSync(join(out, 'quick-selection.json'), JSON.stringify(selections.quick, null, 2))
       if (!selections.quick) console.log('Quick selection unavailable: baseline has no double pass or double failure; no substituted task.')

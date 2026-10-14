@@ -22,12 +22,11 @@ Claude 运行时预检通过。正式轮次及逐任务就绪状态以 `docs/eva
 
 详情与30项列表见 `docs/research/2026-10-13-swe-pro-v2-subset-v1.md`。
 
-2026-10-14 用户要求主／旁路均使用 `zhipu/glm-5.2`，先重跑完整 30 题／60 次建立新基线。
-已确认当前智谱 Coding Plan 将该旧名称自动切换到 GLM-5.3；本轮已停止，付费入口阻止执行，尚无有效 GLM-5.2 基线。
-后续开发全量回归使用新基线的失败／未知并集；快速回归固定一个双通过和一个双失败任务／4 次。
-GLM-5.3 的 `failure-union-v1.json` 仅作历史记录，不能用于 GLM-5.2 新基线。
-入口仍接受 `--selection`、`--baseline-summary` 及免费 `--dry-run`；具体收据与命令见
-[GLM-5.2 协议](../../../docs/evals/2026-10-14-glm52-baseline.md)。
+2026-10-14 用户最终选择主／旁路均使用 `zhipu/glm-5.3-flash`，重新测量完整 30 题／60 次建立新基线。
+GLM-5.2 旧名称在 Coding Plan 会转为 GLM-5.3，之前尝试已停止且不能作为新基线。
+后续开发全量回归使用 Flash 同轮失败／未知并集；快速回归固定一个基线双通过和一个双失败任务／4 次。
+历史 `failure-union-v1.json` 不能用于 Flash 首轮选题；完整命令、身份政策与状态见
+[Flash 协议](../../../docs/evals/2026-10-14-glm53-flash-baseline.md)。
 
 ## 使用官方工具物化任务
 
@@ -41,13 +40,13 @@ python3 v2/tooling/make_subset.py v2/tasks /absolute/path/to/instance-ids.txt /a
 该命令在上游SWE-bench_Pro-os checkout中运行。`smoke-ids.txt`可替代全部ID列表。
 本机适配器保留官方 verifier 原样，主模型容器只挂载只读的 Linux 运行时和冻结插件；
 任务材料（尤其 gold/tests）不挂载进去。模型通过内部 Docker 网络上的受限网关访问
-当前 Claude 路由，主/旁路请求名称均为 GLM-5.2；该名称在当前套餐不能认证真实执行模型，需先确定新模型／通道。凭据只在宿主进程中使用。
+当前 Claude 路由，主/旁路均固定 GLM-5.3-Flash，并核对上游政策和运行收据。凭据只在宿主进程中使用。
 
 已物化任务和运行时后，从本项目 checkout 运行：
 
 ```sh
-node eval/swe-pro/readiness.mjs --tasks-root /absolute/path/to/materialized-subset --out eval/results/swe-pro-glm52/readiness
-node eval/swe-pro/run.mjs --tasks-root /absolute/path/to/materialized-subset --runtime /absolute/path/to/frozen-linux-runtime --readiness eval/results/swe-pro-glm52/readiness --out eval/results/swe-pro-glm52/baseline
+node eval/swe-pro/readiness.mjs --tasks-root /absolute/path/to/materialized-subset --out eval/results/swe-pro-glm53-flash/readiness
+node eval/swe-pro/run.mjs --tasks-root /absolute/path/to/materialized-subset --runtime /absolute/path/to/frozen-linux-runtime --readiness eval/results/swe-pro-glm53-flash/readiness --out eval/results/swe-pro-glm53-flash/baseline
 ```
 
 运行时目录包含经过官方 checksum 核验的 Claude 2.1.295 linux-x64 binary、Linux Node

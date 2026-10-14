@@ -10,13 +10,13 @@ const api = await import('./regression.mjs').catch(error => {
 })
 assert.equal(typeof api.summarizeBaseline, 'function', 'full runs must produce a bound baseline')
 const manifest = JSON.stringify({ tasks: ['a', 'b', 'c', 'd', 'e'].map(instanceId => ({ instanceId, repo: 'repo' })) })
-const identity = { model: 'zhipu/glm-5.2', sideModel: 'zhipu/glm-5.2', experimentSHA256: 'frozen' }
+const identity = { model: 'zhipu/glm-5.3-flash', sideModel: 'zhipu/glm-5.3-flash', experimentSHA256: 'frozen' }
 const values = [[true, true], [false, false], [true, false], [null, null], [true, true]]
 const rows = values.flatMap((v, i) => ['existing', 'facts'].map((mode, j) => ({ task: 'abcde'[i], mode, functionalSuccess: v[j] })))
 const baseline = api.summarizeBaseline(manifest, rows, identity)
 assert.equal(baseline.complete, true)
 assert.equal(baseline.planned, 10)
-assert.equal(baseline.model, 'zhipu/glm-5.2')
+assert.equal(baseline.model, 'zhipu/glm-5.3-flash')
 assert.deepEqual(baseline.remaining.map(t => t.instanceId), ['b', 'c', 'd'])
 assert.equal(api.summarizeBaseline(manifest, rows.slice(0, -1), identity).complete, false)
 assert.throws(() => api.summarizeBaseline(manifest, [...rows, rows[0]], identity), /duplicate/)
@@ -51,9 +51,6 @@ try {
   const preview = run()
   assert.equal(preview.status, 0, preview.stderr)
   assert.equal(JSON.parse(preview.stdout).planned, 4)
-  const blocked = spawnSync(process.execPath, [resolve('eval/swe-pro/run.mjs'), '--manifest', manifestPath], { cwd: dir, encoding: 'utf8' })
-  assert.notEqual(blocked.status, 0)
-  assert.match(blocked.stderr, /Coding Plan.*GLM-5\.2.*GLM-5\.3/, 'known upstream model remapping must block paid execution before runtime setup')
   const old = JSON.stringify({ ...baseline, model: 'zhipu/glm-5.3', sideModel: 'zhipu/glm-5.3' })
   writeFileSync(baselinePath, old)
   writeFileSync(selectionPath, JSON.stringify({ ...selections.quick, baselineSummarySHA256: createHash('sha256').update(old).digest('hex') }))

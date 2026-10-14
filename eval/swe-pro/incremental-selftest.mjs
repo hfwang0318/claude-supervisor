@@ -15,7 +15,7 @@ const runState = await import('./run-state.mjs').catch(error => {
 
 const hash = value => createHash('sha256').update(value).digest('hex')
 const manifestBytes = JSON.stringify({ tasks: ['a', 'b', 'c'].map(instanceId => ({ instanceId, repo: 'repo' })) })
-const baselineBytes = JSON.stringify({ model: 'zhipu/glm-5.2', sideModel: 'zhipu/glm-5.2', complete: true, manifestSHA256: hash(manifestBytes), pairs: [
+const baselineBytes = JSON.stringify({ model: 'zhipu/glm-5.3-flash', sideModel: 'zhipu/glm-5.3-flash', complete: true, manifestSHA256: hash(manifestBytes), pairs: [
   { task: 'a', existing: 'passed', facts: 'passed' },
   { task: 'b', existing: 'failed', facts: 'passed' },
   { task: 'c', existing: 'passed', facts: 'environment-error' }
