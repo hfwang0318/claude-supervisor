@@ -19,7 +19,7 @@ for (let i = 2; i < process.argv.length; i++) {
   const flag = process.argv[i]
   if (seenFlags.has(flag)) throw Error(`duplicate argument: ${flag}`)
   seenFlags.add(flag)
-  if (['--dry-run', '--allow-memory-overcommit', '--exclude-unproductive'].includes(flag)) continue
+  if (['--dry-run', '--allow-memory-overcommit', '--exclude-unproductive', '--allow-vm-memory-change'].includes(flag)) continue
   if (!valueFlags.some(name => flag === `--${name}`)) throw Error(`unknown argument: ${flag}`)
   if (!process.argv[i + 1] || process.argv[i + 1].startsWith('--')) throw Error(`missing value: ${flag}`)
   i++
@@ -31,6 +31,8 @@ const selectionPath = arg('selection', null), baselinePath = arg('baseline-summa
 const continuationPath = arg('continue-from', null)
 const continuationAdapter = arg('continue-adapter', null)
 const excludeUnproductive = process.argv.includes('--exclude-unproductive')
+const allowMemoryChange = process.argv.includes('--allow-vm-memory-change')
+if (allowMemoryChange && !continuationPath) throw Error('VM memory change requires an explicit continuation')
 if (excludeUnproductive && !continuationPath) throw Error('unproductive exclusions require an explicit continuation')
 if (!!continuationPath !== !!continuationAdapter) throw Error('--continue-from and --continue-adapter must be provided together')
 if (continuationPath && (selectionPath || !arg('out', null))) throw Error('continuation requires a full baseline and a new explicit --out')
@@ -40,7 +42,7 @@ const incremental = selectionPath ? selectRegression(manifestBytes, readFileSync
 if (!incremental) summarizeBaseline(manifestBytes, [], models)
 const jobs = schedule(incremental?.tasks ?? manifest.tasks, 53)
 if (process.argv.includes('--dry-run')) {
-  const preview = continuationPath ? loadContinuation(continuationPath, { ...JSON.parse(readFileSync(join(resolve(continuationPath), 'experiment.json'))), ...models, manifestSHA256: hash(manifestPath), adapterSHA256: adapterFingerprint(dirname(fileURLToPath(import.meta.url))) }, jobs, { sourceAdapter: continuationAdapter, excludeUnproductive }) : undefined
+  const preview = continuationPath ? loadContinuation(continuationPath, { ...JSON.parse(readFileSync(join(resolve(continuationPath), 'experiment.json'))), ...models, manifestSHA256: hash(manifestPath), adapterSHA256: adapterFingerprint(dirname(fileURLToPath(import.meta.url))) }, jobs, { sourceAdapter: continuationAdapter, excludeUnproductive, allowMemoryChange }) : undefined
   const remaining = jobs.filter(j => !preview?.completed.has(`${j.task.instanceId}/${j.mode}`))
   console.log(JSON.stringify({ manifestSHA256: hash(manifestPath), selection: incremental ? { name: incremental.name, selectionSHA256: incremental.selectionSHA256, baselineSummarySHA256: incremental.baselineSummarySHA256 } : null, planned: remaining.length, ...(preview ? { cohortPlanned: jobs.length, inherited: preview.completed.size } : {}), jobs: remaining.map(j => ({ task: j.task.instanceId, mode: j.mode })), skipped: incremental?.skipped ?? [] }, null, 2))
   process.exit(0)
@@ -75,7 +77,7 @@ const environment = { dockerVersion: info.ServerVersion, architecture: info.Arch
 const config = { schemaVersion: 1, manifestSHA256: hash(manifestPath), runtime: identity, environment, preparationPolicy: 'per-task-calibration-in-worker-slots', model: MODEL, sideModel: MODEL, modelPolicy: MODEL_POLICY, reasoning: 'default', seed: 53, repetitions: 1, arms: ['existing', 'facts'], timeoutMs: 3_000_000, concurrency, costUSD: 'unknown', adapterSHA256: createHash('sha256').update(readdirSync(resolve('eval/swe-pro')).filter(n => n.endsWith('.mjs')).sort().map(n => `${n}:${hash(resolve('eval/swe-pro', n))}`).join('\n')).digest('hex') }
 if (incremental) config.incremental = { kind: incremental.kind, name: incremental.name, selectionSHA256: incremental.selectionSHA256, baselineSummarySHA256: incremental.baselineSummarySHA256, tasks: incremental.tasks.map(t => t.instanceId), skipped: incremental.skipped }
 if (concurrency > 2 || capacityFile) config.memoryPolicy = admissionPolicy({ concurrency, overcommit, swapBytes, capacityFile })
-const continuation = continuationPath ? loadContinuation(continuationPath, config, jobs, { sourceAdapter: continuationAdapter, excludeUnproductive }) : undefined
+const continuation = continuationPath ? loadContinuation(continuationPath, config, jobs, { sourceAdapter: continuationAdapter, excludeUnproductive, allowMemoryChange }) : undefined
 if (continuation) config.continuation = continuation.identity
 const frozen = freezeExperiment(out, config, jobs, continuation)
 writeFileSync(join(out, 'schedule.json'), JSON.stringify(jobs.map(j => ({ task: j.task.instanceId, mode: j.mode })), null, 2))
@@ -88,7 +90,7 @@ const preparations = new Map()
 const persistResults = () => {
   const rows = results.filter(Boolean)
   // Validate before replacing aggregate files, including resumed result receipts.
-  const summaryIdentity = { ...models, experimentSHA256: frozen.fingerprint, ...(continuation ? { executionPhases: [...continuation.identity.phases, { experimentSHA256: frozen.fingerprint, concurrency, adaptive: Boolean(capacityFile), attempts: rows.length - continuation.identity.inheritedCount }], latencyInterpretation: 'Scheduling changed between phases; report latency by phase, not as one uniform configuration.' } : {}) }
+  const summaryIdentity = { ...models, experimentSHA256: frozen.fingerprint, ...(continuation ? { executionPhases: [...continuation.identity.phases, { experimentSHA256: frozen.fingerprint, concurrency, adaptive: Boolean(capacityFile), environment, attempts: rows.length - continuation.identity.inheritedCount }], ...(allowMemoryChange ? { memoryChange: continuation.identity.memoryChange } : {}), latencyInterpretation: 'Scheduling or VM memory changed between phases; report latency by phase, not as one uniform configuration.' } : {}) }
   const summary = incremental ? summarizeRegression(incremental, rows, summaryIdentity) : summarizeBaseline(manifestBytes, rows, summaryIdentity)
   writeFileSync(join(out, 'results.json'), JSON.stringify(rows, null, 2))
   if (summary) {

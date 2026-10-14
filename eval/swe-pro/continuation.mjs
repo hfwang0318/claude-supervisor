@@ -19,24 +19,29 @@ const verifyExecutionAdapter = (previous, current, sourceAdapter, currentAdapter
   }
   return { sourceAdapterOut: source, executionAdapterSHA256: hash(unchanged.map(n => `${n}:${hash(readFileSync(join(target, n)))}`).join('\n')) }
 }
-const stableConfiguration = config => {
+const stableConfiguration = (config, allowMemoryChange = false) => {
   const stable = { ...config }
   for (const field of ['concurrency', 'adapterSHA256', 'memoryPolicy', 'continuation']) delete stable[field]
+  if (allowMemoryChange) {
+    if (!Number.isSafeInteger(stable.environment?.memoryBytes) || stable.environment.memoryBytes <= 0) throw Error('invalid VM memory configuration')
+    const { memoryBytes, ...environment } = stable.environment
+    stable.environment = environment
+  }
   return stable
 }
 
 // An explicit new phase may change scheduling, never the model, plugin, task
 // material, per-task budgets or physical environment. Original receipts stay
 // in their source directory and retain their original experiment fingerprint.
-export const loadContinuation = (source, config, jobs, { sourceAdapter, currentAdapter = code, excludeUnproductive = false, visited = new Set() } = {}) => {
+export const loadContinuation = (source, config, jobs, { sourceAdapter, currentAdapter = code, excludeUnproductive = false, allowMemoryChange = false, visited = new Set() } = {}) => {
   const sourceOut = resolve(source), bytes = readFileSync(join(sourceOut, 'experiment.json'))
   if (visited.has(sourceOut)) throw Error('continuation cycle')
   visited = new Set([...visited, sourceOut])
   const previous = JSON.parse(bytes)
   if (previous.incremental || config.incremental) throw Error('continuation requires a full baseline')
-  if (JSON.stringify(stableConfiguration(previous)) !== JSON.stringify(stableConfiguration(config))) throw Error('continuation configuration changed beyond scheduling')
+  if (JSON.stringify(stableConfiguration(previous, allowMemoryChange)) !== JSON.stringify(stableConfiguration(config, allowMemoryChange))) throw Error('continuation configuration changed beyond scheduling or explicitly permitted VM memory')
   const adapter = verifyExecutionAdapter(previous.adapterSHA256, config.adapterSHA256, sourceAdapter, currentAdapter)
-  const inherited = previous.continuation ? loadContinuation(previous.continuation.sourceOut, previous, jobs, { sourceAdapter: previous.continuation.sourceAdapterOut, currentAdapter: sourceAdapter, excludeUnproductive: previous.continuation.excludeUnproductive === true, visited }) : undefined
+  const inherited = previous.continuation ? loadContinuation(previous.continuation.sourceOut, previous, jobs, { sourceAdapter: previous.continuation.sourceAdapterOut, currentAdapter: sourceAdapter, excludeUnproductive: previous.continuation.excludeUnproductive === true, allowMemoryChange: previous.continuation.allowMemoryChange === true, visited }) : undefined
   if (inherited) for (const [key, value] of Object.entries(previous.continuation)) if (JSON.stringify(inherited.identity[key]) !== JSON.stringify(value)) throw Error('inherited continuation binding changed')
   const fingerprint = hash(JSON.stringify(previous)), completed = new Map(), origins = new Map(), receipts = [], excluded = []
   for (const { task, mode } of jobs) {
@@ -54,13 +59,13 @@ export const loadContinuation = (source, config, jobs, { sourceAdapter, currentA
     const resultBytes = readFileSync(path), row = JSON.parse(resultBytes)
     validateResult(row, task, mode, fingerprint)
     receipts.push([key, hash(resultBytes)])
-    const origin = { key, directory: dir, resultSHA256: hash(resultBytes), experimentSHA256: fingerprint, concurrency: previous.concurrency, adaptive: Boolean(previous.memoryPolicy?.capacityFile) }
+    const origin = { key, directory: dir, resultSHA256: hash(resultBytes), experimentSHA256: fingerprint, concurrency: previous.concurrency, adaptive: Boolean(previous.memoryPolicy?.capacityFile), ...(previous.environment ? { environment: previous.environment } : {}) }
     if (excludeUnproductive && row.status === 'environment-error' && row.functionalSuccess === null && row.agent === undefined && !existsSync(join(dir, 'gateway.jsonl')) && !existsSync(join(dir, 'agent/model.patch'))) { excluded.push({ ...origin, reason: 'free environment preparation only; no model gateway or agent' }); continue }
     completed.set(key, row); origins.set(key, origin)
   }
   if (!completed.size) throw Error('continuation has no bound source receipts')
-  const phases = [...new Set([...origins.values()].map(r => r.experimentSHA256))].map(experimentSHA256 => { const rows = [...origins.values()].filter(r => r.experimentSHA256 === experimentSHA256); return { experimentSHA256, concurrency: rows[0].concurrency, adaptive: rows[0].adaptive, attempts: rows.length } })
-  return { completed, origins, identity: { ...adapter, sourceOut, sourceConfigSHA256: hash(bytes), sourceExperimentSHA256: fingerprint, sourceResultsSHA256: hash(JSON.stringify(receipts)), sourceConcurrency: previous.concurrency, inheritedCount: completed.size, receiptOrigins: [...origins.values()], phases, ...(excludeUnproductive ? { excludeUnproductive: true, excludedUnproductive: excluded } : {}) } }
+  const phases = [...new Set([...origins.values()].map(r => r.experimentSHA256))].map(experimentSHA256 => { const rows = [...origins.values()].filter(r => r.experimentSHA256 === experimentSHA256); return { experimentSHA256, concurrency: rows[0].concurrency, adaptive: rows[0].adaptive, attempts: rows.length, ...(rows[0].environment ? { environment: rows[0].environment } : {}) } })
+  return { completed, origins, identity: { ...adapter, sourceOut, sourceConfigSHA256: hash(bytes), sourceExperimentSHA256: fingerprint, sourceResultsSHA256: hash(JSON.stringify(receipts)), sourceConcurrency: previous.concurrency, inheritedCount: completed.size, receiptOrigins: [...origins.values()], phases, ...(excludeUnproductive ? { excludeUnproductive: true, excludedUnproductive: excluded } : {}), ...(allowMemoryChange ? { allowMemoryChange: true, memoryChange: { fromBytes: previous.environment.memoryBytes, toBytes: config.environment.memoryBytes, sourceEnvironment: previous.environment, targetEnvironment: config.environment } } : {}) } }
 }
 
 export const validateConcurrency = (concurrency, resources, overcommit = false) => {
