@@ -78,8 +78,9 @@ Claude Code 自带一个旁路代理 "You should know"，看着 Claude 干活，
 事实选择支持最多 6 个相对 `searchPaths`（文件或目录），将大仓库的字面搜索限定在明确范围。
 `paths: []` 时，选中的搜索文件只返回匹配原文行，仍读取并重验整文件 hash。所有范围共享原
 额度，范围超限整体拒绝；范围及搜索词纳入 manifest hash，并在反馈中注明范围之外未知。
-省略 `searchPaths` 保留原全仓库搜索。`FACTS_JOB` 只记录任务阶段和状态，范围不足不追加
-重试，也不认证正确性。
+省略 `searchPaths` 保留原全仓库搜索。`FACTS_JOB` 记录任务阶段、状态、固定原因码及耗时，范围不足不追加
+重试，也不认证正确性。`SIDE_CALL` 增加调用耗时与固定供应商／输出上限原因码；
+两类记录不保留模型回复或源码内容。
 
 默认仍是 `assistance_mode=existing`；`probe`、`recovery` 仅预留，目前只保留确定性规则。
 `execution_mode` 独立控制原副本执行器，不表示允许旁路写真实目录。

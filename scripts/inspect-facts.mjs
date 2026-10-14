@@ -11,7 +11,21 @@ const validTerms = terms => Array.isArray(terms) && terms.length <= 2 && terms.e
 const validScope = scope => scope && Object.keys(scope).every(k => ['paths', 'terms'].includes(k)) && Array.isArray(scope.paths) && scope.paths.length > 0 && scope.paths.length <= 6 && scope.paths.every(safePath) && validTerms(scope.terms) && scope.terms.length > 0
 const validRequest = r => r && Object.keys(r).every(k => ['paths', 'terms', 'searchPaths'].includes(k)) && Array.isArray(r.paths) && r.paths.length <= 6 && r.paths.every(safePath) && validTerms(r.terms) && r.paths.length + r.terms.length > 0 && (r.searchPaths === undefined || validScope({ paths: r.searchPaths, terms: r.terms }))
 const secretContent = /-----BEGIN [A-Z ]*PRIVATE KEY-----|\b(?:sk|rk|pk)-(?:ant-|proj-)?[A-Za-z0-9_-]{16,}|\bAKIA[0-9A-Z]{16}\b|\b(?:gh[pousr]_[A-Za-z0-9]{30,}|github_pat_\w{20,})|\bxox[abprs]-[\w-]{10,}|\bAIza[0-9A-Za-z_-]{35}|\beyJ[\w-]{10,}\.[\w-]{10,}\.[\w-]{10,}|(?:api[_-]?key|secret|token|password|passwd|auth)[\w-]*["']?\s*[:=]\s*["']?[^\s"',;]{6,}/i
-const empty = () => ({ facts: [], files: [], manifestHash: '', incomplete: true })
+const empty = failureReason => ({ facts: [], files: [], manifestHash: '', incomplete: true, failureReason })
+// Error messages and paths are never returned. Only these fixed codes cross the host boundary.
+const failureOf = error => {
+  if (error?.code === 'ENOENT') return 'source-missing'
+  const reasons = {
+    deadline: 'deadline', 'unsafe path': 'unsafe-path', symlink: 'symlink',
+    'non-directory ancestor': 'source-type', 'file limit/type': 'file-limit',
+    'read limit': 'read-limit', 'file count': 'traversal-limit', 'visit limit': 'traversal-limit',
+    'special source': 'source-type', 'changed ancestor': 'source-changed',
+    'changed before read': 'source-changed', 'changed during read': 'source-changed',
+    'source changed across reads': 'source-changed', 'changed directory': 'source-changed',
+    'changed directory members': 'source-changed'
+  }
+  return reasons[error?.message] ?? 'inspection-error'
+}
 const alive = deadline => { if (!Number.isFinite(deadline) || Date.now() >= deadline) throw Error('deadline') }
 const identity = stat => `${stat.dev}/${stat.ino}/${stat.size}/${stat.mtimeMs}/${stat.ctimeMs}`
 const checkedPath = (root, path, deadline) => {
@@ -86,7 +100,7 @@ export const validateFacts = (source, view, deadlineMs, budget = { bytes: 0 }) =
 export const inspectFacts = (source, request, deadlineMs) => {
   try {
     alive(deadlineMs)
-    if (!validRequest(request)) return empty()
+    if (!validRequest(request)) return empty('invalid-request')
     const root = realpathSync(source)
     const budget = { bytes: 0 }
     const scanned = new Map()
@@ -134,14 +148,14 @@ export const inspectFacts = (source, request, deadlineMs) => {
       if (request.searchPaths) for (const path of request.searchPaths) visit(path)
       else walk(root)
     }
-    if (selected.size > 6) return empty()
+    if (selected.size > 6) return empty('selected-file-limit')
     const facts = []
     for (const [path, indexes] of selected) {
       const { text, fileHash } = scanned.get(path)
       for (const n of indexes) {
         const quote = text.split('\n')[n]
         if (!quote.trim()) continue
-        if (secretContent.test(quote) || quote.includes('\0')) return empty()
+        if (secretContent.test(quote) || quote.includes('\0')) return empty('secret-content')
         const startLine = n + 1
         facts.push({ id: hash(`${path}\n${startLine}\n${quote}\n${fileHash}`), path, startLine, quote, fileHash })
       }
@@ -149,7 +163,9 @@ export const inspectFacts = (source, request, deadlineMs) => {
     const files = [...scanned].map(([path, value]) => ({ path, fileHash: value.fileHash }))
     const searchScope = request.searchPaths ? { paths: [...new Set(request.searchPaths)], terms: [...new Set(request.terms)] } : undefined
     const view = { facts, files, manifestHash: viewHash(files, searchScope, searchScope ? directories : undefined), incomplete: false, ...(searchScope ? { searchScope, directories } : {}) }
-    if (!validateFacts(root, view, deadlineMs, budget)) return empty()
+    if (Buffer.byteLength(JSON.stringify(view)) > 32768) return empty('output-limit')
+    if (!facts.length) return empty('no-facts')
+    if (!validateFacts(root, view, deadlineMs, budget)) return empty(Date.now() >= deadlineMs ? 'deadline' : 'validation-failed')
     return view
-  } catch { return empty() }
+  } catch (error) { return empty(failureOf(error)) }
 }

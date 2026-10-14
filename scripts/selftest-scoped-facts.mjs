@@ -12,6 +12,8 @@ try {
   writeFileSync(join(root, 'feature/utils.cjs'), 'exports.parseDate = s => Number(s.slice(-2))\n')
   for (let n = 0; n < 201; n++) writeFileSync(join(root, 'unrelated', `${n}.txt`), 'unrelated\n')
   assert.equal(inspect({ paths: [], terms: ['parseDate'] }).incomplete, true, 'legacy whole-project search must still reject incomplete ranges')
+  assert.equal(inspect({ paths: [], terms: ['parseDate'] }).failureReason, 'traversal-limit')
+  assert.equal(inspect({ paths: [], terms: ['noSuchCall'], searchPaths: ['feature/app.cjs'] }).failureReason, 'no-facts')
   const request = { paths: [], terms: ['parseDate'], searchPaths: ['feature'] }
   const scoped = inspect(request)
   assert.equal(scoped.incomplete, false, 'a complete local scope must survive unrelated repository size')

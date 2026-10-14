@@ -14,7 +14,7 @@ const world = (on: Parameters<TestBody>[1], beforeStoreSet?: (key: string, value
     on('store.keys', () => ({ value: [...values.keys()] }))
   }
   const clock = mock.clock(on, { now: Date.UTC(2026, 9, 12) })
-  const state = { calls: 0, reads: 0, validations: 0, outputTokens: 20, logs: [] as string[], pauseStatus: false, inStatus: false, waitStatus: undefined as Promise<void> | undefined, valid: true, incomplete: false, outputs: ['{"paths":["app.cjs"],"terms":["parseDate"]}', packet], wait: undefined as Promise<void> | undefined, rows: [{ role: 'assistant', text: '', toolUses: [{ tool: 'Read', input: { file_path: '/p/util.cjs' }, text: 'exports.parseDate = s => Number(s.slice(-2))' }] }] }
+  const state = { calls: 0, reads: 0, validations: 0, outputTokens: 20, logs: [] as string[], pauseStatus: false, inStatus: false, waitStatus: undefined as Promise<void> | undefined, valid: true, incomplete: false, failureReason: 'traversal-limit', processError: false, modelDelayMs: 0, outputs: ['{"paths":["app.cjs"],"terms":["parseDate"]}', packet], wait: undefined as Promise<void> | undefined, rows: [{ role: 'assistant', text: '', toolUses: [{ tool: 'Read', input: { file_path: '/p/util.cjs' }, text: 'exports.parseDate = s => Number(s.slice(-2))' }] }] }
   on('session.id', () => ({ value: 'facts-session' }))
   on('session.model', () => ({ value: 'fixture' }))
   on('session.cwd', () => ({ value: '/p' }))
@@ -33,15 +33,17 @@ const world = (on: Parameters<TestBody>[1], beforeStoreSet?: (key: string, value
   on('prompt.submit', (_$, e) => ({ text: e.text }) as never)
   on('turn.complete', (_$, e) => ({ text: e.answer }))
   on('process.run', (_$, e) => {
+    if (state.processError) throw Error('secret=private-source-value')
     const request = JSON.parse(e.init?.stdin ?? '{}')
     let result: unknown
-    if (request.action === 'inspect') { state.reads++; result = { ...view, incomplete: state.incomplete, ...(request.request.searchPaths ? { searchScope: { paths: request.request.searchPaths, terms: request.request.terms } } : {}) } }
+    if (request.action === 'inspect') { state.reads++; result = { ...view, incomplete: state.incomplete, ...(state.incomplete ? { failureReason: state.failureReason } : {}), ...(request.request.searchPaths ? { searchScope: { paths: request.request.searchPaths, terms: request.request.terms } } : {}) } }
     else if (request.action === 'validate-facts') { state.validations++; result = state.valid }
     else throw Error('facts mode must never capture or execute')
     return { value: { exitCode: 0, stdout: JSON.stringify(result), stderr: '', isStdoutTruncated: false, isStderrTruncated: false } } as never
   })
   on('model.complete', async () => {
     state.calls++
+    if (state.modelDelayMs) await clock.advance(state.modelDelayMs)
     const text = state.outputs.shift() ?? 'invalid'
     if (state.calls === 2 && state.wait) await state.wait
     return { value: { isAnswered: true, text, usage: { ...usage, output_tokens: state.outputTokens } } } as never
@@ -179,4 +181,43 @@ test('a stalled stage diagnostic write cannot hold a prepared facts packet', { o
   expect(returnedWhileStalled).toBe(true)
   expect(result.additionalContext?.join('\n')).toContain('app.cjs:1')
   expect(state.calls).toBe(2)
+})
+
+for (const [reported, expected] of [['traversal-limit', 'traversal-limit'], ['secret=password-value', 'inspection-unknown']] as const) test(`incomplete source inspection reports only an allowed reason: ${expected}`, { options }, async ($, on) => {
+  const { state } = world(on); await start($)
+  state.incomplete = true; state.failureReason = reported
+  expect((await batch($)).additionalContext).toEqual(['host context'])
+  await batch($)
+  const event = state.logs.find(l => l.includes('FACTS_JOB')) ?? ''
+  expect(JSON.parse(event.slice(event.indexOf('FACTS_JOB') + 10)).reason).toBe(expected)
+  expect(event).not.toContain('password-value')
+  expect(state.calls).toBe(1)
+})
+test('a side response at the output cap records a bounded cause without retaining its text', { options }, async ($, on) => {
+  const { state } = world(on); await start($); state.outputTokens = 2000
+  state.outputs = ['do-not-retain-selector-reply']
+  expect((await batch($)).additionalContext).toEqual(['host context'])
+  const event = state.logs.find(l => l.includes('SIDE_CALL')) ?? ''
+  const data = JSON.parse(event.slice(event.indexOf('SIDE_CALL') + 10))
+  expect(data.reason).toBe('output-limit')
+  expect(data.elapsedMs).toBe(0)
+  expect(event).not.toContain('do-not-retain-selector-reply')
+})
+test('a host process failure records a service cause without putting raw errors in stage logs', { options }, async ($, on) => {
+  const { state } = world(on); await start($)
+  state.processError = true
+  expect((await batch($)).additionalContext).toEqual(['host context'])
+  const event = state.logs.find(l => l.includes('FACTS_JOB')) ?? ''
+  expect(JSON.parse(event.slice(event.indexOf('FACTS_JOB') + 10)).reason).toBe('service-error')
+  expect(event).not.toContain('private-source-value')
+  expect(state.calls).toBe(1)
+})
+test('an answered selection that uses the deadline is distinguished from an inspection rejection', { options }, async ($, on) => {
+  const { state } = world(on); await start($); state.modelDelayMs = 30000
+  expect((await batch($)).additionalContext).toEqual(['host context'])
+  const event = state.logs.find(l => l.includes('FACTS_JOB')) ?? ''
+  const data = JSON.parse(event.slice(event.indexOf('FACTS_JOB') + 10))
+  expect(data.reason).toBe('deadline')
+  expect(data.elapsedMs).toBe(30000)
+  expect(state.reads).toBe(0)
 })

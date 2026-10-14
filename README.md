@@ -94,8 +94,11 @@ search file returns only matching original lines; its complete contents still
 contribute to its hash and version checks. Limits remain shared across all scopes,
 and a scope that exceeds them is rejected. Search scope and terms are hash-bound
 and shown in feedback; absence outside that scope remains unknown. Omitting
-`searchPaths` preserves whole-project search. `FACTS_JOB` records only the attempt
-stage and outcome; an incomplete view never causes a retry or a correctness verdict.
+`searchPaths` preserves whole-project search. `FACTS_JOB` records the attempt
+stage, outcome, fixed failure code, elapsed time and remaining budget, without
+retaining model replies or source content. `SIDE_CALL` adds call timing and a fixed
+provider/output-limit reason. An incomplete view never causes a retry or a
+correctness verdict.
 
 `assistance_mode=existing` remains the default. `probe` and `recovery` are reserved
 and currently run only record rules. `execution_mode` separately controls the

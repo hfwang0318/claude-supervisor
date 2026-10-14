@@ -1,7 +1,8 @@
 export type SourceFact = { id: string; path: string; startLine: number; quote: string; fileHash: string }
 export type FactRequest = { paths: string[]; terms: string[]; searchPaths?: string[] }
 // Host-owned source hashes include searched files, not just returned matches.
-export type FactView = { facts: SourceFact[]; files: { path: string; fileHash: string }[]; manifestHash: string; incomplete: boolean; searchScope?: { paths: string[]; terms: string[] }; directories?: { path: string; entriesHash: string; version: string }[] }
+export type FactInspectionFailure = 'invalid-request' | 'deadline' | 'unsafe-path' | 'symlink' | 'source-missing' | 'source-type' | 'file-limit' | 'read-limit' | 'traversal-limit' | 'selected-file-limit' | 'source-changed' | 'secret-content' | 'output-limit' | 'no-facts' | 'validation-failed' | 'inspection-error' | 'inspection-unknown' | 'invalid-view' | 'redaction-rejected'
+export type FactView = { facts: SourceFact[]; files: { path: string; fileHash: string }[]; manifestHash: string; incomplete: boolean; failureReason?: FactInspectionFailure; searchScope?: { paths: string[]; terms: string[] }; directories?: { path: string; entriesHash: string; version: string }[] }
 export type AssistInput = { binding: Binding; asked: string; recentFacts: SourceFact[]; symptom: string }
 export type AssistPacket = {
   binding: Binding; kind: 'location' | 'probe' | 'recovery'; question: string

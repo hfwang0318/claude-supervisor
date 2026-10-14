@@ -1,6 +1,6 @@
 # GLM-5.3-Flash 新基线与开发回归
 
-状态：主模型／审查模型均为 GLM-5.3-Flash；实现与免费检查已完成，完整模型基线执行中。
+状态：主模型／审查模型均为 GLM-5.3-Flash；实现与免费检查已完成，完整 60 次模型基线及审计已完成（2026-10-15 02:01 CST）。
 
 ## 目的与模型身份
 
@@ -59,7 +59,7 @@ node eval/swe-pro/run.mjs --selection eval/results/swe-pro-glm53-flash/baseline-
 `node scripts/check.mjs` 通过：149 个 host tests、类型／manifest 校验、真实进程隔离检查、各套 scorer self-tests 和 9 组 SWE 适配器检查。
 30 题离线插件启动检查通过；30 题空 patch／官方参考 patch 的 hash 绑定校准及 300 份任务材料校验通过。
 最小付费路由检查的请求、返回及 Router 访问／用量标签均为 Flash；64-token 请求仅有 thinking，256-token 请求返回 OK。
-这些检查验证机制、环境与路由，完整模型结果仍待全部结束。
+这些检查验证机制、环境与路由；最终模型结果和限制见[基线交付报告](2026-10-15-glm53-flash-results.md)。
 
 首轮因供应商五小时额度于 16:24–16:28 返回 429／1308，16:28:39 停止；供应商提示恢复时间为北京时间 17:12:38。
 原始 `baseline/` 的 7 份记录保持不变。新的 `baseline-resumed/` 保留 4 份已独立评分记录，仅排除没有任何成功模型响应／补丁的 3 份基础设施尝试：
@@ -80,7 +80,7 @@ Element Web facts 全部为额度拒绝；Ansible／Vuls facts 在免费环境�
 node eval/swe-pro/run.mjs --continue-from eval/results/swe-pro-glm53-flash/baseline-resumed --continue-adapter eval/results/swe-pro-glm53-flash/adapter-two-workers --out eval/results/swe-pro-glm53-flash/baseline-four-workers --jobs 4 --allow-memory-overcommit --dry-run
 ```
 
-最终统计待模型基线完整结束后填写，不得将免费检查或部分模型结果标记为基线完成。
+最终统计：existing 22 pass／8 fail／0 unknown；facts 21 pass／7 fail／2 unknown。60 份回执全部审计，43 个正结果核对官方必需测试；事实包仍为 0。固定快速回归为 NodeBB 8ca65b0 与 Ansible 42355d1；失败／未知并集为 12 题／24 次，见交付报告。
 
 ## 持续资源监测与自适应调度
 

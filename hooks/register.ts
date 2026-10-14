@@ -220,14 +220,17 @@ const ask = async ($: EngineInterface, prompt: string, timeoutMs = 30000, jobSig
   const budget = s.coordinator.reserveCall(await $.clock.now(), 2000)
   if (!budget) return undefined
   const callBinding = { ...s.coordinator.binding }
+  const startedAt = await $.clock.now()
   const reply = await $.model.complete({ model: selection.modelId, prompt: redact(prompt), maxTokens: budget.maxTokens, timeoutMs: Math.min(timeoutMs, budget.timeoutMs) }, jobSignal ? { signal: jobSignal } : undefined).catch((err: unknown) => {
     say($, `configured side model unavailable: ${String(err)}`)
     return undefined
   })
+  const elapsedMs = Math.max(0, await $.clock.now() - startedAt)
   const outputCapped = !!reply && reply.usage.output_tokens >= budget.maxTokens
-  const callEvent = { schemaVersion: 1, kind: 'side-call', callId: `${callBinding.sessionId}/${callBinding.generationId}/${callBinding.turnId}/${++s.jobNumber}`, modelId: selection.modelId, binding: callBinding, usage: reply?.usage ?? null, result: reply?.isAnswered && !outputCapped ? 'answered' : 'unknown' }
+  const reason = outputCapped ? 'output-limit' : !reply ? 'provider-error' : !reply.isAnswered ? 'provider-unanswered' : null
+  const callEvent = { schemaVersion: 1, kind: 'side-call', callId: `${callBinding.sessionId}/${callBinding.generationId}/${callBinding.turnId}/${++s.jobNumber}`, modelId: selection.modelId, binding: callBinding, usage: reply?.usage ?? null, elapsedMs, timeoutMs: Math.min(timeoutMs, budget.timeoutMs), reason, result: reply?.isAnswered && !outputCapped ? 'answered' : 'unknown' }
   await remember($, callEvent)
-  say($, `SIDE_CALL ${JSON.stringify({ callId: callEvent.callId, modelId: callEvent.modelId, result: callEvent.result, input: reply?.usage.input_tokens ?? null, output: reply?.usage.output_tokens ?? null, cached: reply?.usage.cache_read_input_tokens ?? null, created: reply?.usage.cache_creation_input_tokens ?? null })}`)
+  say($, `SIDE_CALL ${JSON.stringify({ callId: callEvent.callId, modelId: callEvent.modelId, result: callEvent.result, reason, elapsedMs, timeoutMs: callEvent.timeoutMs, input: reply?.usage.input_tokens ?? null, output: reply?.usage.output_tokens ?? null, cached: reply?.usage.cache_read_input_tokens ?? null, created: reply?.usage.cache_creation_input_tokens ?? null })}`)
   await selectionOf($)
   if (!sameBinding(callBinding, s.coordinator.binding)) return reply
   if (!reply || !reply.isAnswered || outputCapped) { s.coordinator.recordFailure(); s.modelDisabled = true }
@@ -249,10 +252,16 @@ const locationFacts = async ($: EngineInterface, list: Rows): Promise<PreparedFa
   s.factsAttempted = true
   const input: AssistInput = { binding, asked: s.asked, recentFacts: [], symptom }
   const host = hostOf($, job.signal)
-  const deadlineMs = await $.clock.now() + s.coordinator.remainingTime(await $.clock.now())
+  const startedAt = await $.clock.now()
+  const deadlineMs = startedAt + s.coordinator.remainingTime(startedAt)
+  let reason: string | null = 'unknown'
   const current = async () => {
     await selectionOf($)
-    return !job.signal.aborted && sameBinding(binding, s.coordinator.binding) && await isOn($) && await $.clock.now() < deadlineMs
+    if (!sameBinding(binding, s.coordinator.binding)) { reason = 'stale-binding'; return false }
+    if (job.signal.aborted) { reason = 'cancelled'; return false }
+    if (!await isOn($)) { reason = 'disabled'; return false }
+    if (await $.clock.now() >= deadlineMs) { reason = 'deadline'; return false }
+    return true
   }
   let finished = false
   let stage: 'selection' | 'inspection' | 'packet' = 'selection'
@@ -261,34 +270,40 @@ const locationFacts = async ($: EngineInterface, list: Rows): Promise<PreparedFa
     if (!await current()) return null
     const firstPrompt = factRequestPrompt(input.asked, symptom)
     const first = await ask($, firstPrompt, deadlineMs - await $.clock.now(), job.signal)
-    if (!first?.isAnswered || !await current()) return null
+    if (!await current()) return null
+    if (!first?.isAnswered) { reason = 'side-unanswered'; return null }
     const request = parseFactRequest(first.text)
-    if (!request) { outcome = first.text.trim() === 'null' ? 'abstained' : 'invalid'; return null }
+    if (!request) { outcome = first.text.trim() === 'null' ? 'abstained' : 'invalid'; reason = outcome === 'abstained' ? 'no-request' : 'invalid-request'; return null }
     stage = 'inspection'
     const view = await host.inspectFacts(request, deadlineMs)
-    if (view.incomplete || !await current()) return null
+    if (!await current()) return null
+    if (view.incomplete) { reason = view.failureReason ?? 'inspection-unknown'; return null }
     stage = 'packet'
     const secondPrompt = assistPacketPrompt(input, view)
-    if (bytesOf(firstPrompt) + bytesOf(secondPrompt) > 65536) return null
+    if (bytesOf(firstPrompt) + bytesOf(secondPrompt) > 65536) { reason = 'input-limit'; return null }
     const second = await ask($, secondPrompt, deadlineMs - await $.clock.now(), job.signal)
-    if (!second?.isAnswered || !await current()) return null
+    if (!await current()) return null
+    if (!second?.isAnswered) { reason = 'side-unanswered'; return null }
     const packet = buildAssistPacket(input, view, second.text)
-    if (!packet) { outcome = second.text.trim() === 'null' ? 'abstained' : 'invalid'; return null }
+    if (!packet) { outcome = second.text.trim() === 'null' ? 'abstained' : 'invalid'; reason = outcome === 'abstained' ? 'no-packet' : 'invalid-packet'; return null }
     if (!await current()) return null
     const note = assistNote(packet, view)
-    if (bytesOf(note) > 32768) return null
+    if (bytesOf(note) > 32768) { reason = 'output-limit'; return null }
     finished = s.coordinator.finish(id, binding, 'succeeded', await $.clock.now())
-    if (!finished) return null
+    if (!finished) { reason = 'stale-binding'; return null }
     outcome = 'prepared'
+    reason = null
     return { id, packet, view, note, signal: job.signal, deadlineMs }
   } catch (error) {
+    reason = 'service-error'
     await remember($, { kind: 'assistance', binding, result: 'unknown', reason: redact(String(error)) })
     return null
   } finally {
     if (!finished) s.coordinator.finish(id, binding, 'failed', await $.clock.now())
-    const event = { kind: 'assistance-attempt', binding, jobId: id, stage, result: outcome }
+    const elapsedMs = Math.max(0, await $.clock.now() - startedAt)
+    const event = { kind: 'assistance-attempt', binding, jobId: id, stage, result: outcome, reason, elapsedMs, remainingMs: Math.max(0, deadlineMs - await $.clock.now()) }
     void remember($, event)
-    say($, `FACTS_JOB ${JSON.stringify({ jobId: id, stage, result: outcome })}`)
+    say($, `FACTS_JOB ${JSON.stringify({ jobId: id, stage, result: outcome, reason, elapsedMs, remainingMs: event.remainingMs })}`)
   }
 }
 

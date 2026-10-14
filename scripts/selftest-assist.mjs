@@ -58,5 +58,13 @@ try {
   for (let n = 0; n < 201; n++) writeFileSync(join(wide, `${n}.cjs`), 'no matches\n')
   assert.equal((await inspect({ paths: [], terms: ['absent'] })).incomplete, true)
   assert.equal((await handle({ action: 'inspect', root, request: { paths: ['secret.cjs'], terms: [] }, deadlineMs: Date.now() - 1 })).incomplete, true)
+  const missing = await inspect({ paths: ['missing.cjs'], terms: [] })
+  assert.equal(missing.failureReason, 'source-missing', 'a missing source must be distinct from a deadline or safety rejection')
+  assert.deepEqual(missing.facts, []); assert.deepEqual(missing.files, [])
+  assert.equal((await inspect({ paths: ['huge.cjs'], terms: [] })).failureReason, 'file-limit')
+  assert.equal((await inspect({ paths: ['many.cjs'], terms: [] })).failureReason, 'output-limit')
+  assert.equal((await inspect({ paths: ['secret.cjs'], terms: [] })).failureReason, 'secret-content')
+  assert.equal((await inspect({ paths: ['../outside'], terms: [] })).failureReason, 'invalid-request')
+  assert.equal((await handle({ action: 'inspect', root, request: { paths: ['secret.cjs'], terms: [] }, deadlineMs: Date.now() - 1 })).failureReason, 'deadline')
   console.log('real facts selftest: exact imports, source changes, deletion, paths, symlinks, secret lines, byte/file/output limits and deadlines passed')
 } finally { rmSync(root, { recursive: true, force: true }) }

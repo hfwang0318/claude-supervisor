@@ -5,7 +5,7 @@ export const selectSideModel = (configured: string, workerId: string): ModelSele
   return { modelId, reason: modelId === null ? 'worker model unavailable; choose a side model explicitly' : '' }
 }
 
-import type { Binding, ExecutionEvidence, Snapshot, FactView } from '../supervisor/contracts'
+import type { Binding, ExecutionEvidence, Snapshot, FactView, FactInspectionFailure } from '../supervisor/contracts'
 import type { Host } from '../supervisor/ports'
 import { classifyOutput } from '../supervisor/runner'
 
@@ -19,11 +19,16 @@ type Dependencies = {
   sanitize(text: string): string
 }
 
+const INSPECTION_FAILURES: readonly FactInspectionFailure[] = ['invalid-request', 'deadline', 'unsafe-path', 'symlink', 'source-missing', 'source-type', 'file-limit', 'read-limit', 'traversal-limit', 'selected-file-limit', 'source-changed', 'secret-content', 'output-limit', 'no-facts', 'validation-failed', 'inspection-error']
+const incompleteView = (failureReason: FactInspectionFailure): FactView => ({ facts: [], files: [], manifestHash: '', incomplete: true, failureReason })
+
 export const createHost = (deps: Dependencies): Host => ({
   now: deps.now, identity: deps.identity, cwd: deps.cwd, persist: deps.persist, deliver: deps.deliver,
   inspectFacts: async (request, deadlineMs) => {
     const value = await deps.service({ action: 'inspect', root: await deps.cwd(), request, deadlineMs }, deadlineMs) as FactView
-    if (!value || !Array.isArray(value.facts) || !Array.isArray(value.files) || value.incomplete !== false || deps.sanitize(JSON.stringify(value)) !== JSON.stringify(value)) return { facts: [], files: [], manifestHash: '', incomplete: true }
+    if (!value || !Array.isArray(value.facts) || !Array.isArray(value.files)) return incompleteView('invalid-view')
+    if (value.incomplete !== false) return incompleteView(INSPECTION_FAILURES.includes(value.failureReason as FactInspectionFailure) ? value.failureReason as FactInspectionFailure : 'inspection-unknown')
+    if (deps.sanitize(JSON.stringify(value)) !== JSON.stringify(value)) return incompleteView('redaction-rejected')
     return value
   },
   validateFacts: async (view, deadlineMs) => await deps.service({ action: 'validate-facts', root: await deps.cwd(), view, deadlineMs }, deadlineMs) === true,
