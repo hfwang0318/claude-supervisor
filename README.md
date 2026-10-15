@@ -108,6 +108,9 @@ For this grounded local scope the side model selects up to six short fact IDs;
 the host resolves their original source bindings and supplies neutral wording.
 Ordinary function calls such as `dispatch(retry(...))` count as call evidence,
 as do imports and member calls; definitions alone still do not.
+Ordinary calls already visible in a successful project `Read` also suppress a
+missing-caller job, including line-numbered output. Quoted mentions, failed
+reads and reads outside the project do not establish such a caller.
 This still permits only one inspection per job; a rejected local scope stays
 unknown. Identifier matching uses whole identifiers, so `cli` inside `client`
 cannot consume the prompt's only facts job. `FACTS_JOB.selectionMethod` records

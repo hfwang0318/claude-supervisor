@@ -8,6 +8,8 @@ const objectOf = (text: string): Record<string, unknown> | null => {
 const keys = (value: Record<string, unknown>, allowed: string[]) => Object.keys(value).every(k => allowed.includes(k))
 const pathOK = (path: unknown): path is string => typeof path === 'string' && path.length > 0 && path.length <= 512 && !path.startsWith('/') && !/[\\\x00-\x1f]/.test(path) && path.split('/').every(s => s && s !== '.' && s !== '..' && !/^(?:\.env(?:\..*)?|\.ssh|\.aws|\.gnupg|\.git|\.superpowers|node_modules|id_rsa|credentials(?:\..*)?)$|\.(?:pem|key)$/i.test(s))
 const textOK = (text: unknown, max = 2048): text is string => typeof text === 'string' && text.trim().length > 0 && bytesOf(text) <= max && redact(text) === text
+const bareCallSource = (quote: string) => /^\s*(?:(?:return|await)\s+|(?:(?:const|let|var)\s+)?[\w$.]+\s*=\s*)?(?!(?:if|for|while|switch|catch|with|function)\b)[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*\s*\(/.test(quote)
+const callSource = (quote: string) => !/\b(?:function|def)\b|(?:exports\.\w+|(?:const|let)\s+\w+)\s*=/.test(quote) && /\b[\w$]+(?:\.[\w$]+)+\s*\(/.test(quote) || bareCallSource(quote)
 // The observed candidate anchors the identifiers; only literal source files in
 // the requirement add scope. Missing or unsafe files still fail at inspection.
 export const localFactRequest = (asked: string, symptom: string): FactRequest | null => {
@@ -51,7 +53,7 @@ export const buildAssistPacket = (input: AssistInput, view: FactView, text: stri
   if (value.kind !== 'location' || value.requiresMainJudgment !== true || !textOK(value.question) || !textOK(value.requirementQuote) || !input.asked.includes(value.requirementQuote) || !textOK(value.explanation) || value.nextCheck !== null && !textOK(value.nextCheck)) return null
   if (!Array.isArray(value.factIds) || value.factIds.length < 1 || value.factIds.length > 64 || !value.factIds.every(id => typeof id === 'string' && view.facts.some(f => f.id === id && pathOK(f.path) && f.startLine > 0 && textOK(f.quote, 32768) && view.files.some(file => file.path === f.path && file.fileHash === f.fileHash))) || !Array.isArray(value.observationIds) || value.observationIds.length !== 0) return null
   const sources = view.facts.filter(f => value.factIds instanceof Array && value.factIds.includes(f.id))
-  if (!sources.some(f => /\brequire\s*\(|\bimport\s|\bfrom\s/.test(f.quote) || !/\b(?:function|def)\b|(?:exports\.\w+|(?:const|let)\s+\w+)\s*=/.test(f.quote) && /\b[\w$]+(?:\.[\w$]+)+\s*\(/.test(f.quote) || /^\s*(?:(?:return|await)\s+|(?:(?:const|let|var)\s+)?[\w$.]+\s*=\s*)?(?!(?:if|for|while|switch|catch|with|function)\b)[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*\s*\(/.test(f.quote))) return null
+  if (!sources.some(f => /\brequire\s*\(|\bimport\s|\bfrom\s/.test(f.quote) || callSource(f.quote))) return null
   return { binding: { ...input.binding }, kind: 'location', question: value.question, requirementQuote: value.requirementQuote, factIds: [...new Set(value.factIds)], observationIds: [], explanation: value.explanation, nextCheck: value.nextCheck as string | null, requiresMainJudgment: true }
 }
 // In a grounded local scope the side model only selects source IDs. The host
@@ -82,6 +84,12 @@ export const assistNote = (packet: AssistPacket, view: FactView) => [
 
 type Row = { role: string; text: string; toolUses?: readonly { tool: string; input: unknown; text?: string; isError?: true }[] }
 const hasIdentifier = (text: string, name: string) => new RegExp(`(^|[^A-Za-z0-9_$])${name.replaceAll('$', '\\$')}(?![A-Za-z0-9_$])`).test(text)
+const knownCall = (line: string, name: string) => {
+  // Read's line numbers are metadata. Ignore anything inside/after a literal or
+  // comment rather than treating a printed call as an observed source caller.
+  const code = line.replace(/^\s*\d+[→\t]/, '').split(/['"`]|\/\/|#/, 1)[0] ?? ''
+  return callSource(code) && new RegExp(`(^|[^A-Za-z0-9_$])${name.replaceAll('$', '\\$')}\\s*\\(`).test(code)
+}
 // Observe a candidate implementation missing call/import context, or a concrete API
 // error. No reading-count heuristic, guessed target or pre-edit interception.
 export const assistSignal = (asked: string, rows: readonly Row[], cwd: string): string | null => {
@@ -102,7 +110,12 @@ export const assistSignal = (asked: string, rows: readonly Row[], cwd: string): 
     const definitions = [...output.matchAll(/(?:function\s+|def\s+)([A-Za-z_$][\w$]*)|(?:(?:const|let)\s+|exports\.)([A-Za-z_$][\w$]*)\s*=\s*(?:\([^)]*\)|\w+)\s*=>/g)].map(m => m[1] ?? m[2] ?? '')
     const relevant = definitions.filter(name => name.length > 2 && hasIdentifier(asked, name))
     // Imports of other dependencies say nothing about this function's caller.
-    const missing = relevant.filter(name => !uses.some(u => (u.text ?? '').split('\n').some(line => hasIdentifier(line, name) && /\brequire\s*\(|\bimport\s|\bfrom\s/.test(line))))
+    const missing = relevant.filter(name => !uses.some(u => {
+      const source = (u.input ?? {}) as Record<string, unknown>
+      const prefix = cwd.replace(/\/$/, '') + '/'
+      const projectRead = u.tool === 'Read' && !u.isError && typeof source.file_path === 'string' && source.file_path.startsWith(prefix) && pathOK(source.file_path.slice(prefix.length))
+      return (u.text ?? '').split('\n').some(line => hasIdentifier(line, name) && (/\brequire\s*\(|\bimport\s|\bfrom\s/.test(line) || projectRead && knownCall(line, name)))
+    }))
     if (missing.length) return `Observed candidate ${path} defines ${missing.slice(0, 3).join(', ')}; no related actual caller/import or API contract is present. Check whether additional source facts are needed.`
   }
   return null

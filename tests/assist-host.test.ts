@@ -79,6 +79,12 @@ test('a rejected local scope stays unknown without another inspection or guessed
   expect(state.calls).toBe(0); expect(state.reads).toBe(1)
   expect((await batch($)).additionalContext).toEqual(['host context'])
 })
+test('a known ordinary caller in the tool results spends no facts calls or reads', { options }, async ($, on) => {
+  const { state } = world(on); await start($)
+  state.rows[0]!.toolUses.push({ tool: 'Read', input: { file_path: '/p/app.cjs' }, text: '38\t    dispatch(parseDate(input));' })
+  expect((await batch($)).additionalContext).toEqual(['host context'])
+  expect(state.calls).toBe(0); expect(state.reads).toBe(0)
+})
 
 test('facts mode appends actual source after a batch once, preserves host context and never runs existing review', { options }, async ($, on) => {
   const { state } = world(on); await start($)

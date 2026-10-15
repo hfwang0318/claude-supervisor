@@ -115,6 +115,20 @@ test('an identifier appearing only inside a different word cannot spend the one 
   expect(assistSignal('Move entropy from the client to src/api/worker/facades/EntropyFacade.ts.', rows, '/p')).toBeNull()
   expect(assistSignal('Fix cli used by app.cjs.', rows, '/p')).not.toBeNull()
 })
+test('an actual caller already returned in the current tool batch is not missing evidence', async () => {
+  const rows = [{ role: 'assistant', text: '', toolUses: [
+    { tool: 'Read', input: { file_path: '/p/app.cjs' }, text: '38\t                dispatch(parseDate(input));' },
+    { tool: 'Read', input: { file_path: '/p/util.cjs' }, text: '36\texports.parseDate = input => input' },
+  ] }]
+  expect(assistSignal(input.asked, rows, '/p')).toBeNull()
+  const quotesOnly = [{ ...rows[0]!, toolUses: [{ ...rows[0]!.toolUses[0]!, text: 'const note = "parseDate(input)"' }, rows[0]!.toolUses[1]!] }]
+  expect(assistSignal(input.asked, quotesOnly, '/p')).not.toBeNull()
+  for (const caller of [
+    { ...rows[0]!.toolUses[0]!, input: { file_path: '/elsewhere/app.cjs' } },
+    { ...rows[0]!.toolUses[0]!, isError: true as const },
+    { ...rows[0]!.toolUses[0]!, text: 'dispatch("parseDate(input)")' },
+  ]) expect(assistSignal(input.asked, [{ ...rows[0]!, toolUses: [caller, rows[0]!.toolUses[1]!] }], '/p')).not.toBeNull()
+})
 
 test('definition-only location advice cannot stand in for an actual import or call source', async () => {
   const v = { ...view, facts: [{ ...view.facts[0]!, quote: 'exports.parseDate = s => Number(s.slice(-2))' }] }
