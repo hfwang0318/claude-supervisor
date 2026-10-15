@@ -62,3 +62,22 @@ test('an all-clear answer cannot claim dimensions without their context', async 
   expect(parseReview(c, JSON.stringify({ reviewed: ['architecture'], judgment: null, action: { kind: 'none' } }))).toBeNull()
   expect(parseReview(c, JSON.stringify({ reviewed: [], judgment: null, action: { kind: 'none' } }))).not.toBeNull()
 })
+test('negated, historical or quoted plan words cannot manufacture a current plan', async () => {
+  for (const text of ['目前没有方案，先读取现有实现。', '还没计划好，先看代码。', '这段注释里有“计划”二字。', '> Plan: replace the API.', 'The old plan was rejected.']) {
+    const c = buildReviewContext(binding, asked, [{ role: 'assistant', text, toolUses: [] }], '', 'plan')!
+    expect(c.sources.some(s => s.kind === 'plan')).toBe(false)
+    expect(parseReview(c, JSON.stringify({ reviewed: ['requirement-plan'], judgment: null, action: { kind: 'none' } }))).toBeNull()
+  }
+  expect(buildReviewContext(binding, asked, [{ role: 'assistant', text: '方案：保留接口并修复内部实现。', toolUses: [] }], '', 'plan')!.sources.some(s => s.kind === 'plan')).toBe(true)
+})
+test('verification context retains actual exit status, stderr and truncation instead of success-looking text alone', async () => {
+  const c = buildReviewContext(binding, asked, [{ role: 'assistant', text: '', toolUses: [{ tool: 'Bash', input: { command: 'npm test' }, text: '1 passed', result: { exitCode: 1, isStdoutTruncated: true, stderr: 'AssertionError: hidden failure' } }] }], '', 'completion')!
+  const observed = JSON.parse(c.sources.find(s => s.kind === 'observation')!.text)
+  expect(observed.exitCode).toBe(1)
+  expect(observed.truncated).toBe(true)
+  expect(observed.output).toContain('AssertionError: hidden failure')
+  expect(c.scope.omitted).toContain('observation-incomplete')
+  const pending = buildReviewContext(binding, asked, [{ role: 'assistant', text: '', toolUses: [{ tool: 'Bash', input: { command: 'npm test' } }] }], '', 'completion')!
+  expect(pending.sources.some(s => s.kind === 'observation')).toBe(false)
+  expect(parseReview(pending, JSON.stringify({ reviewed: ['verification'], judgment: null, action: { kind: 'none' } }))).toBeNull()
+})

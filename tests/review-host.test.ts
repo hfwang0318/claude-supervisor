@@ -4,14 +4,19 @@ const options = { assistance_mode: 'supervise', execution_mode: 'off', verifier_
 const reply = () => JSON.stringify({ reviewed: ['architecture'], judgment: { dimension: 'architecture', question: 'Should the public interface be replaced?', requirementQuote: 'Preserve the API.', sourceIds: ['req', 'plan-1'], reason: 'The proposed replacement removes the existing entry point.', impact: 'Caller compatibility.', recommendation: 'adjust', uncertainty: 'The complete caller set is unknown.' }, action: { kind: 'none' } })
 const world = (on: Parameters<TestBody>[1]) => {
   mock.store(on); const clock = mock.clock(on, { now: 100000 })
-  const state = { calls: 0, timeouts: [] as number[], prompts: [] as string[], logs: [] as string[], wait: undefined as Promise<void> | undefined, outputs: [reply(), reply()], rows: [{ role: 'assistant', text: 'Plan: replace the public method.', toolUses: [{ tool: 'Read', input: { file_path: '/p/api.js' }, text: 'exports.old = () => 1' }] }] }
+  const state = { calls: 0, timeouts: [] as number[], prompts: [] as string[], logs: [] as string[], processActions: [] as string[], validateDelay: 0, wait: undefined as Promise<void> | undefined, outputs: [reply(), reply()], rows: [{ role: 'assistant', text: 'Plan: replace the public method.', toolUses: [{ tool: 'Read', input: { file_path: '/p/api.js' }, text: 'exports.old = () => 1' }] }] }
   on('session.id', () => ({ value: 'review-session' })); on('session.model', () => ({ value: 'fixture' })); on('session.cwd', () => ({ value: '/p' })); on('session.messages', () => ({ value: state.rows }) as never)
   on('env.get', () => ({ value: 'on' })); on('ui.status', () => ({ value: undefined })); on('ui.log', (_$, e) => { state.logs.push(e.text); return { value: undefined } })
   on('command.register', (_$, e) => ({ value: { command: e.name } })); on('session.start', () => ({ cwd: '/p' })); on('prompt.submit', (_$, e) => ({ text: e.text }) as never)
   on('classic.PostToolBatch', () => ({ additionalContext: ['host context'] }) as never); on('classic.Stop', () => ({}) as never)
   on('turn.complete', (_$, e) => ({ text: e.answer }))
   on('model.complete', async (_$, e) => { state.calls++; state.timeouts.push(e.timeoutMs ?? 0); state.prompts.push(e.prompt); if (state.wait) await state.wait; return { value: { isAnswered: true, text: state.outputs.shift() ?? 'null', usage: { input_tokens: 10, output_tokens: 20 } } } as never })
-  on('process.run', () => ({ value: { exitCode: 0, stdout: 'null', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }) as never)
+  on('process.run', async (_$, e) => {
+    const request = JSON.parse(e.init?.stdin ?? '{}'); state.processActions.push(request.action)
+    if (request.action === 'validate-facts' && state.validateDelay) await clock.advance(state.validateDelay)
+    const value = request.action === 'inspect' ? { facts: [{ id: 'f1', path: 'api.js', startLine: 1, quote: 'exports.old = () => 1', fileHash: 'h' }], files: [{ path: 'api.js', fileHash: 'h' }], manifestHash: 'm', incomplete: false } : request.action === 'validate-facts' ? true : null
+    return { value: { exitCode: 0, stdout: JSON.stringify(value), stderr: '', isStdoutTruncated: false, isStderrTruncated: false } } as never
+  })
   return { state, clock }
 }
 const start = async ($: Parameters<TestBody>[0]) => { await $.session.start({ cwd: '/p', surface: 'terminal', isInteractive: false }); await $.prompt.submit({ text: 'Preserve the API.', origin: { kind: 'sdk' } } as never) }
@@ -134,4 +139,28 @@ test('a grounded continue judgment without new evidence does not interrupt the w
   const d = JSON.parse(reply()); d.judgment.recommendation = 'continue'; state.outputs = [JSON.stringify(d)]
   expect((await batch($)).additionalContext).toEqual(['host context'])
   expect(state.logs.some(l => l.includes('REVIEW_DELIVERY'))).toBe(false)
+})
+
+test('source validation time is charged before another review can start', { options }, async ($, on) => {
+  const { state } = world(on); await start($)
+  const d = JSON.parse(reply()); d.action = { kind: 'location', request: { paths: ['api.js'], terms: [] } }; state.outputs = [JSON.stringify(d), reply()]; state.validateDelay = 20000
+  expect((await batch($)).additionalContext?.join('\n')).toContain('Supplemental verified')
+  state.rows[0]!.text = 'Plan: preserve the public method through an adapter.'
+  await batch($)
+  expect(state.calls).toBe(2)
+  expect(state.timeouts[1]! <= 10000).toBe(true)
+})
+test('budget and invalid protocol skips have bounded phase-specific unreviewed diagnostics', { options }, async ($, on) => {
+  const { state } = world(on); await start($)
+  state.outputs = ['not json', reply()]
+  await batch($)
+  expect(state.logs.some(l => l.includes('invalid-review-protocol'))).toBe(true)
+  state.rows[0]!.text = 'Plan: preserve the public method through an adapter.'
+  await batch($)
+  await $.classic.Stop({ last_assistant_message: 'Finished.' } as never)
+  const skips = state.logs.filter(l => l.includes('budget-exhausted') && l.includes('completion'))
+  expect(skips.length).toBe(1)
+  await $.classic.Stop({ last_assistant_message: 'Finished.' } as never)
+  expect(state.logs.filter(l => l.includes('budget-exhausted') && l.includes('completion')).length).toBe(1)
+  expect(state.calls).toBe(2)
 })

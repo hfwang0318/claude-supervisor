@@ -20,3 +20,13 @@ test('unknown evidence IDs or a success after the chosen failures cannot support
   expect(buildRecoveryPacket(c, ['invented'], 'What next?')).toBeNull()
   expect(buildRecoveryPacket(context(['AssertionError: a', 'AssertionError: a', 'AssertionError: a', 'PASS']), ['tool-1', 'tool-2', 'tool-3'], 'What next?')).toBeNull()
 })
+test('successful undefined output and a newer unavailable result cannot be called three recent failures', async () => {
+  const uses = Array.from({ length: 3 }, () => ({ tool: 'Bash', input: { command: 'npm test' }, text: 'PASS handles undefined correctly\n10 passed', result: { exitCode: 0 } }))
+  const c = buildReviewContext(binding, 'Empty input must return zero.', [{ role: 'assistant', text: '', toolUses: uses }], '', 'failure')!
+  expect(recoveryObservations(c)).toEqual([])
+  for (const latest of [{ tool: 'Bash', input: { command: 'node check.js' }, text: 'PASS\n' + 'x'.repeat(10000) }, { tool: 'Bash', input: { command: 'node check.js' }, text: 'password=private-value-123' }, { tool: 'Bash', input: { command: 'node check.js' } }]) {
+    const previous = Array.from({ length: 3 }, () => ({ tool: 'Bash', input: { command: 'node check.js' }, text: 'AssertionError: expected zero', isError: true as const }))
+    const bounded = buildReviewContext(binding, 'Empty input must return zero.', [{ role: 'assistant', text: '', toolUses: [...previous, latest] }], '', 'failure')!
+    expect(recoveryObservations(bounded)).toEqual([])
+  }
+})

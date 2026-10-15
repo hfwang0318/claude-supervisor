@@ -5,12 +5,13 @@ const observations = (context: ReviewContext) => context.sources.filter(s => s.k
   try {
     const v = JSON.parse(s.text)
     if (v.tool !== 'Bash' || typeof v.input?.command !== 'string' || typeof v.output !== 'string') return []
-    const error = v.output.split('\n').find((l: string) => /Error|\bFAIL(?:ED)?\b|\b[1-9]\d* failed\b|undefined|not found|No such file/i.test(l))?.trim() ?? ''
-    return [{ id: s.id, command: v.input.command.trim(), output: v.output, failed: v.isError === true || error !== '', signature: error || v.output.trim() }]
+    const error = v.output.split('\n').find((l: string) => /^\s*(?:[\w.]*Error(?:\b|:)|FAIL(?:ED)?(?:\b|:)|[1-9]\d* failed\b|Exit code [1-9]\d*)/i.test(l))?.trim() ?? ''
+    return [{ id: s.id, command: v.input.command.trim(), output: v.output, failed: v.completed === true && v.truncated !== true && (typeof v.exitCode === 'number' ? v.exitCode !== 0 : v.isError === true || error !== ''), signature: error || v.output.trim() || `exit=${v.exitCode}` }]
   } catch { return [] }
 })
 
 export const recoveryObservations = (context: ReviewContext): string[] => {
+  if (context.scope.omitted.includes('observation-incomplete')) return []
   const last = observations(context).slice(-3)
   if (last.length !== 3 || !last.every(o => o.failed && o.signature && o.command === last[0]!.command && o.signature === last[0]!.signature)) return []
   return last.map(o => o.id)

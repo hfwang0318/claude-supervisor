@@ -32,6 +32,10 @@ try {
   const jobs = JSON.parse(preview.stdout).jobs
   assert.ok(jobs.some(j => j.mode === 'facts' && j.assistanceMode === 'supervise'))
   assert.ok(jobs.every(j => j.assistanceMode === (j.mode === 'facts' ? 'supervise' : 'existing')))
+  const short = spawnSync(process.execPath, ['eval/swe-pro/run.mjs', '--experimental-mode', 'supervise', '--task-timeout-ms', '900000', '--dry-run'], { encoding: 'utf8' })
+  assert.equal(short.status, 0, short.stderr)
+  assert.equal(JSON.parse(short.stdout).taskTimeoutMs, 900000)
+  assert.notEqual(spawnSync(process.execPath, ['eval/swe-pro/run.mjs', '--task-timeout-ms', '0', '--dry-run']).status, 0)
   const invalid = spawnSync(process.execPath, ['eval/swe-pro/run.mjs', '--experimental-mode', 'bogus', '--dry-run'], { encoding: 'utf8' })
   assert.notEqual(invalid.status, 0)
   const dims = ['requirement-plan', 'plan-implementation', 'architecture', 'direction', 'exploration', 'verification', 'recovery']
@@ -40,7 +44,10 @@ try {
   assert.deepEqual(Object.keys(metrics.dimensions).sort(), dims.sort())
   assert.equal(metrics.reviews.length, 7)
   assert.equal(metrics.validatedBenefit, 'unknown', 'the presence of advice must not certify correctness or behavior improvement')
+  assert.equal(reviewMetrics('deepseek-supervisor: ASSIST {\"delivery\":\"context-returned\",\"packet\":{\"kind\":\"location\"}}').factsReturned, 1)
+  assert.equal(reviewMetrics('deepseek-supervisor: REVIEW_DELIVERY {\"delivery\":\"context-returned\",\"sourceFactCount\":2}').sourceFactCount, 2)
   assert.equal(metrics.mainActionChanged, 'unknown')
+  assert.equal(reviewMetrics('deepseek-supervisor: REVIEW_DELIVERY {\"delivery\":\"context-returned\"}').factsReturned, 0, 'architecture advice is not a source fact packet')
   assert.equal(metrics.deliveryCount, 0, 'review completion alone cannot stand for delivery')
   assert.ok(readFileSync('eval/experiment.mjs', 'utf8').includes("'supervise'"))
   console.log('Comprehensive review identity/behavior metrics self-tests passed; fixture processes only, no model calls')

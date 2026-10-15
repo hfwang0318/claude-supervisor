@@ -9,15 +9,16 @@ import { captureSnapshot } from './workspace'
 import { executeProbe } from './runner'
 
 export type ReviewFlowPorts = { host: Host; executionMode: 'off' | 'shadow' | 'enabled'; deadlineMs: number; current(): Promise<boolean>; ask(prompt: string): Promise<string | null> }
-export type ReviewOutcome = { note: string | null; reason: string; view: FactView | null; evidence: ExecutionEvidence | null; validate(): Promise<boolean>; cleanup(): Promise<void> }
+export type ReviewOutcome = { note: string | null; reason: string; view: FactView | null; sourceFactIds: string[]; evidence: ExecutionEvidence | null; validate(): Promise<boolean>; cleanup(): Promise<void> }
 
 export const runReviewFlow = async (context: ReviewContext, reply: ReviewReply, ports: ReviewFlowPorts): Promise<ReviewOutcome> => {
   const { host, deadlineMs } = ports
   let snapshot: Snapshot | null = null, view: FactView | null = null, evidence: ExecutionEvidence | null = null, closed = false
+  let sourceFactIds: string[] = []
   let reason = 'prepared', note = reply.judgment ? reviewNote(context, reply) : ''
   const current = async () => await host.now() < deadlineMs && await ports.current()
   const outcome = (): ReviewOutcome => ({
-    note: ports.executionMode === 'shadow' || !note ? null : note, reason, view, evidence,
+    note: ports.executionMode === 'shadow' || !note ? null : note, reason, view, sourceFactIds, evidence,
     validate: async () => await current() && (!view || await host.validateFacts(view, deadlineMs)) && (!snapshot || !!host.validateSnapshot && await host.validateSnapshot(snapshot, deadlineMs)) && await current(),
     cleanup: async () => { if (!closed) { closed = true; if (snapshot) await host.cleanup(snapshot) } },
   })
@@ -39,6 +40,7 @@ export const runReviewFlow = async (context: ReviewContext, reply: ReviewReply, 
           if (!Array.isArray(ids) || !ids.length || ids.length > 6 || !ids.every(id => typeof id === 'string' && /^f[1-9]\d*$/.test(id) && Number(id.slice(1)) <= inspected.facts.length)) { selected = []; reason = 'source-selection-unknown' }
           else selected = [...new Set(ids as string[])].map(id => inspected.facts[Number(id.slice(1)) - 1]!)
         }
+        sourceFactIds = selected.map(f => f.id)
         note += selected.length ? `\n\nSupplemental verified source excerpts (only this supplied scope; dynamic targets and API behavior remain unverified):\n${selected.map(f => `${f.path}:${f.startLine} [sha256 ${f.fileHash}]\n${f.quote}`).join('\n\n')}` : '\n\nNo supplemental source was selected; the review remains advisory.'
       }
     } else if (action.kind === 'probe') {

@@ -3,11 +3,16 @@ import { bytesOf, redact } from '../hooks/prompt'
 import { parseFactRequest } from './assist'
 
 export const REVIEW_DIMENSIONS: ReviewDimension[] = ['requirement-plan', 'plan-implementation', 'architecture', 'direction', 'exploration', 'verification', 'recovery']
-export type ReviewRow = { role: string; text: string; toolUses?: readonly { tool: string; input: unknown; text?: string; isError?: true }[] }
+export type ReviewRow = { role: string; text: string; toolUses?: readonly { tool: string; input: unknown; text?: string; result?: unknown; isError?: true }[] }
 const safeText = (value: unknown, max: number): value is string => typeof value === 'string' && value.trim().length > 0 && bytesOf(value) <= max && redact(value) === value
 const record = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value)
 const only = (value: Record<string, unknown>, fields: string[]) => Object.keys(value).every(key => fields.includes(key))
 const strings = (value: unknown, max = 8): value is string[] => Array.isArray(value) && value.length <= max && value.every(v => safeText(v, 128)) && new Set(value).size === value.length
+
+const explicitPlan = (text: string) => text.replace(/```[\s\S]*?(?:```|$)/g, '').split('\n').some(line => {
+  if (/^\s*(?:>|["'“「])/.test(line)) return false
+  return /^\s*(?:Plan|Approach|方案|计划)\s*[:：]\s*(?!(?:none|unknown|not)(?:\b)|暂无|没有|尚未|未定|待定)\S/i.test(line) || /^\s*(?:I (?:will|intend to)\s+|I'll\s+|我(?:打算|计划|将)\s*[^，。！？])/i.test(line)
+})
 
 export const buildReviewContext = (binding: Binding, asked: string, rows: readonly ReviewRow[], changes: string, phase: ReviewContext['phase']): ReviewContext | null => {
   if (!safeText(asked, 16384)) return null
@@ -17,7 +22,7 @@ export const buildReviewContext = (binding: Binding, asked: string, rows: readon
     context.sources.push(source)
   }
   // Only attributed, explicit plans; an implementation summary is not a plan.
-  const plans = rows.filter(r => r.role === 'assistant' && /\bplan\s*:|\bapproach\s*:|\bI (?:will|intend to)\b|\bI'll\b|方案|计划|打算/i.test(r.text))
+  const plans = rows.filter(r => r.role === 'assistant' && explicitPlan(r.text))
   if (plans.length > 2) context.scope.omitted.push('earlier-plans')
   for (const [index, row] of plans.slice(-2).entries()) add({ id: `plan-${index + 1}`, kind: 'plan', text: row.text }, 8192)
   if (changes.trim()) {
@@ -31,7 +36,16 @@ export const buildReviewContext = (binding: Binding, asked: string, rows: readon
   const tools = rows.filter(r => r.role === 'assistant').flatMap(r => r.toolUses ?? [])
   if (tools.length > 6) context.scope.omitted.push('earlier-tools')
   for (const [index, use] of tools.slice(-6).entries()) {
-    add({ id: `tool-${index + 1}`, kind: use.tool === 'Bash' ? 'observation' : 'tool', text: JSON.stringify({ tool: use.tool, input: use.input, output: use.text ?? '', ...(use.isError ? { isError: true } : {}) }) }, 8192)
+    const result = record(use.result) ? use.result : {}
+    const exit = result.exitCode ?? result.exit_code
+    const exitCode = typeof exit === 'number' && Number.isInteger(exit) ? exit : null
+    const truncated = result.isStdoutTruncated === true || result.isStderrTruncated === true || result.truncated === true
+    const completed = result.status !== 'running' && (exitCode !== null || use.isError === true || typeof use.text === 'string' || typeof result.stdout === 'string' || typeof result.stderr === 'string')
+    const output = [...new Set([use.text, result.stdout, result.stderr].filter((v): v is string => typeof v === 'string'))].join('\n')
+    const source: ReviewSource = { id: `tool-${index + 1}`, kind: use.tool === 'Bash' && completed ? 'observation' : 'tool', text: JSON.stringify({ tool: use.tool, input: use.input, output, ...(use.tool === 'Bash' ? { completed, exitCode, truncated, outputStatus: !completed || truncated ? 'unknown' : 'recorded' } : {}), ...(use.isError ? { isError: true } : {}) }) }
+    const before = context.sources.length
+    add(source, 8192)
+    if (use.tool === 'Bash' && (before === context.sources.length || !completed || truncated)) context.scope.omitted.push('observation-incomplete')
   }
   return context
 }
