@@ -5,7 +5,7 @@ import type { Issue, Reading, Track } from '../types'
 import type { Binding, ExecutionEvidence, AssistInput, AssistPacket, FactView } from '../supervisor/contracts'
 import { validateObservation, normalizeTrack } from '../supervisor/ledger'
 import { captureSnapshot } from '../supervisor/workspace'
-import { buildAssistPacket, parseFactRequest, assistSignal, assistNote, localFactRequest } from '../supervisor/assist'
+import { buildAssistPacket, buildLocalAssistPacket, parseFactRequest, assistSignal, assistNote, localFactRequest } from '../supervisor/assist'
 import { Coordinator, sameBinding } from '../supervisor/coordinator'
 import { selectSideModel, createHost } from './host'
 import { registerBand } from './band'
@@ -13,7 +13,7 @@ import { HISTORY as READINGS_KEPT, readingOf } from './weather'
 import type { Finding, Kind } from './evidence'
 import { changesOf, contradictions, evidenceOf, isCheckClaim, isCheckCommand, isCheckKind, isClaim, keyOf, recordFindings, settledBy, skipped, supports, unreported } from './evidence'
 import type { Facts, Mode, VerifyInput, VerifyResult } from './prompt'
-import { assistPacketPrompt, factRequestPrompt, base, bytesOf, claimsOf, clip,  factsOf, isSameItem, noteText, parseTurn, probeRefusal, redact, refusal, ROUNDS, shown, squash, verifyPrompt } from './prompt'
+import { assistPacketPrompt, localPacketPrompt, factRequestPrompt, base, bytesOf, claimsOf, clip,  factsOf, isSameItem, noteText, parseTurn, probeRefusal, redact, refusal, ROUNDS, shown, squash, verifyPrompt } from './prompt'
 
 // Claude Code's own "You should know" is hidden whenever ANTHROPIC_BASE_URL points
 // away from Anthropic (observed on 2.1.290: that one variable alone), so it never
@@ -284,12 +284,12 @@ const locationFacts = async ($: EngineInterface, list: Rows): Promise<PreparedFa
     if (!await current()) return null
     if (view.incomplete) { reason = view.failureReason ?? 'inspection-unknown'; return null }
     stage = 'packet'
-    const secondPrompt = assistPacketPrompt(input, view)
+    const secondPrompt = selectionMethod === 'local-scoped' ? localPacketPrompt(view) : assistPacketPrompt(input, view)
     if (bytesOf(firstPrompt) + bytesOf(secondPrompt) > 65536) { reason = 'input-limit'; return null }
     const second = await ask($, secondPrompt, deadlineMs - await $.clock.now(), job.signal)
     if (!await current()) return null
     if (!second?.isAnswered) { reason = 'side-unanswered'; return null }
-    const packet = buildAssistPacket(input, view, second.text)
+    const packet = selectionMethod === 'local-scoped' ? buildLocalAssistPacket(input, view, second.text) : buildAssistPacket(input, view, second.text)
     if (!packet) { outcome = second.text.trim() === 'null' ? 'abstained' : 'invalid'; reason = outcome === 'abstained' ? 'no-packet' : 'invalid-packet'; return null }
     if (!await current()) return null
     const note = assistNote(packet, view)

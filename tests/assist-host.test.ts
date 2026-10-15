@@ -60,7 +60,7 @@ const batch = ($: Parameters<TestBody>[0]) => $.classic.PostToolBatch({ tool_cal
 test('a grounded local scope skips model selection and gives one slow packet reply the remaining budget', { options }, async ($, on) => {
   const { state } = world(on); await start($)
   await $.prompt.submit({ text: 'Fix parseDate used by app.cjs.', origin: { kind: 'sdk' } } as never)
-  state.outputs = [packet]; state.modelDelayMs = 22000
+  state.outputs = ['{"factIds":["f1"]}']; state.modelDelayMs = 22000
   const result = await batch($)
   expect(result.additionalContext?.join('\n')).toContain('require("./utils.cjs")')
   expect(state.calls).toBe(1); expect(state.reads).toBe(1); expect(state.validations).toBe(1)

@@ -51,8 +51,23 @@ export const buildAssistPacket = (input: AssistInput, view: FactView, text: stri
   if (value.kind !== 'location' || value.requiresMainJudgment !== true || !textOK(value.question) || !textOK(value.requirementQuote) || !input.asked.includes(value.requirementQuote) || !textOK(value.explanation) || value.nextCheck !== null && !textOK(value.nextCheck)) return null
   if (!Array.isArray(value.factIds) || value.factIds.length < 1 || value.factIds.length > 64 || !value.factIds.every(id => typeof id === 'string' && view.facts.some(f => f.id === id && pathOK(f.path) && f.startLine > 0 && textOK(f.quote, 32768) && view.files.some(file => file.path === f.path && file.fileHash === f.fileHash))) || !Array.isArray(value.observationIds) || value.observationIds.length !== 0) return null
   const sources = view.facts.filter(f => value.factIds instanceof Array && value.factIds.includes(f.id))
-  if (!sources.some(f => /\brequire\s*\(|\bimport\s|\bfrom\s/.test(f.quote) || !/\b(?:function|def)\b|(?:exports\.\w+|(?:const|let)\s+\w+)\s*=/.test(f.quote) && /\b[\w$]+(?:\.[\w$]+)+\s*\(/.test(f.quote))) return null
+  if (!sources.some(f => /\brequire\s*\(|\bimport\s|\bfrom\s/.test(f.quote) || !/\b(?:function|def)\b|(?:exports\.\w+|(?:const|let)\s+\w+)\s*=/.test(f.quote) && /\b[\w$]+(?:\.[\w$]+)+\s*\(/.test(f.quote) || /^\s*(?:(?:return|await)\s+|(?:(?:const|let|var)\s+)?[\w$.]+\s*=\s*)?(?!(?:if|for|while|switch|catch|with|function)\b)[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*\s*\(/.test(f.quote))) return null
   return { binding: { ...input.binding }, kind: 'location', question: value.question, requirementQuote: value.requirementQuote, factIds: [...new Set(value.factIds)], observationIds: [], explanation: value.explanation, nextCheck: value.nextCheck as string | null, requiresMainJudgment: true }
+}
+// In a grounded local scope the side model only selects source IDs. The host
+// supplies neutral wording; every ID and call/import still passes the full gate.
+export const buildLocalAssistPacket = (input: AssistInput, view: FactView, text: string): AssistPacket | null => {
+  const value = objectOf(text), scope = view.searchScope
+  if (!value || !keys(value, ['factIds']) || !Array.isArray(value.factIds) || value.factIds.length > 6 || !Array.isArray(scope?.terms) || !scope.terms.length || !scope.terms.every(term => textOK(term, 128) && /^[A-Za-z_$][\w$]*$/.test(term))) return null
+  if (!value.factIds.every(id => typeof id === 'string' && /^f[1-9]\d*$/.test(id) && Number(id.slice(1)) <= view.facts.length)) return null
+  const requirementQuote = input.asked.split('\n').find(line => textOK(line) && scope.terms.some(term => hasIdentifier(line, term)))
+  if (!requirementQuote) return null
+  return buildAssistPacket(input, view, JSON.stringify({
+    kind: 'location', question: `Which observed import or call uses ${scope.terms.join(', ')}?`,
+    requirementQuote, factIds: value.factIds.map(id => view.facts[Number(id.slice(1)) - 1]!.id), observationIds: [],
+    explanation: 'These source lines may help locate the observed candidate. API behavior and repair correctness remain unverified.',
+    nextCheck: null, requiresMainJudgment: true,
+  }))
 }
 export const assistNote = (packet: AssistPacket, view: FactView) => [
   '[deepseek-supervisor] Read-only location facts (advisory; main model decides).',

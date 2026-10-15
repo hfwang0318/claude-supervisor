@@ -1,5 +1,5 @@
 import { test, expect } from 'claude-code/testing'
-import { buildAssistPacket, parseFactRequest, assistSignal, assistNote, localFactRequest } from '../supervisor/assist'
+import { buildAssistPacket, buildLocalAssistPacket, parseFactRequest, assistSignal, assistNote, localFactRequest } from '../supervisor/assist'
 import type { AssistInput, FactView } from '../supervisor/contracts'
 const binding = { sessionId: 's', generationId: 'g', turnId: 't', taskRevision: 1, workspaceRevision: 'w', snapshotId: 'unknown' }
 const input: AssistInput = { binding, asked: 'Fix parseDate used by app.cjs.', symptom: 'candidate util.cjs; caller missing', recentFacts: [] }
@@ -35,6 +35,37 @@ test('a location packet presents the real import verbatim and keeps explanation 
   expect(assistNote(p!, view)).toContain('app.cjs:1')
   expect(assistNote(p!, view)).toContain(view.facts[0]!.quote)
   expect(assistNote(p!, view)).toContain('Unverified explanation')
+})
+test('a local side reply selects grounded call facts without generating a repair explanation', async () => {
+  const scoped = { ...view, searchScope: { paths: ['app.cjs'], terms: ['parseDate'] } }
+  const p = buildLocalAssistPacket(input, scoped, '{"factIds":["f1"]}')
+  expect(p?.factIds).toEqual(['f1'])
+  expect(p?.requirementQuote).toBe(input.asked)
+  expect(p?.requiresMainJudgment).toBe(true)
+  expect(assistNote(p!, scoped)).toContain(view.facts[0]!.quote)
+  expect(assistNote(p!, scoped)).toContain('remain unverified')
+  for (const text of ['null', '{"factIds":[]}', '{"factIds":["invented"]}', '{"factIds":["f1"],"explanation":"apply my fix"}']) expect(buildLocalAssistPacket(input, scoped, text)).toBeNull()
+  expect(buildLocalAssistPacket(input, { ...scoped, incomplete: true }, '{"factIds":["f1"]}')).toBeNull()
+  expect(buildLocalAssistPacket(input, { ...scoped, facts: [{ ...view.facts[0]!, quote: 'exports.parseDate = s => s' }] }, '{"factIds":["f1"]}')).toBeNull()
+})
+test('local packet requirements retain the actual matching line and never fabricate an abbreviated quote', async () => {
+  const scoped = { ...view, searchScope: { paths: ['app.cjs'], terms: ['parseDate'] } }
+  const long = { ...input, asked: 'x'.repeat(3000) + '\nFix parseDate in app.cjs.' }
+  expect(buildLocalAssistPacket(long, scoped, '{"factIds":["f1"]}')?.requirementQuote).toBe('Fix parseDate in app.cjs.')
+  expect(buildLocalAssistPacket({ ...input, asked: 'Fix client in app.cjs.' }, scoped, '{"factIds":["f1"]}')).toBeNull()
+  expect(buildLocalAssistPacket(input, view, '{"factIds":["f1"]}')).toBeNull()
+})
+test('an observed bare call is valid source evidence while a definition alone is not', async () => {
+  for (const quote of ['dispatch(retry(newRetry(currentRetry, queryParameters, error)));', 'const day = parseDate(input)', 'return parseDate(input)']) {
+    const source = { ...view, facts: [{ ...view.facts[0]!, quote }] }
+    expect(buildAssistPacket(input, source, JSON.stringify(packet))?.factIds).toEqual(['f1'])
+  }
+  for (const quote of ['function parseDate(input) {', 'def parseDate(input):', 'const parseDate = input => input', '// parseDate(input)', '"parseDate(input)"', 'if (ready) {']) expect(buildAssistPacket(input, { ...view, facts: [{ ...view.facts[0]!, quote }] }, JSON.stringify(packet))).toBeNull()
+})
+test('short local reply IDs resolve only to the original bound source facts', async () => {
+  const scoped = { ...view, facts: [{ ...view.facts[0]!, id: 'c'.repeat(64) }], searchScope: { paths: ['app.cjs'], terms: ['parseDate'] } }
+  expect(buildLocalAssistPacket(input, scoped, '{"factIds":["f1"]}')?.factIds).toEqual(['c'.repeat(64)])
+  for (const id of ['f0', 'f2', 'f01', 'f-1', 'c'.repeat(64)]) expect(buildLocalAssistPacket(input, scoped, JSON.stringify({ factIds: [id] }))).toBeNull()
 })
 test('fabricated references, quotes, requirements and incomplete views cannot become feedback', async () => {
   for (const p of [{ ...packet, factIds: ['made-up'] }, { ...packet, requirementQuote: 'return 0' }, { ...packet, quote: 'invented import' }, { ...packet, observationIds: ['unseen'] }, { ...packet, requiresMainJudgment: false }]) expect(buildAssistPacket(input, view, JSON.stringify(p))).toBeNull()

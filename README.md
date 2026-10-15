@@ -104,6 +104,10 @@ When a missing identifier is observed in a candidate implementation and the
 requirement explicitly names other safe source files, facts mode first inspects
 only those literal files. The side model then interprets the verified excerpts,
 without a separate model selection call. Otherwise the existing selector is used.
+For this grounded local scope the side model selects up to six short fact IDs;
+the host resolves their original source bindings and supplies neutral wording.
+Ordinary function calls such as `dispatch(retry(...))` count as call evidence,
+as do imports and member calls; definitions alone still do not.
 This still permits only one inspection per job; a rejected local scope stays
 unknown. Identifier matching uses whole identifiers, so `cli` inside `client`
 cannot consume the prompt's only facts job. `FACTS_JOB.selectionMethod` records
