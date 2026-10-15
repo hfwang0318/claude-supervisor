@@ -7,7 +7,7 @@ import { validateObservation, normalizeTrack } from '../supervisor/ledger'
 import { captureSnapshot } from '../supervisor/workspace'
 import { buildAssistPacket, buildLocalAssistPacket, parseFactRequest, assistSignal, assistNote, localFactRequest } from '../supervisor/assist'
 import { Coordinator, sameBinding } from '../supervisor/coordinator'
-import { buildReviewContext, parseReview, reviewPrompt, REVIEW_DIMENSIONS } from '../supervisor/review'
+import { buildReviewContext, parseReview, reviewPrompt, REVIEW_DIMENSIONS, hasExplorationEvidence } from '../supervisor/review'
 import { runReviewFlow } from '../supervisor/review-flow'
 import type { ReviewOutcome } from '../supervisor/review-flow'
 import type { ReviewContext } from '../supervisor/contracts'
@@ -336,7 +336,7 @@ const engineeringReview = async ($: EngineInterface, list: Rows, final = false, 
   const record = evidenceOf(list), since = record.prompts.at(-1)?.at ?? 0
   const changes = changesOf(record, 24576), lastRun = record.runs.filter(r => r.at >= since).at(-1)
   const lastEdit = record.edits.filter(e => e.at >= since).at(-1)?.at ?? -1
-  const phase: ReviewContext['phase'] = final ? 'completion' : lastRun && !lastRun.ok ? 'failure' : changes && lastRun && lastRun.at >= lastEdit ? 'implementation' : 'plan'
+  let phase: ReviewContext['phase'] = final ? 'completion' : lastRun && !lastRun.ok ? 'failure' : changes && lastRun && lastRun.at >= lastEdit ? 'implementation' : 'plan'
   const binding = { ...s.coordinator.binding }
   const skipped = async (reason: string) => {
     const key = `${phase}:${reason}`
@@ -356,9 +356,12 @@ const engineeringReview = async ($: EngineInterface, list: Rows, final = false, 
   const context = buildReviewContext(binding, s.asked, answer ? [...rows, { role: 'assistant', text: answer, toolUses: [] }] : rows, changes, phase)
   if (!context) return skipped('context-rejected')
   if (!final && phase === 'plan' && changes !== '') return skipped('awaiting-post-edit-check')
-  if (!final && phase === 'plan' && !context.sources.some(source => source.kind === 'plan')) return skipped('no-explicit-plan')
+  if (!final && phase === 'plan' && !context.sources.some(source => source.kind === 'plan')) {
+    if (!hasExplorationEvidence(context)) return skipped('insufficient-exploration-evidence')
+    phase = 'exploration'; context.phase = phase
+  }
   if (mode === 'recovery' && (s.reviewRecoveryUsed || !recoveryObservations(context).length)) return skipped(s.reviewRecoveryUsed ? 'recovery-already-offered' : 'insufficient-recovery-evidence')
-  const material = phase === 'plan' ? context.sources.filter(source => source.kind === 'plan' || source.kind === 'requirement') : context.sources
+  const material = phase === 'exploration' ? context.sources.filter(source => source.kind === 'requirement') : phase === 'plan' ? context.sources.filter(source => source.kind === 'plan' || source.kind === 'requirement') : context.sources
   const key = `${phase}:${signatureOfChange(JSON.stringify(material))}`
   if (s.reviewSignatures.has(key)) return skipped('already-considered-context')
   const id = `review-${++s.jobNumber}`, job = s.coordinator.start(id, await $.clock.now())

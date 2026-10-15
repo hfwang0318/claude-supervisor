@@ -77,7 +77,7 @@ test('a completion review receives the actual final claim as attributed evidence
   await $.classic.Stop({ last_assistant_message: 'The old interface is removed; callers were not tested.' } as never)
   expect(state.prompts[0]).toContain('The old interface is removed; callers were not tested.')
 })
-test('no explicit plan defers review until substantive implementation or completion', { options }, async ($, on) => {
+test('one source without an explicit plan waits for more exploration evidence', { options }, async ($, on) => {
   const { state } = world(on); await start($); state.rows[0]!.text = 'Reading the existing method.'
   await batch($); expect(state.calls).toBe(0)
 })
@@ -163,4 +163,34 @@ test('budget and invalid protocol skips have bounded phase-specific unreviewed d
   await $.classic.Stop({ last_assistant_message: 'Finished.' } as never)
   expect(state.logs.filter(l => l.includes('budget-exhausted') && l.includes('completion')).length).toBe(1)
   expect(state.calls).toBe(2)
+})
+
+for (const dimension of ['architecture', 'direction', 'exploration']) test(`${dimension} reaches the worker without an explicit plan after distinct source evidence`, { options }, async ($, on) => {
+  const { state } = world(on); await start($)
+  state.rows = [{ role: 'assistant', text: '', toolUses: [
+    { tool: 'Read', input: { file_path: '/p/api.js' }, text: 'exports.old = () => 1' },
+    { tool: 'Grep', input: { pattern: 'old', path: '/p/caller.js' }, text: 'api.old()' }
+  ] }] as never
+  const d = JSON.parse(reply()); d.reviewed = [dimension]; d.judgment.dimension = dimension; d.judgment.sourceIds = ['req', 'tool-1', 'tool-2']; state.outputs = [JSON.stringify(d), JSON.stringify(d)]
+  const response = await batch($)
+  expect(response.additionalContext?.join('\n')).toContain(`Dimension: ${dimension}`)
+  const context = JSON.parse(state.prompts[0]!.split('\n\n').at(-1)!)
+  expect(context.phase).toBe('exploration')
+  expect(context.sources.some((s: { kind: string }) => s.kind === 'plan')).toBe(false)
+  expect(response.additionalContext?.join('\n')).toContain('not reviewed: requirement-plan, plan-implementation')
+  state.rows.push({ role: 'assistant', text: '', toolUses: [{ tool: 'Read', input: { file_path: '/p/other.js' }, text: 'other caller' }] })
+  await batch($)
+  expect(state.calls).toBe(1)
+  await $.classic.Stop({ last_assistant_message: 'The interface should remain compatible.' } as never)
+  expect(state.calls).toBe(2)
+  await $.classic.Stop({ last_assistant_message: 'The interface should remain compatible.' } as never)
+  expect(state.calls).toBe(2)
+})
+for (const unusable of ['failed', 'pending', 'running', 'truncated', 'duplicate']) test(`exploration waits when the second source is ${unusable}`, { options }, async ($, on) => {
+  const { state } = world(on); await start($)
+  const first = { tool: 'Read', input: { file_path: '/p/api.js' }, text: 'exports.old = () => 1' }
+  const second = unusable === 'failed' ? { tool: 'Read', input: { file_path: '/p/missing.js' }, text: 'No such file', isError: true } : unusable === 'pending' ? { tool: 'Read', input: { file_path: '/p/pending.js' } } : unusable === 'running' ? { tool: 'Read', input: { file_path: '/p/pending.js' }, text: 'partial source', result: { status: 'running' } } : unusable === 'truncated' ? { tool: 'Read', input: { file_path: '/p/truncated.js' }, text: 'partial source', result: { isStdoutTruncated: true } } : { ...first, text: 'reread same path, new text' }
+  state.rows = [{ role: 'assistant', text: '', toolUses: [first, second] }] as never
+  expect((await batch($)).additionalContext).toEqual(['host context'])
+  expect(state.calls).toBe(0)
 })

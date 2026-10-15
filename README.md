@@ -135,7 +135,12 @@ using the same protocol. Generated expectations remain hypotheses; recovery
 never invents eliminated causes. One recovery packet and one semantic completion
 follow-up are allowed per prompt. Plans are reviewed before editing, changes
 after a recorded check, and completion when needed, sharing the same 2-call,
-4,000-output-token, 30-second budget. Every tool batch does not start a model.
+4,000-output-token, 30-second budget. Without an explicit plan, two distinct
+successful bounded Read/Grep results allow one exploration review per prompt,
+covering architecture, direction and exploration from the actual records. The
+missing plan remains unknown; plan-consistency dimensions are not reviewed.
+Pending, failed, truncated or repeated reads do not open this opportunity.
+Later source batches do not repeat it, and later phases share the same budget.
 
 `execution_mode=off` still permits advisory review and explicitly unexecuted
 probe suggestions. `shadow` keeps observations without worker feedback.

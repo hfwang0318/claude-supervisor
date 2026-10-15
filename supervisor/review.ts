@@ -42,12 +42,25 @@ export const buildReviewContext = (binding: Binding, asked: string, rows: readon
     const truncated = result.isStdoutTruncated === true || result.isStderrTruncated === true || result.truncated === true
     const completed = result.status !== 'running' && (exitCode !== null || use.isError === true || typeof use.text === 'string' || typeof result.stdout === 'string' || typeof result.stderr === 'string')
     const output = [...new Set([use.text, result.stdout, result.stderr].filter((v): v is string => typeof v === 'string'))].join('\n')
-    const source: ReviewSource = { id: `tool-${index + 1}`, kind: use.tool === 'Bash' && completed ? 'observation' : 'tool', text: JSON.stringify({ tool: use.tool, input: use.input, output, ...(use.tool === 'Bash' ? { completed, exitCode, truncated, outputStatus: !completed || truncated ? 'unknown' : 'recorded' } : {}), ...(use.isError ? { isError: true } : {}) }) }
+    const source: ReviewSource = { id: `tool-${index + 1}`, kind: use.tool === 'Bash' && completed ? 'observation' : 'tool', text: JSON.stringify({ tool: use.tool, input: use.input, output, completed, exitCode, truncated, outputStatus: !completed || truncated ? 'unknown' : 'recorded', ...(use.isError ? { isError: true } : {}) }) }
     const before = context.sources.length
     add(source, 8192)
     if (use.tool === 'Bash' && (before === context.sources.length || !completed || truncated)) context.scope.omitted.push('observation-incomplete')
   }
   return context
+}
+
+// A bounded early opportunity from actual evidence, even when no plan was spoken.
+// Directory listings alone and pending/failed reads cannot consume the review budget.
+export const hasExplorationEvidence = (context: ReviewContext): boolean => {
+  const observations = context.sources.filter(s => s.kind === 'tool').flatMap(source => {
+    try {
+      const use = JSON.parse(source.text)
+      if (!['Read', 'Grep'].includes(use.tool) || use.completed !== true || use.truncated === true || typeof use.exitCode === 'number' && use.exitCode !== 0 || use.isError === true || typeof use.output !== 'string' || !use.output.trim() || /<tool_use_error>|No such file|does not exist|Permission denied/.test(use.output)) return []
+      return [JSON.stringify({ tool: use.tool, input: use.input })]
+    } catch { return [] }
+  })
+  return new Set(observations).size >= 2
 }
 
 export const availableDimensions = (context: ReviewContext): ReviewDimension[] => {
