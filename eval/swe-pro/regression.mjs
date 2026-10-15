@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto'
+import { createHash, randomBytes } from 'node:crypto'
 import { selectIncremental, summarizeIncremental, nextSelection } from './incremental.mjs'
 
 const hash = bytes => createHash('sha256').update(bytes).digest('hex')
@@ -17,17 +17,18 @@ export const summarizeBaseline = (manifestBytes, results, identity) => {
   return { ...summary, ...identity, kind: 'baseline', interpretation: 'Full frozen project subset on current main/side models; not an official full benchmark score.' }
 }
 
-export const baselineSelections = (name, summaryBytes) => {
+export const baselineSelections = (name, summaryBytes, { seed = randomBytes(16).toString('hex') } = {}) => {
   const summary = JSON.parse(summaryBytes)
-  if (summary.kind !== 'baseline' || !summary.complete || summary.skipped?.length !== 0) throw Error('incomplete or non-full baseline cannot freeze regression selections')
+  if (!['baseline', 'incremental'].includes(summary.kind) || !summary.complete || summary.kind === 'baseline' && summary.skipped?.length !== 0) throw Error('incomplete or quick round cannot freeze regression selections')
+  if (typeof seed !== 'string' || !/^[a-f0-9]{32}$/.test(seed)) throw Error('quick seed must contain 32 lowercase hex characters')
   const incremental = nextSelection(name, summaryBytes)
-  const passed = summary.pairs.find(p => p.existing === 'passed' && p.facts === 'passed')
-  const failed = summary.pairs.find(p => p.existing === 'failed' && p.facts === 'failed')
-  const quick = passed && failed ? {
-    schemaVersion: 1, kind: 'quick', name: `${name}-quick`, purpose: 'one baseline double pass and one double failure; mechanism smoke only',
+  const failures = summary.pairs.filter(p => p.existing === 'failed' && p.facts === 'failed')
+  const failed = failures.length ? failures[parseInt(createHash('sha256').update(`${hash(summaryBytes)}:${seed}`).digest('hex').slice(0, 8), 16) % failures.length] : null
+  const quick = failed ? {
+    schemaVersion: 2, kind: 'quick', name: `${name}-quick`, purpose: 'one randomly sampled double failure in both modes; full ordinary checks are separate',
     manifestSHA256: summary.manifestSHA256, baselineSummarySHA256: hash(summaryBytes), arms,
-    taskCount: 2, plannedAttempts: 4,
-    tasks: [passed, failed].map(p => ({ instanceId: p.task, repo: p.repo, baseline: { existing: p.existing, facts: p.facts } }))
+    sampling: { method: 'sha256-seed-v1', seed }, taskCount: 1, plannedAttempts: 2,
+    tasks: [{ instanceId: failed.task, repo: failed.repo, baseline: { existing: failed.existing, facts: failed.facts } }]
   } : null
   return { incremental, quick }
 }
@@ -38,14 +39,15 @@ export const selectRegression = (manifestBytes, selectionBytes, baselineBytes, i
   if (selection.kind !== undefined && selection.kind !== 'incremental' && selection.kind !== 'quick') throw Error('invalid regression kind')
   if (baseline.kind === 'quick') throw Error('quick results cannot be used as an incremental baseline')
   if (selection.kind !== 'quick') return { ...selectIncremental(manifestBytes, selectionBytes, baselineBytes), kind: 'incremental' }
-  const expected = baselineSelections('validation', baselineBytes).quick
-  if (!expected) throw Error('quick regression requires both a double pass and a double failure')
-  for (const key of ['schemaVersion', 'manifestSHA256', 'baselineSummarySHA256', 'arms', 'taskCount', 'plannedAttempts', 'tasks']) {
+  if (selection.schemaVersion !== 2 || selection.sampling?.method !== 'sha256-seed-v1') throw Error('quick selection requires the seeded single-failure protocol; regenerate in a new file')
+  const expected = baselineSelections('validation', baselineBytes, { seed: selection.sampling.seed ?? '' }).quick
+  if (!expected) throw Error('quick regression requires a double failure; unknowns cannot substitute')
+  for (const key of ['schemaVersion', 'manifestSHA256', 'baselineSummarySHA256', 'arms', 'sampling', 'taskCount', 'plannedAttempts', 'tasks']) {
     if (JSON.stringify(selection[key]) !== JSON.stringify(expected[key])) throw Error(`quick selection mismatch: ${key}`)
   }
   if (typeof selection.name !== 'string' || !selection.name.trim() || hash(manifestBytes) !== selection.manifestSHA256) throw Error('invalid quick selection name or manifest hash')
-  // Validate complete canonical baseline coverage through the existing union validator.
-  selectIncremental(manifestBytes, JSON.stringify(baselineSelections('validation', baselineBytes).incremental), baselineBytes)
+  // Validate both selected and historical coverage without drawing another sample.
+  selectIncremental(manifestBytes, JSON.stringify(nextSelection('validation', baselineBytes)), baselineBytes)
   const manifest = JSON.parse(manifestBytes), ids = new Set(selection.tasks.map(t => t.instanceId))
   return {
     kind: 'quick', name: selection.name, manifestSHA256: hash(manifestBytes), baselineSummarySHA256: hash(baselineBytes), selectionSHA256: hash(selectionBytes),

@@ -94,8 +94,12 @@ Claude Code 自带一个旁路代理 "You should know"，看着 Claude 干活，
 成绩。基线校验、全新输出目录和下一轮清单见[增量对比策略](docs/evals/2026-10-14-incremental-comparison.md)。
 当前评测主模型和旁路均为 `zhipu/glm-5.3-flash`。除返回标签外，启动前还核对
 Coding Plan 官方路由政策；GLM-5.2／5.1 旧名称会上游自动升级，不能据回显建立基线。
-Flash 先完整重测 30 题／60 次；开发全量回归随后使用失败／未知并集，快速回归固定
-一个基线双通过和一个双失败任务／4 次，不能缩减失败集合。见[Flash 协议](docs/evals/2026-10-14-glm53-flash-baseline.md)。
+Flash 先完整重测 30 题／60 次。日常快速回归和完整验证都先用不带 `--pure`／`--host`
+的 `node scripts/check.mjs` **全跑普通、无模型测试**；只缩减昂贵模型评测：快速随机
+抽一个双失败任务，两组各一次／共 2 次；完整验证跑全部失败／未知并集、两组各一次。
+两种模式按需要选择，不自动先快速再完整。`select-regression.mjs` 将新随机种子和选题冻结
+到新文件，续跑直接使用原文件、不重新抽样；快速结果不能缩减失败集合。
+见[Flash 协议](docs/evals/2026-10-14-glm53-flash-baseline.md)。
 默认两并发；三至八并发需要 `--allow-memory-overcommit`、Docker VM swap 和足够 CPU／内存，
 单题限制保持不变。超过四并发还需实时 `--capacity-file`。`capacity-monitor.mjs` 管理 runner
 和小型只读 Linux 探针，每五秒采样可用内存／swap，发布短期派发许可。资源压力或采样缺失时

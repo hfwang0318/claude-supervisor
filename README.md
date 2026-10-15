@@ -119,9 +119,14 @@ Current evaluation main and side models both use `zhipu/glm-5.3-flash`. The
 runner checks the published Coding Plan routing policy as well as response
 labels: legacy GLM-5.2/5.1 names are automatically upgraded upstream and cannot
 establish their own baseline. A fresh full 30-task baseline (60 attempts) starts
-on Flash. Development regressions then use the failure/unknown union; quick
-regressions use exactly one baseline double pass and one double failure (four
-attempts), without shrinking the union. See [the Flash protocol](docs/evals/2026-10-14-glm53-flash-baseline.md).
+on Flash. Both daily quick regressions and full verification run **all ordinary,
+model-free checks** with `node scripts/check.mjs` (without `--pure` or `--host`).
+Only the expensive model cohort changes: quick draws one double-failure task at
+random and runs both modes (two attempts); full verification runs the complete
+failure/unknown union in both modes. These are alternative modes, not an automatic
+quick-then-full sequence. `select-regression.mjs` freezes a fresh seed and selection
+in a new file; replay uses that file without redrawing. Quick results never shrink
+the union. See [the Flash protocol](docs/evals/2026-10-14-glm53-flash-baseline.md).
 The default is two workers. Three through eight require `--allow-memory-overcommit`,
 Docker VM swap and sufficient CPU/memory; each task keeps its original limits.
 More than four also require a live `--capacity-file`. `capacity-monitor.mjs` owns

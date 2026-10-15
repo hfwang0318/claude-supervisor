@@ -101,7 +101,7 @@ const persistResults = () => {
       const selections = baselineSelections('glm53-flash-baseline', summaryBytes)
       writeFileSync(join(out, 'failure-selection.json'), JSON.stringify(selections.incremental, null, 2))
       writeFileSync(join(out, 'quick-selection.json'), JSON.stringify(selections.quick, null, 2))
-      if (!selections.quick) console.log('Quick selection unavailable: baseline has no double pass or double failure; no substituted task.')
+      if (!selections.quick) console.log('Quick selection unavailable: baseline has no double failure; no substituted task.')
     }
   }
 }

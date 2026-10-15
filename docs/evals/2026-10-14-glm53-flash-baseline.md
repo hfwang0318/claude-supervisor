@@ -38,20 +38,33 @@ agent 只见原始 instruction 和干净仓库、隔离配置、无 MCP／web／
 
 ## 后续回归规则
 
-本轮最终汇总输出为 `baseline-adaptive/`，旧阶段保持原样。完成后生成 `summary-baseline.json`，以及绑定其字节 hash 的两类选择文件：
+**2026-10-15 用户修订，优先于历史规则：普通测试始终全测，只压缩模型 token 和耗时评测。**
+日常快速回归与完整验证都先运行 `node scripts/check.mjs`，包含全部宿主、类型／清单、真实只读／隔离、scorer 和 SWE adapter 自检，不传 `--pure`／`--host` 缩减范围。失败先修复，不用模型抽样代替普通测试。
+
+昂贵模型部分按需要二选一，不自动串行叠加：
 
 - `failure-selection.json`：任一组失败或未知的并集，两组各一次。以后开发“全量回归”是此集合全量；
   完成后以同轮结果生成 `next-selection.json`。历史双通过项跳过，不能算作新版得分。
-- `quick-selection.json`：按冻结清单顺序固定首个双通过和首个双失败任务，共两题／四次。
-  若任一类别不存在，保存 null 并报告 unavailable，不用未知凑数。`summary-quick.json` 不能缩减失败集合。
+- 新 `quick-selection.json`（schemaVersion 2）：从最近一次完整基线或完整增量轮次中随机抽一个双失败任务，existing／facts 各一次，共一题／两次。普通测试仍全跑；不再额外抽一个模型双通过对照题。没有双失败则报告 unavailable，不用单侧失败或未知凑数。
+- 每次新快速回归用 `select-regression.mjs` 生成新随机种子，并冻结选题、种子、父汇总及 manifest hash。验证按同一种子重现选择；恢复既有运行时使用原选择文件，不重新抽样、不覆盖已有文件。可用 `--seed` 重现免费预览。
+- `summary-quick.json` 不能缩减失败并集，也不能成为下一次抽样的父汇总；必须使用最近一次完整轮次，保留历史跳过边界。
 
-范围可先免费预览。实际运行去掉 `--dry-run` 并指定本轮新冻结 runtime、固定任务目录、readiness 与全新 out。
+本轮最终基线汇总输出为 `baseline-adaptive/`，后续诊断回归已完成于 `facts-diagnostics-flash/incremental/`。旧阶段、旧双题 quick 清单和原报告保持不变；新选择器会拒绝旧 quick 协议，需另生成新文件，不迁移或重写已完成实验。
+
+以下准备与预览均不调用模型；每轮先全跑普通测试，然后只选其中一种模式。完整验证不再额外运行 quick。
+实际付费运行去掉 `--dry-run` 并指定本轮新冻结 runtime、固定任务目录、readiness 与全新 out。
 切换模型后首次建立完整基线不传 selection 参数；旧 GLM-5.3／GLM-5.2 请求标签的基线不能混用。
 
 ```sh
-node eval/swe-pro/run.mjs --dry-run
-node eval/swe-pro/run.mjs --selection eval/results/swe-pro-glm53-flash/baseline-adaptive/failure-selection.json --baseline-summary eval/results/swe-pro-glm53-flash/baseline-adaptive/summary-baseline.json --dry-run
-node eval/swe-pro/run.mjs --selection eval/results/swe-pro-glm53-flash/baseline-adaptive/quick-selection.json --baseline-summary eval/results/swe-pro-glm53-flash/baseline-adaptive/summary-baseline.json --dry-run
+node scripts/check.mjs
+# BASELINE 指向最近一次完整轮次；ROUND 使用本轮新目录名。
+BASELINE=eval/results/facts-diagnostics-flash/incremental/summary-incremental.json
+# 日常开发：一次新抽样，然后冻结文件供预览／实际运行／恢复使用。
+node eval/swe-pro/select-regression.mjs --kind quick --baseline-summary "$BASELINE" --out eval/results/ROUND/quick-selection.json
+node eval/swe-pro/run.mjs --selection eval/results/ROUND/quick-selection.json --baseline-summary "$BASELINE" --dry-run
+# 或完整验证：全部失败／未知并集；本轮不再叠加 quick。
+node eval/swe-pro/select-regression.mjs --kind incremental --baseline-summary "$BASELINE" --out eval/results/ROUND/failure-selection.json
+node eval/swe-pro/run.mjs --selection eval/results/ROUND/failure-selection.json --baseline-summary "$BASELINE" --dry-run
 ```
 
 ## 验证与结果
@@ -80,7 +93,7 @@ Element Web facts 全部为额度拒绝；Ansible／Vuls facts 在免费环境�
 node eval/swe-pro/run.mjs --continue-from eval/results/swe-pro-glm53-flash/baseline-resumed --continue-adapter eval/results/swe-pro-glm53-flash/adapter-two-workers --out eval/results/swe-pro-glm53-flash/baseline-four-workers --jobs 4 --allow-memory-overcommit --dry-run
 ```
 
-最终统计：existing 22 pass／8 fail／0 unknown；facts 21 pass／7 fail／2 unknown。60 份回执全部审计，43 个正结果核对官方必需测试；事实包仍为 0。固定快速回归为 NodeBB 8ca65b0 与 Ansible 42355d1；失败／未知并集为 12 题／24 次，见交付报告。
+最终统计：existing 22 pass／8 fail／0 unknown；facts 21 pass／7 fail／2 unknown。60 份回执全部审计，43 个正结果核对官方必需测试；事实包仍为 0。当时旧规则的固定快速回归为 NodeBB 8ca65b0 与 Ansible 42355d1；失败／未知并集为 12 题／24 次，见交付报告。以上是历史执行，不是新随机单题策略。
 
 ## 持续资源监测与自适应调度
 
