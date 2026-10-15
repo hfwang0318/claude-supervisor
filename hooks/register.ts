@@ -5,7 +5,7 @@ import type { Issue, Reading, Track } from '../types'
 import type { Binding, ExecutionEvidence, AssistInput, AssistPacket, FactView } from '../supervisor/contracts'
 import { validateObservation, normalizeTrack } from '../supervisor/ledger'
 import { captureSnapshot } from '../supervisor/workspace'
-import { buildAssistPacket, parseFactRequest, assistSignal, assistNote } from '../supervisor/assist'
+import { buildAssistPacket, parseFactRequest, assistSignal, assistNote, localFactRequest } from '../supervisor/assist'
 import { Coordinator, sameBinding } from '../supervisor/coordinator'
 import { selectSideModel, createHost } from './host'
 import { registerBand } from './band'
@@ -266,16 +266,21 @@ const locationFacts = async ($: EngineInterface, list: Rows): Promise<PreparedFa
   let finished = false
   let stage: 'selection' | 'inspection' | 'packet' = 'selection'
   let outcome: 'unknown' | 'abstained' | 'invalid' | 'prepared' = 'unknown'
+  let request = localFactRequest(input.asked, symptom)
+  const selectionMethod = request ? 'local-scoped' : 'model'
   try {
     if (!await current()) return null
-    const firstPrompt = factRequestPrompt(input.asked, symptom)
-    const first = await ask($, firstPrompt, deadlineMs - await $.clock.now(), job.signal)
-    if (!await current()) return null
-    if (!first?.isAnswered) { reason = 'side-unanswered'; return null }
-    const request = parseFactRequest(first.text)
-    if (!request) { outcome = first.text.trim() === 'null' ? 'abstained' : 'invalid'; reason = outcome === 'abstained' ? 'no-request' : 'invalid-request'; return null }
+    let firstPrompt = ''
+    if (!request) {
+      firstPrompt = factRequestPrompt(input.asked, symptom)
+      const first = await ask($, firstPrompt, deadlineMs - await $.clock.now(), job.signal)
+      if (!await current()) return null
+      if (!first?.isAnswered) { reason = 'side-unanswered'; return null }
+      request = parseFactRequest(first.text)
+      if (!request) { outcome = first.text.trim() === 'null' ? 'abstained' : 'invalid'; reason = outcome === 'abstained' ? 'no-request' : 'invalid-request'; return null }
+    }
     stage = 'inspection'
-    const view = await host.inspectFacts(request, deadlineMs)
+    const view = await host.inspectFacts(request, deadlineMs, { filesOnly: selectionMethod === 'local-scoped' })
     if (!await current()) return null
     if (view.incomplete) { reason = view.failureReason ?? 'inspection-unknown'; return null }
     stage = 'packet'
@@ -301,9 +306,9 @@ const locationFacts = async ($: EngineInterface, list: Rows): Promise<PreparedFa
   } finally {
     if (!finished) s.coordinator.finish(id, binding, 'failed', await $.clock.now())
     const elapsedMs = Math.max(0, await $.clock.now() - startedAt)
-    const event = { kind: 'assistance-attempt', binding, jobId: id, stage, result: outcome, reason, elapsedMs, remainingMs: Math.max(0, deadlineMs - await $.clock.now()) }
+    const event = { kind: 'assistance-attempt', binding, jobId: id, selectionMethod, stage, result: outcome, reason, elapsedMs, remainingMs: Math.max(0, deadlineMs - await $.clock.now()) }
     void remember($, event)
-    say($, `FACTS_JOB ${JSON.stringify({ jobId: id, stage, result: outcome, reason, elapsedMs, remainingMs: event.remainingMs })}`)
+    say($, `FACTS_JOB ${JSON.stringify({ jobId: id, selectionMethod, stage, result: outcome, reason, elapsedMs, remainingMs: event.remainingMs })}`)
   }
 }
 

@@ -1,10 +1,33 @@
 import { test, expect } from 'claude-code/testing'
-import { buildAssistPacket, parseFactRequest, assistSignal, assistNote } from '../supervisor/assist'
+import { buildAssistPacket, parseFactRequest, assistSignal, assistNote, localFactRequest } from '../supervisor/assist'
 import type { AssistInput, FactView } from '../supervisor/contracts'
 const binding = { sessionId: 's', generationId: 'g', turnId: 't', taskRevision: 1, workspaceRevision: 'w', snapshotId: 'unknown' }
 const input: AssistInput = { binding, asked: 'Fix parseDate used by app.cjs.', symptom: 'candidate util.cjs; caller missing', recentFacts: [] }
 const view: FactView = { facts: [{ id: 'f1', path: 'app.cjs', startLine: 1, quote: 'exports.day = require("./utils.cjs").parseDate', fileHash: 'a'.repeat(64) }], files: [{ path: 'app.cjs', fileHash: 'a'.repeat(64) }], manifestHash: 'b'.repeat(64), incomplete: false }
 const packet = { kind: 'location', question: 'Which implementation does app load?', requirementQuote: 'Fix parseDate', factIds: ['f1'], observationIds: [], explanation: 'The imported implementation may differ from the selected one.', nextCheck: 'Read the imported file.', requiresMainJudgment: true }
+
+test('explicit source names ground a file-only search for the observed missing identifier', async () => {
+  const symptom = 'Observed candidate util.cjs defines parseDate; no related actual caller/import or API contract is present. Check whether additional source facts are needed.'
+  expect(localFactRequest('Fix parseDate used by app.cjs.', symptom)).toEqual({ paths: [], terms: ['parseDate'], searchPaths: ['util.cjs', 'app.cjs'] })
+  expect(localFactRequest('Fix parseDate in `src/app.ts`; preserve `src/app.ts`.', symptom)).toEqual({ paths: [], terms: ['parseDate'], searchPaths: ['util.cjs', 'src/app.ts'] })
+  expect(localFactRequest('Fix parseDate.', symptom)).toBeNull()
+  expect(localFactRequest('Fix parseDate in util.cjs.', symptom)).toBeNull()
+  expect(localFactRequest('Fix parseDate used by app.cjs.', 'Observed call/API error: TypeError: parseDate is not a function')).toBeNull()
+})
+test('local scope does not repair unsafe source names or silently drop excess paths', async () => {
+  const symptom = 'Observed candidate util.cjs defines parseDate; no related actual caller/import or API contract is present. Check whether additional source facts are needed.'
+  for (const path of ['../app.cjs', '/app.cjs', 'src/../../app.cjs', '.env/app.cjs', 'dir\\app.cjs']) expect(localFactRequest(`Fix parseDate used by ${path}.`, symptom)).toBeNull()
+  expect(localFactRequest('Fix parseDate in a.cjs b.cjs c.cjs d.cjs e.cjs f.cjs.', symptom)).toBeNull()
+})
+test('local source paths retain complete filename tokens and reject unsupported suffixes', async () => {
+  const symptom = 'Observed candidate util.cjs defines parseDate; no related actual caller/import or API contract is present. Check whether additional source facts are needed.'
+  for (const path of ['src/app.js.map', 'cli.js.pem', 'app.js/../../secrets', '`app.js`.pem', '`app.js.`']) expect(localFactRequest(`Fix parseDate used by ${path}`, symptom)).toBeNull()
+  expect(localFactRequest('Fix parseDate used by `foo+bar.ts`.', symptom)?.searchPaths).toEqual(['util.cjs', 'foo+bar.ts'])
+})
+test('oversized requirements do not enter local scope extraction', async () => {
+  const symptom = 'Observed candidate util.cjs defines parseDate; no related actual caller/import or API contract is present. Check whether additional source facts are needed.'
+  expect(localFactRequest('Fix parseDate used by app.cjs. ' + 'x'.repeat(65536), symptom)).toBeNull()
+})
 
 test('a location packet presents the real import verbatim and keeps explanation a hypothesis', async () => {
   const p = buildAssistPacket(input, view, JSON.stringify(packet))
@@ -54,6 +77,12 @@ test('observable candidate without call context or API errors trigger; simple re
 
 test('a label typo with a preserved count function does not create a location job', async () => {
   expect(assistSignal('Fix the label typo Welcom to Welcome. Preserve the count function.', [{ role: 'assistant', text: '', toolUses: [{ tool: 'Read', input: { file_path: '/p/app.cjs' }, text: 'exports.label = "Welcom"; exports.count = xs => xs.length' }] }], '/p')).toBeNull()
+})
+
+test('an identifier appearing only inside a different word cannot spend the one facts job', async () => {
+  const rows = [{ role: 'assistant', text: '', toolUses: [{ tool: 'Read', input: { file_path: '/p/buildSrc/nativeLibraryProvider.js' }, text: 'const cli = value => value' }] }]
+  expect(assistSignal('Move entropy from the client to src/api/worker/facades/EntropyFacade.ts.', rows, '/p')).toBeNull()
+  expect(assistSignal('Fix cli used by app.cjs.', rows, '/p')).not.toBeNull()
 })
 
 test('definition-only location advice cannot stand in for an actual import or call source', async () => {

@@ -100,6 +100,15 @@ retaining model replies or source content. `SIDE_CALL` adds call timing and a fi
 provider/output-limit reason. An incomplete view never causes a retry or a
 correctness verdict.
 
+When a missing identifier is observed in a candidate implementation and the
+requirement explicitly names other safe source files, facts mode first inspects
+only those literal files. The side model then interprets the verified excerpts,
+without a separate model selection call. Otherwise the existing selector is used.
+This still permits only one inspection per job; a rejected local scope stays
+unknown. Identifier matching uses whole identifiers, so `cli` inside `client`
+cannot consume the prompt's only facts job. `FACTS_JOB.selectionMethod` records
+`local-scoped` or `model`; source/binding revalidation and budgets are unchanged.
+
 `assistance_mode=existing` remains the default. `probe` and `recovery` are reserved
 and currently run only record rules. `execution_mode` separately controls the
 existing independent executor and does not enable real-directory side writes.

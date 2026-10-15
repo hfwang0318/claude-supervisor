@@ -82,6 +82,12 @@ Claude Code 自带一个旁路代理 "You should know"，看着 Claude 干活，
 重试，也不认证正确性。`SIDE_CALL` 增加调用耗时与固定供应商／输出上限原因码；
 两类记录不保留模型回复或源码内容。
 
+当轨迹已观察到候选实现缺少某个标识符的调用关系，而需求明确提到其他安全源码文件时，
+facts 先只对这些字面文件做局部检索，再由旁路解释已核验的原文，省去单独的模型选题调用。
+其余情况保留原选择器；每个任务仍只检索一次，局部检索拒绝后保持 unknown、不追加重试。
+标识符按完整名称匹配，`client` 中的 `cli` 不会消耗唯一事实任务。
+`FACTS_JOB.selectionMethod` 区分 `local-scoped`／`model`，来源／Binding 重验及预算保持。
+
 默认仍是 `assistance_mode=existing`；`probe`、`recovery` 仅预留，目前只保留确定性规则。
 `execution_mode` 独立控制原副本执行器，不表示允许旁路写真实目录。
 免费检查用 `node eval/selftest-assist.mjs`、`node scripts/selftest-assist.mjs`。

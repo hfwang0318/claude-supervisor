@@ -97,7 +97,7 @@ export const validateFacts = (source, view, deadlineMs, budget = { bytes: 0 }) =
     return factsMatch && directoriesMatch && [...budget.versions].every(([path, version]) => identity(lstatSync(checkedPath(root, path, deadlineMs))) === version)
   } catch { return false }
 }
-export const inspectFacts = (source, request, deadlineMs) => {
+export const inspectFacts = (source, request, deadlineMs, { filesOnly = false } = {}) => {
   try {
     alive(deadlineMs)
     if (!validRequest(request)) return empty('invalid-request')
@@ -123,7 +123,10 @@ export const inspectFacts = (source, request, deadlineMs) => {
         if (visited.size > 200) throw Error('visit limit')
         const full = checkedPath(root, path, deadlineMs)
         const stat = lstatSync(full)
-        if (stat.isDirectory()) walk(full, path + '/')
+        if (stat.isDirectory()) {
+          if (filesOnly) throw Error('special source')
+          walk(full, path + '/')
+        }
         else if (stat.isFile()) {
           const { text } = load(path)
           if (text.includes('\0')) return

@@ -170,7 +170,7 @@ export const execute = async (snapshot, command, files, deadlineMs) => {
 }
 
 export const handle = async request => {
-  if (request.action === 'inspect') return inspectFacts(request.root, request.request, request.deadlineMs)
+  if (request.action === 'inspect') return inspectFacts(request.root, request.request, request.deadlineMs, { filesOnly: request.filesOnly === true })
   if (request.action === 'validate-facts') return validateFacts(request.root, request.view, request.deadlineMs)
   if (request.action === 'manifest') return manifest(request.root, request.deadlineMs)
   if (request.action === 'capture') return capture(request.binding, request.root, request.deadlineMs)

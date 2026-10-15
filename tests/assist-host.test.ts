@@ -14,7 +14,7 @@ const world = (on: Parameters<TestBody>[1], beforeStoreSet?: (key: string, value
     on('store.keys', () => ({ value: [...values.keys()] }))
   }
   const clock = mock.clock(on, { now: Date.UTC(2026, 9, 12) })
-  const state = { calls: 0, reads: 0, validations: 0, outputTokens: 20, logs: [] as string[], pauseStatus: false, inStatus: false, waitStatus: undefined as Promise<void> | undefined, valid: true, incomplete: false, failureReason: 'traversal-limit', processError: false, processDelayMs: 0, modelDelayMs: 0, outputs: ['{"paths":["app.cjs"],"terms":["parseDate"]}', packet], wait: undefined as Promise<void> | undefined, rows: [{ role: 'assistant', text: '', toolUses: [{ tool: 'Read', input: { file_path: '/p/util.cjs' }, text: 'exports.parseDate = s => Number(s.slice(-2))' }] }] }
+  const state = { calls: 0, reads: 0, filesOnly: false, validations: 0, outputTokens: 20, logs: [] as string[], pauseStatus: false, inStatus: false, waitStatus: undefined as Promise<void> | undefined, valid: true, incomplete: false, failureReason: 'traversal-limit', processError: false, processDelayMs: 0, modelDelayMs: 0, outputs: ['{"paths":["app.cjs"],"terms":["parseDate"]}', packet], wait: undefined as Promise<void> | undefined, rows: [{ role: 'assistant', text: '', toolUses: [{ tool: 'Read', input: { file_path: '/p/util.cjs' }, text: 'exports.parseDate = s => Number(s.slice(-2))' }] }] }
   on('session.id', () => ({ value: 'facts-session' }))
   on('session.model', () => ({ value: 'fixture' }))
   on('session.cwd', () => ({ value: '/p' }))
@@ -37,7 +37,7 @@ const world = (on: Parameters<TestBody>[1], beforeStoreSet?: (key: string, value
     if (state.processError) throw Error('secret=private-source-value')
     const request = JSON.parse(e.init?.stdin ?? '{}')
     let result: unknown
-    if (request.action === 'inspect') { state.reads++; result = { ...view, incomplete: state.incomplete, ...(state.incomplete ? { failureReason: state.failureReason } : {}), ...(request.request.searchPaths ? { searchScope: { paths: request.request.searchPaths, terms: request.request.terms } } : {}) } }
+    if (request.action === 'inspect') { state.reads++; state.filesOnly = request.filesOnly === true; result = { ...view, incomplete: state.incomplete, ...(state.incomplete ? { failureReason: state.failureReason } : {}), ...(request.request.searchPaths ? { searchScope: { paths: request.request.searchPaths, terms: request.request.terms } } : {}) } }
     else if (request.action === 'validate-facts') { state.validations++; result = state.valid }
     else throw Error('facts mode must never capture or execute')
     return { value: { exitCode: 0, stdout: JSON.stringify(result), stderr: '', isStdoutTruncated: false, isStderrTruncated: false } } as never
@@ -53,9 +53,32 @@ const world = (on: Parameters<TestBody>[1], beforeStoreSet?: (key: string, value
 }
 const start = async ($: Parameters<TestBody>[0]) => {
   await $.session.start({ cwd: '/p', surface: 'terminal', isInteractive: false })
-  await $.prompt.submit({ text: 'Fix parseDate used by app.cjs.', origin: { kind: 'sdk' } } as never)
+  await $.prompt.submit({ text: 'Fix parseDate.', origin: { kind: 'sdk' } } as never)
 }
 const batch = ($: Parameters<TestBody>[0]) => $.classic.PostToolBatch({ tool_calls: [] } as never) as Promise<{ additionalContext?: string[] }>
+
+test('a grounded local scope skips model selection and gives one slow packet reply the remaining budget', { options }, async ($, on) => {
+  const { state } = world(on); await start($)
+  await $.prompt.submit({ text: 'Fix parseDate used by app.cjs.', origin: { kind: 'sdk' } } as never)
+  state.outputs = [packet]; state.modelDelayMs = 22000
+  const result = await batch($)
+  expect(result.additionalContext?.join('\n')).toContain('require("./utils.cjs")')
+  expect(state.calls).toBe(1); expect(state.reads).toBe(1); expect(state.validations).toBe(1)
+  expect(state.filesOnly).toBe(true)
+  const event = state.logs.find(l => l.includes('FACTS_JOB')) ?? ''
+  const data = JSON.parse(event.slice(event.indexOf('FACTS_JOB') + 10))
+  expect(data.selectionMethod).toBe('local-scoped')
+  expect(data.result).toBe('prepared')
+  expect(data.elapsedMs).toBe(22000)
+})
+test('a rejected local scope stays unknown without another inspection or guessed selector call', { options }, async ($, on) => {
+  const { state } = world(on); await start($)
+  await $.prompt.submit({ text: 'Fix parseDate used by app.cjs.', origin: { kind: 'sdk' } } as never)
+  state.incomplete = true; state.failureReason = 'source-missing'
+  expect((await batch($)).additionalContext).toEqual(['host context'])
+  expect(state.calls).toBe(0); expect(state.reads).toBe(1)
+  expect((await batch($)).additionalContext).toEqual(['host context'])
+})
 
 test('facts mode appends actual source after a batch once, preserves host context and never runs existing review', { options }, async ($, on) => {
   const { state } = world(on); await start($)

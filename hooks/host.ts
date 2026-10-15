@@ -24,8 +24,8 @@ const incompleteView = (failureReason: FactInspectionFailure): FactView => ({ fa
 
 export const createHost = (deps: Dependencies): Host => ({
   now: deps.now, identity: deps.identity, cwd: deps.cwd, persist: deps.persist, deliver: deps.deliver,
-  inspectFacts: async (request, deadlineMs) => {
-    const value = await deps.service({ action: 'inspect', root: await deps.cwd(), request, deadlineMs }, deadlineMs) as FactView
+  inspectFacts: async (request, deadlineMs, options) => {
+    const value = await deps.service({ action: 'inspect', root: await deps.cwd(), request, deadlineMs, ...(options?.filesOnly ? { filesOnly: true } : {}) }, deadlineMs) as FactView
     if (!value || !Array.isArray(value.facts) || !Array.isArray(value.files)) return incompleteView('invalid-view')
     if (value.incomplete !== false) return incompleteView(INSPECTION_FAILURES.includes(value.failureReason as FactInspectionFailure) ? value.failureReason as FactInspectionFailure : 'inspection-unknown')
     if (deps.sanitize(JSON.stringify(value)) !== JSON.stringify(value)) return incompleteView('redaction-rejected')
