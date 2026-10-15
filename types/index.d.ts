@@ -4,6 +4,12 @@ export type FactRequest = { paths: string[]; terms: string[]; searchPaths?: stri
 export type FactInspectionFailure = 'invalid-request' | 'deadline' | 'unsafe-path' | 'symlink' | 'source-missing' | 'source-type' | 'file-limit' | 'read-limit' | 'traversal-limit' | 'selected-file-limit' | 'source-changed' | 'secret-content' | 'output-limit' | 'no-facts' | 'validation-failed' | 'inspection-error' | 'inspection-unknown' | 'invalid-view' | 'redaction-rejected'
 export type FactView = { facts: SourceFact[]; files: { path: string; fileHash: string }[]; manifestHash: string; incomplete: boolean; failureReason?: FactInspectionFailure; searchScope?: { paths: string[]; terms: string[] }; directories?: { path: string; entriesHash: string; version: string }[] }
 export type AssistInput = { binding: Binding; asked: string; recentFacts: SourceFact[]; symptom: string }
+export type ReviewDimension = 'requirement-plan' | 'plan-implementation' | 'architecture' | 'direction' | 'exploration' | 'verification' | 'recovery'
+export type ReviewSource = { id: string; kind: 'requirement' | 'plan' | 'change' | 'tool' | 'observation'; text: string }
+export type ReviewContext = { binding: Binding; phase: 'plan' | 'implementation' | 'failure' | 'completion'; sources: ReviewSource[]; scope: { omitted: string[]; repositoryComplete: false } }
+export type ReviewJudgment = { dimension: ReviewDimension; question: string; requirementQuote: string; sourceIds: string[]; reason: string; impact: string; recommendation: 'continue' | 'adjust' | 'replan' | 'gather-evidence'; uncertainty: string }
+export type ReviewAction = { kind: 'none' } | { kind: 'location'; request: FactRequest } | { kind: 'probe'; candidate: unknown } | { kind: 'recovery'; observationIds: string[]; question: string }
+export type ReviewReply = { reviewed: ReviewDimension[]; judgment: ReviewJudgment | null; action: ReviewAction }
 export type AssistPacket = {
   binding: Binding; kind: 'location' | 'probe' | 'recovery'; question: string
   requirementQuote: string; factIds: string[]; observationIds: string[]
