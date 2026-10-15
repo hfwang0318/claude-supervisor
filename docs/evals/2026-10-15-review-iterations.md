@@ -82,3 +82,15 @@ E34请求／34流式返回起始；S29请求，其中27个流式返回起始、1
 ### Router引用body补充恢复（不改原回执）
 
 此前只解析SQLite内联body时，Round001/002分别有21／23行未解析。现从`request-log-bodies`的本地引用文件只读恢复，并另存规范化元数据／bodySHA；001共67行、002共61行全部原需求匹配且Flash/200。003共62行body可解析，其中61行匹配完整原需求且Flash/200，另1行是未按完整需求绑定的辅助请求，不擅自扩推。三轮仍均无匹配的max4048审查body。旧`router-behavior-audit.json`保存当时快照，补充在各轮`router-body-recovery.json`；未复制raw thinking、源码输出或凭据，也未改原运行结果。
+
+## 2026-10-16：继续诊断，区分取消与真实上游故障
+
+用户明确授权继续按集中审计／批次修复节奏优化，并在瓶颈时使用GPT-6-Astra；其诊断因额度中断后已按用户要求续做。这次为只读调用链诊断，不是新一轮全分支fresh review。
+
+Astra核实当前公开3456入口由`gateway-bootstrap.js`直接运行core，管理端`cli.js`的兼容代理499记录不在该入口路径。安装包`next-ai-gateway.js`的非流式`Jl`在等待上游响应和读取body后检查取消，并可能提前返回；成功路径之后才生成`vf → sa` trace。直接公开模式的同步器依靠trace bundle以`allowStandaloneRecord`创建request_logs。因此客户端取消可以同时没有原body、完成日志和pending update，缺行不证明请求未抵达CCR。Astra用实际函数与受控依赖报告了成功1条trace、响应头前取消0条、body读取中取消0条的免费对照；父端另行核对安装字节SHA和对应提前返回源码。它不复现真实provider，也不解释30秒为什么没有内容。core SHA为`14e5fad973d13fec170f38d0dee0f9a131aaa002f1a8ab08fccf755465199e3a`，CLI SHA为`43fe94a6bb33c4b1b49fd47f5f3eda2ae8064a740d6e5def3ba50f95ff0fa6d3`；未改全局Router或重启服务。
+
+父端真实loopback复现另一项独立问题：仅客户端主动关闭就会产生旧`upstream-error`。TDD先确认失败，再将下游取消标成`client-disconnected`；上游连接reset、上游body中断、正常完成和网关身份拒绝均有对照，避免反向误归因。历史记录不重写，旧标签仍不足以判定供应商根因。
+
+同批新增有限边界元数据：实际转发body的SHA／字节长度、request-forwarded、上游headers时间／状态、首字节时间、累计收到字节、唯一transport-end及结果。这里的上游是该层连接的端点（host层为CCR），不是已经穿透CCR得到的provider时序；forwarded只表示本层HTTP发送完成，不证明接收方处理；completed只表示传输完成，不证明有效判断或主模型消费。没有保存提示正文、回复正文、thinking或凭据。免费真实socket测试覆盖无headers取消、有headers无body取消、部分body后取消及成功／错误／身份拒绝，每个请求恰有一个终态。测试先因缺失终态失败，再修复；232宿主和全部`node scripts/check.mjs`通过（transport-boundary-final-checks.log）。三轮45个关键原文件hash一致。
+
+仍不能判断实际provider排队、生成或网络原因，不凭low effort猜测关闭思考，不扩大30秒／2call／4000token预算。新的单题观察若启动，只回答此前无法核对的实际完整输入、宿主typed reason及边界时序，并统一审计所有自然出现维度；不以官方通过为目标。新冻结版本／新out，旧批次不重跑，无有效判断的能力继续标未观察；本地检查通过不代表服务恢复。
