@@ -50,5 +50,25 @@ try {
   assert.equal(reviewMetrics('deepseek-supervisor: REVIEW_DELIVERY {\"delivery\":\"context-returned\"}').factsReturned, 0, 'architecture advice is not a source fact packet')
   assert.equal(metrics.deliveryCount, 0, 'review completion alone cannot stand for delivery')
   assert.ok(readFileSync('eval/experiment.mjs', 'utf8').includes("'supervise'"))
+  const prepared = { id: 'review-1', status: 'prepared', modelId: 'fixture', promptSignature: 'fixture-signature', context: { sources: [{ id: 'req', kind: 'requirement', text: 'Keep the public API.' }] } }
+  const serializedInput = JSON.stringify(prepared), splitAt = 67
+  const head = { id: prepared.id, status: 'prepared', modelId: 'fixture', promptSignature: prepared.promptSignature, contextEncoding: 'json-parts', parts: 2, characters: serializedInput.length }
+  const eventLine = (marker, value) => `deepseek-supervisor: ${marker} ${JSON.stringify(value)}`
+  const inputHead = eventLine('REVIEW_INPUT', head)
+  const inputParts = [serializedInput.slice(0, splitAt), serializedInput.slice(splitAt)].map((text, index) => eventLine('REVIEW_INPUT_PART', { id: prepared.id, promptSignature: prepared.promptSignature, index, total: 2, text }))
+  const reconstructed = reviewMetrics([inputHead, ...inputParts.toReversed()].join('\n'))
+  assert.equal(reconstructed.inputAudit?.prepared, 1, 'complete correlated parts must recover the prepared input')
+  assert.equal(reconstructed.inputAudit.incompleteInputs, 0)
+  for (const damaged of [[inputHead, inputParts[0]], [inputHead, ...inputParts, inputParts[0]], [inputHead, inputParts[0], inputParts[1].replace('fixture-signature', 'other-signature')]]) {
+    const inputAudit = reviewMetrics(damaged.join('\n')).inputAudit
+    assert.equal(inputAudit.prepared, 0, 'missing, duplicated or mismatched parts must not fabricate a complete context')
+    assert.equal(inputAudit.incompleteInputs, 1)
+  }
+  const clippedAudit = reviewMetrics('deepseek-supervisor: REVIEW_INPUT {"context":{"sources":[…').inputAudit
+  assert.equal(clippedAudit.prepared, 0)
+  assert.equal(clippedAudit.malformedEvents, 1, 'old clipped records stay explicitly unavailable')
+  const { readReviewInputs } = await import('./swe-pro/review-metrics.mjs')
+  assert.deepEqual(readReviewInputs([inputHead, ...inputParts].join('\n')).inputs, [prepared])
+  assert.deepEqual(readReviewInputs(eventLine('REVIEW_INPUT', prepared)).inputs, [prepared], 'short legacy complete inputs remain readable')
   console.log('Comprehensive review identity/behavior metrics self-tests passed; fixture processes only, no model calls')
 } finally { rmSync(dir, { recursive: true, force: true }) }

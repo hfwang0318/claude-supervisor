@@ -156,8 +156,11 @@ spend an early review opportunity on a directory listing. Concrete plans remain
 eligible; otherwise review waits for the bounded source-evidence trigger.
 
 `REVIEW_INPUT` records the bounded, redacted context prepared for a review and a
-prompt signature, even if no answer arrives; preparation does not prove network
-acceptance. Deadline expiry is distinguished from a changed source binding.
+prompt signature, even if no answer arrives; larger records use correlated small
+`REVIEW_INPUT_PART` events to survive the host log limit. Missing or duplicate
+parts remain unavailable. Preparation does not prove network acceptance. Deadline expiry is distinguished from a changed source binding. `SIDE_CALL` also
+retains the typed host outcome (aborted, API error or empty reply) without raw
+error bodies; an aborted request does not establish a provider cause.
 `REVIEW` records parsed judgments, scope, dimensions, actions and unknowns;
 `REVIEW_DELIVERY` distinguishes context returned/submitted from confirmed
 consumption, which is unknown. Advice correctness, changed worker decisions and

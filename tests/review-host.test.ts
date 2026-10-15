@@ -4,13 +4,13 @@ const options = { assistance_mode: 'supervise', execution_mode: 'off', verifier_
 const reply = () => JSON.stringify({ reviewed: ['architecture'], judgment: { dimension: 'architecture', question: 'Should the public interface be replaced?', requirementQuote: 'Preserve the API.', sourceIds: ['req', 'plan-1'], reason: 'The proposed replacement removes the existing entry point.', impact: 'Caller compatibility.', recommendation: 'adjust', uncertainty: 'The complete caller set is unknown.' }, action: { kind: 'none' } })
 const world = (on: Parameters<TestBody>[1]) => {
   mock.store(on); const clock = mock.clock(on, { now: 100000 })
-  const state = { calls: 0, unanswered: false, timeouts: [] as number[], prompts: [] as string[], logs: [] as string[], processActions: [] as string[], validateDelay: 0, wait: undefined as Promise<void> | undefined, outputs: [reply(), reply()], rows: [{ role: 'assistant', text: 'Plan: replace the public method.', toolUses: [{ tool: 'Read', input: { file_path: '/p/api.js' }, text: 'exports.old = () => 1' }] }] }
+  const state = { calls: 0, unanswered: false, unansweredReason: 'aborted', logLimit: Infinity, timeouts: [] as number[], prompts: [] as string[], logs: [] as string[], processActions: [] as string[], validateDelay: 0, wait: undefined as Promise<void> | undefined, outputs: [reply(), reply()], rows: [{ role: 'assistant', text: 'Plan: replace the public method.', toolUses: [{ tool: 'Read', input: { file_path: '/p/api.js' }, text: 'exports.old = () => 1' }] }] }
   on('session.id', () => ({ value: 'review-session' })); on('session.model', () => ({ value: 'fixture' })); on('session.cwd', () => ({ value: '/p' })); on('session.messages', () => ({ value: state.rows }) as never)
-  on('env.get', () => ({ value: 'on' })); on('ui.status', () => ({ value: undefined })); on('ui.log', (_$, e) => { state.logs.push(e.text); return { value: undefined } })
+  on('env.get', () => ({ value: 'on' })); on('ui.status', () => ({ value: undefined })); on('ui.log', (_$, e) => { state.logs.push(e.text.slice(0, state.logLimit)); return { value: undefined } })
   on('command.register', (_$, e) => ({ value: { command: e.name } })); on('session.start', () => ({ cwd: '/p' })); on('prompt.submit', (_$, e) => ({ text: e.text }) as never)
   on('classic.PostToolBatch', () => ({ additionalContext: ['host context'] }) as never); on('classic.Stop', () => ({}) as never)
   on('turn.complete', (_$, e) => ({ text: e.answer }))
-  on('model.complete', async (_$, e) => { state.calls++; state.timeouts.push(e.timeoutMs ?? 0); state.prompts.push(e.prompt); if (state.wait) await state.wait; return { value: { isAnswered: !state.unanswered, text: state.outputs.shift() ?? 'null', usage: { input_tokens: 10, output_tokens: 20 } } } as never })
+  on('model.complete', async (_$, e) => { state.calls++; state.timeouts.push(e.timeoutMs ?? 0); state.prompts.push(e.prompt); if (state.wait) await state.wait; return { value: state.unanswered ? { isAnswered: false, reason: state.unansweredReason, ...(state.unansweredReason === 'api-error' ? { status: 429, error: 'rate_limit' } : {}), usage: { input_tokens: 0, output_tokens: 0 } } : { isAnswered: true, text: state.outputs.shift() ?? 'null', usage: { input_tokens: 10, output_tokens: 20 } } } as never })
   on('process.run', async (_$, e) => {
     const request = JSON.parse(e.init?.stdin ?? '{}'); state.processActions.push(request.action)
     if (request.action === 'validate-facts' && state.validateDelay) await clock.advance(state.validateDelay)
@@ -242,4 +242,35 @@ test('generic discovery plus a directory listing waits for source evidence witho
   const input = JSON.parse(state.prompts[0]!.split('\n\n').at(-1)!)
   expect(input.phase).toBe('exploration')
   expect(input.sources.some((s: { kind: string }) => s.kind === 'plan')).toBe(false)
+})
+
+
+test('a large review input can be reconstructed after the real host log character limit', { options }, async ($, on) => {
+  const { state } = world(on); await start($); state.logLimit = 10000
+  state.rows[0]!.toolUses[0]!.text = 'source'.repeat(1100) + 'first-source-end'
+  state.rows[0]!.toolUses.push({ tool: 'Read', input: { file_path: '/p/caller.js' }, text: 'caller'.repeat(1100) + 'second-source-end' })
+  await batch($)
+  const headLine = state.logs.find(l => l.includes('REVIEW_INPUT '))!
+  const head = JSON.parse(headLine.slice(headLine.indexOf('REVIEW_INPUT ') + 13))
+  let record = head
+  if (head.contextEncoding === 'json-parts') {
+    const parts = state.logs.filter(l => l.includes('REVIEW_INPUT_PART ')).map(l => JSON.parse(l.slice(l.indexOf('REVIEW_INPUT_PART ') + 18)))
+    record = JSON.parse(parts.sort((a, b) => a.index - b.index).map(p => p.text).join(''))
+    expect(parts.length).toBe(head.parts)
+  }
+  expect(record.context.sources.some((s: { text: string }) => s.text.includes('first-source-end'))).toBe(true)
+  expect(record.context.sources.some((s: { text: string }) => s.text.includes('second-source-end'))).toBe(true)
+  expect(record.context.sources[0].text).toBe('Preserve the API.')
+  expect(state.calls).toBe(1)
+})
+for (const reason of ['aborted', 'api-error', 'empty-reply']) test(`side call diagnostics retain the typed host ${reason} outcome without inventing provider detail`, { options }, async ($, on) => {
+  const { state } = world(on); await start($); state.unanswered = true; state.unansweredReason = reason
+  expect((await batch($)).additionalContext).toEqual(['host context'])
+  const line = state.logs.find(l => l.includes('SIDE_CALL '))!
+  const event = JSON.parse(line.slice(line.indexOf('SIDE_CALL ') + 10))
+  expect(event.hostReason).toBe(reason)
+  expect(event.hostStatus).toBe(reason === 'api-error' ? 429 : null)
+  expect(event.hostError).toBe(reason === 'api-error' ? 'rate_limit' : null)
+  expect(event.result).toBe('unknown')
+  expect(state.calls).toBe(1)
 })
