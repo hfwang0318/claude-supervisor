@@ -118,9 +118,39 @@ unknown. Identifier matching uses whole identifiers, so `cli` inside `client`
 cannot consume the prompt's only facts job. `FACTS_JOB.selectionMethod` records
 `local-scoped` or `model`; source/binding revalidation and budgets are unchanged.
 
-`assistance_mode=existing` remains the default. `probe` and `recovery` are reserved
-and currently run only record rules. `execution_mode` separately controls the
-existing independent executor and does not enable real-directory side writes.
+`assistance_mode=existing` remains the default. Opt into `supervise` for a
+single reviewer covering requirement–plan and plan–implementation consistency,
+architecture, decision direction, exploration/counterexamples, failure recovery
+and verification/completion. It reads attributed requirements, explicit plans,
+bounded change excerpts, recent tools and the final answer. Missing plans and
+omitted context remain unreviewed. Architecture/direction advice can reach the
+worker without first being converted into a command; a sourced recommendation
+is not a demonstrated defect or a repair certificate.
+
+The reviewer gives at most one important judgment per review, recommends
+continue/adjust/replan/gather-evidence, and chooses at most one supplemental
+action: safe source inspection, a requirement-bound probe, or recovery from
+three actual matching failures. `probe` and `recovery` restrict that action while
+using the same protocol. Generated expectations remain hypotheses; recovery
+never invents eliminated causes. One recovery packet and one semantic completion
+follow-up are allowed per prompt. Plans are reviewed before editing, changes
+after a recorded check, and completion when needed, sharing the same 2-call,
+4,000-output-token, 30-second budget. Every tool batch does not start a model.
+
+`execution_mode=off` still permits advisory review and explicitly unexecuted
+probe suggestions. `shadow` keeps observations without worker feedback.
+`enabled` can execute only through the validated isolated-copy capability;
+unsupported hosts, including current Linux evaluation containers, return
+unexecuted suggestions. No side-generated commands or files run in the actual
+project. New prompts, cancellation, model/workspace changes and off discard stale
+feedback; off/cancellation do not replenish the prompt budget. Source and
+snapshot observations are revalidated immediately before feedback.
+
+`REVIEW` records parsed judgments, scope, dimensions, actions and unknowns;
+`REVIEW_DELIVERY` distinguishes context returned/submitted from confirmed
+consumption, which is unknown. Advice correctness, changed worker decisions and
+independent acceptance require trajectory auditing. See the
+[capability and verification record](docs/evals/2026-10-15-complete-supervision.md).
 Use `node eval/selftest-assist.mjs` and `node scripts/selftest-assist.mjs` for free
 checks. The four-task `assist` suite needs a frozen `--experiment` config with
 `assistanceMode` and optional `taskTimeoutMs` (pilot: 180000); A and B both use
@@ -283,7 +313,8 @@ Options, in the `/config` menu or under `pluginConfigs` in settings:
 | Option | Default | |
 |---|---|---|
 | `verifier_model` | current worker | Empty follows the worker; an ID or host alias selects another side model |
-| `execution_mode` | `off` | `shadow` observes only; `enabled` sends advisory feedback |
+| `execution_mode` | `off` | Advisory review remains available; `shadow` suppresses feedback; `enabled` permits validated isolated execution |
+| `assistance_mode` | `existing` | `supervise` covers all process judgments; `facts`, `probe`, `recovery` isolate evidence actions |
 | `review_changes` | `true` | At the end of a turn that changed code, the verifier also reviews the change. |
 
 The plugin's store is shared by every session on the machine. It keeps the on/off/auto setting and the last 50 checks, including the claims and command output. It is never sent anywhere.
@@ -292,11 +323,11 @@ The plugin's store is shared by every session on the machine. It keeps the on/of
 
 Record rules call no model. Historical timings in eval/README.md do not measure the new foundation. Current side limits are listed above; missing prices or complete worker/side usage remain unknown and cannot establish a cost advantage.
 
-In a session you watch, nothing waits on the verifier. In a session nobody watches (`claude -p`), the turn's end waits for it: in the eval runs, a run with the plugin took 1.5 to 2.1 times as long as one without, the holds included.
+Interactive completion review runs after the turn; eligible tool-batch review waits before the next worker request. In a session nobody watches (`claude -p`), the turn's end waits for it: in the eval runs, a run with the plugin took 1.5 to 2.1 times as long as one without, the holds included.
 
 ## Known limits
 
-- **It only checks what the record or a command can show.** A model that did the wrong thing correctly, or misread what you wanted, leaves a record that holds. The verifier's review of the change catches some of that, and only where a command can show it.
+- **Judgment can be wrong or incomplete.** `supervise` can question requirements, plans, architecture and direction from bounded context, but a plausible opinion is not proof. Missing plans, omitted files and untested branches remain unknown; real-model benefit is not established by local tests.
 - **The rules read regexes, not meaning.** A project's own test runner under a name they do not know is no run. One whose name says test, check, lint, build, ci or verify (`./scripts/check-all`, `npm run verify`, `manage.py test`) keeps "no run at all" quiet; one that says none of these (`cargo nextest run`, `./go`) does not, so a pass claimed after it is held as unchecked, and the model can answer `[ysk#N refuted: …]`. An edit made through Bash (`sed -i`, a script) is not seen as an edit, which makes the rules miss rather than misfire.
 - **Without a sandbox the verifier mostly reads.** On Linux it cannot run the project's code; a defect it finds is a hypothesis the model's own run settles.
 - **A turn held at its end costs a step.** When the check is wrong, that step is wasted; the model can say so with `refuted`. Live runs found such misfires, and each became a test (below).
