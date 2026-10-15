@@ -63,3 +63,13 @@ ProtonMail 首个 local-scoped packet 在 10,698ms 准备完成，选择实际 `
 这个具体重复触发来自旧 signal 仅检查相关 import，没有检查实际普通调用。新增纯函数与宿主行为回归先 RED166pass/2fail，再实现对当前项目成功 Read 的普通调用识别，支持原生行号；遇到字面字符串、失败读取、项目外读取仍不把它们视为已知调用。GREEN168 个宿主测试与全部普通检查通过。按保留的实际请求规范化工具记录免费重放：冻结旧函数生成 missing-caller 症状，新函数返回 null；未重建 SDK 逐事件时序，不复制原始请求或 thinking。
 
 此修复只修改开发工作树，**正在运行的十二次仍使用冻结934f705**。不改 runtime、selection、预算和原回执，不为这个修复立即追加付费批次；先收齐当前结果再判断下一步。Task1 有效链当前仍为0，Task2/3关闭。
+
+## 收齐 facts 组与查询范围修复（2026-10-15 12:54 CST）
+
+本轮目前完成 11/12，facts 六次全部结束：5 通过、1 失败；existing 4 通过、1 失败，ProtonMail 对照仍在运行。facts 的五个通过任务均没有事实包；Flipt 虽然出现 facts 通过／existing 失败，也没有定位介入，不能作为收益。唯一 ProtonMail 事实包重复此前 Read，且独立官方验收失败。其余定位任务有三次 selection deadline、一次 secret-content 拒绝；具体供应商超时原因和缺失用量保持 unknown，不放宽安全边界。
+
+五条实际主模型请求的规范化工具记录免费回放确认：`af314e2` 只消除了 ProtonMail 的重复触发，未消除其他三次超时。OpenLibrary b671 另有可复现的内部范围不匹配：触发器输出三个标识符，而本地与真实 inspector 都最多接受两个，导致已有明确文件范围仍退回模型 selector。本轮将每次触发限定为最先观察到的两个缺失标识符，其余标识符不声明已查；不增大范围或预算。
+
+宿主行为回归先 RED168pass/1fail，修复后完整 `node scripts/check.mjs` 为 169 个宿主测试及全部普通检查通过。实际请求回放从旧 localRequest=null 变为 `get_contents`／`get_subfield_values`、三个明确文件的局部请求；固定同一 pinned Linux image base 的断网只读检索完整取得 3 文件／28 行，原 hash 和范围仍由 inspector 核对。未重建原临时修改工作区，不能称为精确旧工作区重放，也没有新的模型、投递、采纳或收益证据。
+
+这两项后续修复仍不在当前冻结 `934f705` 中。保留现有运行及原回执，先等待最后一项和完整审计，不自动叠加新的付费回归；目标链仍为 0，任务 2／3 关闭。

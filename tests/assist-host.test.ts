@@ -85,6 +85,15 @@ test('a known ordinary caller in the tool results spends no facts calls or reads
   expect((await batch($)).additionalContext).toEqual(['host context'])
   expect(state.calls).toBe(0); expect(state.reads).toBe(0)
 })
+test('several missing identifiers keep the grounded job within the two-term inspection limit', { options }, async ($, on) => {
+  const { state } = world(on); await start($)
+  await $.prompt.submit({ text: 'Fix parseDate, parseMonth and parseYear used by app.cjs.', origin: { kind: 'sdk' } } as never)
+  state.rows[0]!.toolUses[0]!.text = 'exports.parseDate = s => s\nexports.parseMonth = s => s\nexports.parseYear = s => s'
+  state.outputs = ['{"factIds":["f1"]}']
+  expect((await batch($)).additionalContext?.join('\n')).toContain('app.cjs:1')
+  expect(state.calls).toBe(1); expect(state.reads).toBe(1)
+  expect(state.filesOnly).toBe(true)
+})
 
 test('facts mode appends actual source after a batch once, preserves host context and never runs existing review', { options }, async ($, on) => {
   const { state } = world(on); await start($)

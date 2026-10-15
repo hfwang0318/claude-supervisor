@@ -111,6 +111,8 @@ as do imports and member calls; definitions alone still do not.
 Ordinary calls already visible in a successful project `Read` also suppress a
 missing-caller job, including line-numbered output. Quoted mentions, failed
 reads and reads outside the project do not establish such a caller.
+Each location job takes at most two observed missing identifiers, matching
+the literal search limit; other identifiers remain outside that job's scope.
 This still permits only one inspection per job; a rejected local scope stays
 unknown. Identifier matching uses whole identifiers, so `cli` inside `client`
 cannot consume the prompt's only facts job. `FACTS_JOB.selectionMethod` records

@@ -116,7 +116,9 @@ export const assistSignal = (asked: string, rows: readonly Row[], cwd: string): 
       const projectRead = u.tool === 'Read' && !u.isError && typeof source.file_path === 'string' && source.file_path.startsWith(prefix) && pathOK(source.file_path.slice(prefix.length))
       return (u.text ?? '').split('\n').some(line => hasIdentifier(line, name) && (/\brequire\s*\(|\bimport\s|\bfrom\s/.test(line) || projectRead && knownCall(line, name)))
     }))
-    if (missing.length) return `Observed candidate ${path} defines ${missing.slice(0, 3).join(', ')}; no related actual caller/import or API contract is present. Check whether additional source facts are needed.`
+    // One job can search at most two literal terms. Other identifiers stay
+    // outside this job's disclosed scope rather than forcing model selection.
+    if (missing.length) return `Observed candidate ${path} defines ${missing.slice(0, 2).join(', ')}; no related actual caller/import or API contract is present. Check whether additional source facts are needed.`
   }
   return null
 }
