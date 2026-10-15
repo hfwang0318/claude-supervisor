@@ -120,3 +120,18 @@ test('off and on cannot replenish the shared active review budget', { options },
   expect(state.calls).toBe(2)
   expect(state.timeouts[1]! <= 20000).toBe(true)
 })
+for (const dimension of ['requirement-plan', 'direction', 'verification']) test(`${dimension} judgment has a real hook feedback path`, { options }, async ($, on) => {
+  const { state } = world(on); await start($)
+  if (dimension === 'verification') state.rows[0]!.toolUses.push({ tool: 'Bash', input: { command: 'npm test' }, text: '1 failed', isError: true } as never)
+  const d = JSON.parse(reply()); d.reviewed = [dimension]; d.judgment.dimension = dimension
+  if (dimension === 'verification') d.judgment.sourceIds = ['req', 'tool-2']
+  state.outputs = [JSON.stringify(d)]
+  expect((await batch($)).additionalContext?.join('\n')).toContain(`Dimension: ${dimension}`)
+  expect(state.calls).toBe(1)
+})
+test('a grounded continue judgment without new evidence does not interrupt the worker', { options }, async ($, on) => {
+  const { state } = world(on); await start($)
+  const d = JSON.parse(reply()); d.judgment.recommendation = 'continue'; state.outputs = [JSON.stringify(d)]
+  expect((await batch($)).additionalContext).toEqual(['host context'])
+  expect(state.logs.some(l => l.includes('REVIEW_DELIVERY'))).toBe(false)
+})

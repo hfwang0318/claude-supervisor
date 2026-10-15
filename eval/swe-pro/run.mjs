@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync } from 
 import { resolve, join, dirname } from 'node:path'
 import { createHash } from 'node:crypto'
 import { MODEL, MODEL_POLICY, assertEvaluationModel } from './gateway.mjs'
-import { openModelNetwork, runAgent, treeHash, NODE_IMAGE } from './agent.mjs'
+import { openModelNetwork, runAgent, treeHash, NODE_IMAGE, armModes, assertRuntimeModes } from './agent.mjs'
 import { grade, readyForTask, verifyArtifacts, command, prepareTask } from './docker.mjs'
 import { schedule, identityValid, summarizeUsage, boundedMap } from './schedule.mjs'
 import { nextSelection } from './incremental.mjs'
@@ -10,10 +10,11 @@ import { selectRegression, summarizeBaseline, baselineSelections, summarizeRegre
 import { freezeExperiment, validateResult } from './run-state.mjs'
 import { loadContinuation, validateConcurrency, adapterFingerprint } from './continuation.mjs'
 import { fileURLToPath } from 'node:url'
+import { reviewMetrics } from './review-metrics.mjs'
 import { adaptiveMap, admissionPolicy, registerDrainSignals } from './capacity.mjs'
 
 const arg = (name, fallback) => { const i = process.argv.indexOf(`--${name}`); return i < 0 ? fallback : process.argv[i + 1] }
-const valueFlags = ['manifest', 'selection', 'baseline-summary', 'tasks-root', 'runtime', 'readiness', 'out', 'jobs', 'continue-from', 'continue-adapter', 'capacity-file']
+const valueFlags = ['manifest', 'selection', 'baseline-summary', 'tasks-root', 'runtime', 'readiness', 'out', 'jobs', 'continue-from', 'continue-adapter', 'capacity-file', 'experimental-mode']
 const seenFlags = new Set()
 for (let i = 2; i < process.argv.length; i++) {
   const flag = process.argv[i]
@@ -37,14 +38,17 @@ if (excludeUnproductive && !continuationPath) throw Error('unproductive exclusio
 if (!!continuationPath !== !!continuationAdapter) throw Error('--continue-from and --continue-adapter must be provided together')
 if (continuationPath && (selectionPath || !arg('out', null))) throw Error('continuation requires a full baseline and a new explicit --out')
 if (!!selectionPath !== !!baselinePath) throw Error('--selection and --baseline-summary must be provided together')
-const models = { model: MODEL, sideModel: MODEL }
+const modes = armModes(arg('experimental-mode', 'facts'))
+const models = { model: MODEL, sideModel: MODEL, armModes: modes }
 const incremental = selectionPath ? selectRegression(manifestBytes, readFileSync(resolve(selectionPath)), readFileSync(resolve(baselinePath)), models) : null
 if (!incremental) summarizeBaseline(manifestBytes, [], models)
 const jobs = schedule(incremental?.tasks ?? manifest.tasks, 53)
 if (process.argv.includes('--dry-run')) {
-  const preview = continuationPath ? loadContinuation(continuationPath, { ...JSON.parse(readFileSync(join(resolve(continuationPath), 'experiment.json'))), ...models, manifestSHA256: hash(manifestPath), adapterSHA256: adapterFingerprint(dirname(fileURLToPath(import.meta.url))) }, jobs, { sourceAdapter: continuationAdapter, excludeUnproductive, allowMemoryChange }) : undefined
+  const parent = continuationPath ? JSON.parse(readFileSync(join(resolve(continuationPath), 'experiment.json'))) : null
+  if (parent && modes.facts !== (parent.armModes?.facts ?? parent.runtime?.armModes?.facts ?? 'facts')) throw Error('continuation assistance mode changed')
+  const preview = parent ? loadContinuation(continuationPath, { ...parent, model: MODEL, sideModel: MODEL, ...(parent.armModes ? { armModes: modes } : {}), manifestSHA256: hash(manifestPath), adapterSHA256: adapterFingerprint(dirname(fileURLToPath(import.meta.url))) }, jobs, { sourceAdapter: continuationAdapter, excludeUnproductive, allowMemoryChange }) : undefined
   const remaining = jobs.filter(j => !preview?.completed.has(`${j.task.instanceId}/${j.mode}`))
-  console.log(JSON.stringify({ manifestSHA256: hash(manifestPath), selection: incremental ? { name: incremental.name, selectionSHA256: incremental.selectionSHA256, baselineSummarySHA256: incremental.baselineSummarySHA256 } : null, planned: remaining.length, ...(preview ? { cohortPlanned: jobs.length, inherited: preview.completed.size } : {}), jobs: remaining.map(j => ({ task: j.task.instanceId, mode: j.mode })), skipped: incremental?.skipped ?? [] }, null, 2))
+  console.log(JSON.stringify({ manifestSHA256: hash(manifestPath), selection: incremental ? { name: incremental.name, selectionSHA256: incremental.selectionSHA256, baselineSummarySHA256: incremental.baselineSummarySHA256 } : null, planned: remaining.length, ...(preview ? { cohortPlanned: jobs.length, inherited: preview.completed.size } : {}), jobs: remaining.map(j => ({ task: j.task.instanceId, mode: j.mode, assistanceMode: modes[j.mode] })), skipped: incremental?.skipped ?? [] }, null, 2))
   process.exit(0)
 }
 if (jobs.length === 0) throw Error('no remaining tasks; no model execution needed')
@@ -55,6 +59,7 @@ const readiness = resolve(arg('readiness', 'eval/results/swe-pro-glm53-flash/rea
 if (incremental && !arg('out', null)) throw Error('incremental execution requires a new explicit --out directory')
 const out = resolve(arg('out', 'eval/results/swe-pro-glm53-flash/baseline'))
 const identity = JSON.parse(readFileSync(join(runtime, 'identity.json')))
+assertRuntimeModes(runtime, identity, modes.facts)
 if (identity.model !== MODEL || identity.sideModel !== MODEL) throw Error('frozen runtime model identities differ from current main/side models')
 for (const mode of ['existing', 'facts']) if (treeHash(join(runtime, `plugin-${mode}`)) !== identity.pluginHashes[mode]) throw Error('frozen plugin changed')
 if (hash(join(runtime, 'gateway.mjs')) !== identity.gatewaySHA256 || hash(join(runtime, 'node')) !== identity.nodeSHA256 || hash(join(runtime, 'claude')) !== identity.claudeSHA256) throw Error('frozen runtime changed')
@@ -74,13 +79,13 @@ if (concurrency > 2) {
 }
 validateConcurrency(concurrency, { memoryBytes: info.MemTotal, swapBytes, cpus: info.NCPU }, overcommit)
 const environment = { dockerVersion: info.ServerVersion, architecture: info.Architecture, cpus: info.NCPU, memoryBytes: info.MemTotal }
-const config = { schemaVersion: 1, manifestSHA256: hash(manifestPath), runtime: identity, environment, preparationPolicy: 'per-task-calibration-in-worker-slots', model: MODEL, sideModel: MODEL, modelPolicy: MODEL_POLICY, reasoning: 'default', seed: 53, repetitions: 1, arms: ['existing', 'facts'], timeoutMs: 3_000_000, concurrency, costUSD: 'unknown', adapterSHA256: createHash('sha256').update(readdirSync(resolve('eval/swe-pro')).filter(n => n.endsWith('.mjs')).sort().map(n => `${n}:${hash(resolve('eval/swe-pro', n))}`).join('\n')).digest('hex') }
+const config = { schemaVersion: 1, manifestSHA256: hash(manifestPath), runtime: identity, environment, preparationPolicy: 'per-task-calibration-in-worker-slots', model: MODEL, sideModel: MODEL, modelPolicy: MODEL_POLICY, reasoning: 'default', seed: 53, repetitions: 1, arms: ['existing', 'facts'], armModes: modes, timeoutMs: 3_000_000, concurrency, costUSD: 'unknown', adapterSHA256: createHash('sha256').update(readdirSync(resolve('eval/swe-pro')).filter(n => n.endsWith('.mjs')).sort().map(n => `${n}:${hash(resolve('eval/swe-pro', n))}`).join('\n')).digest('hex') }
 if (incremental) config.incremental = { kind: incremental.kind, name: incremental.name, selectionSHA256: incremental.selectionSHA256, baselineSummarySHA256: incremental.baselineSummarySHA256, tasks: incremental.tasks.map(t => t.instanceId), skipped: incremental.skipped }
 if (concurrency > 2 || capacityFile) config.memoryPolicy = admissionPolicy({ concurrency, overcommit, swapBytes, capacityFile })
 const continuation = continuationPath ? loadContinuation(continuationPath, config, jobs, { sourceAdapter: continuationAdapter, excludeUnproductive, allowMemoryChange }) : undefined
 if (continuation) config.continuation = continuation.identity
 const frozen = freezeExperiment(out, config, jobs, continuation)
-writeFileSync(join(out, 'schedule.json'), JSON.stringify(jobs.map(j => ({ task: j.task.instanceId, mode: j.mode })), null, 2))
+writeFileSync(join(out, 'schedule.json'), JSON.stringify(jobs.map(j => ({ task: j.task.instanceId, mode: j.mode, assistanceMode: modes[j.mode] })), null, 2))
 let interrupted = false
 const controller = new AbortController()
 const dispatchController = new AbortController()
@@ -111,7 +116,7 @@ const runTask = async ({ task, mode }, index, execution) => {
   if (results[index]) return
   if (existsSync(dir)) throw Error(`unfinished attempt retained: ${task.instanceId}/${mode}; review it before restarting`)
   mkdirSync(dir, { recursive: true })
-  const result = { task: task.instanceId, repo: task.repo, split: task.split, mode, experimentSHA256: frozen.fingerprint, costUSD: 'unknown', status: 'environment-error', functionalSuccess: null }
+  const result = { task: task.instanceId, repo: task.repo, split: task.split, mode, assistanceMode: modes[mode], experimentSHA256: frozen.fingerprint, costUSD: 'unknown', status: 'environment-error', functionalSuccess: null }
   if (execution) result.execution = execution
   if (!preparations.has(task.instanceId)) preparations.set(task.instanceId, prepareTask(task, tasksRoot, join(readiness, task.instanceId), { signal: controller.signal, progress: phase => console.log(new Date().toISOString(), task.repo, 'environment', phase) }))
   const ready = await preparations.get(task.instanceId)
@@ -132,6 +137,7 @@ const runTask = async ({ task, mode }, index, execution) => {
       result.modelRequests = events.filter(e => e.type === 'request' && e.maxOutput !== undefined).length
       const debug = existsSync(join(dir, 'agent/debug.log')) ? readFileSync(join(dir, 'agent/debug.log'), 'utf8') : ''
       result.sideCalls = [...debug.matchAll(/SIDE_CALL\s+(\{[^\n]+\})/g)].flatMap(m => { try { return [JSON.parse(m[1])] } catch { return [] } })
+      result.review = reviewMetrics(debug)
       result.factsReturned = (debug.match(/"delivery":"context-returned"/g) ?? []).length
       if (result.modelIdentityVerified && receipt.patchAvailable && ['completed', 'timeout', 'agent-error'].includes(receipt.status)) {
         result.grade = await grade(task, tasksRoot, patch, join(dir, 'grade'), { signal: controller.signal, calibrated: true })
@@ -141,7 +147,7 @@ const runTask = async ({ task, mode }, index, execution) => {
     } catch (error) { result.error = error.message }
     finally { if (network) await network.close() }
   }
-  validateResult(result, task, mode, frozen.fingerprint)
+  validateResult(result, task, mode, frozen.fingerprint, modes[mode])
   writeFileSync(resultPath, JSON.stringify(result, null, 2))
   results[index] = result
   persistResults()

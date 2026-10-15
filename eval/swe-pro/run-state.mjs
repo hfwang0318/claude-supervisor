@@ -3,7 +3,8 @@ import { existsSync, readFileSync, readdirSync, mkdirSync, writeFileSync } from 
 import { join } from 'node:path'
 import { validateResume } from './schedule.mjs'
 
-export const validateResult = (row, task, mode, fingerprint) => {
+export const validateResult = (row, task, mode, fingerprint, assistanceMode) => {
+  if (assistanceMode && (row.assistanceMode !== assistanceMode || row.agent && row.agent.assistanceMode !== assistanceMode)) throw Error('unbound assistance mode receipt')
   if (row.task !== task.instanceId || row.mode !== mode || row.experimentSHA256 !== fingerprint || ![true, false, null].includes(row.functionalSuccess)) throw Error('unbound or invalid result receipt')
   if (row.functionalSuccess === null) {
     if (!['environment-error', 'agent-or-model-error', 'timeout', 'cancelled', 'patch-error'].includes(row.status) || row.grade?.reward !== undefined && row.grade.reward !== null) throw Error('contradictory unknown result receipt')
@@ -30,7 +31,7 @@ export const freezeExperiment = (out, config, jobs, continuation) => {
     }
     if (existsSync(path)) {
       const row = JSON.parse(readFileSync(path))
-      validateResult(row, task, mode, fingerprint)
+      validateResult(row, task, mode, fingerprint, config.armModes?.[mode] ?? config.runtime?.armModes?.[mode])
       completed.set(`${task.instanceId}/${mode}`, row)
     } else if (existsSync(dir)) throw Error(`unfinished attempt retained: ${task.instanceId}/${mode}; no automatic retries`)
   }

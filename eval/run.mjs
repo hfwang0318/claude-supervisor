@@ -1,3 +1,4 @@
+import { reviewMetrics } from './swe-pro/review-metrics.mjs'
 // Runs each task with the plugin and without it, and scores the runs.
 //
 //   node eval/run.mjs [--suite short|long|hard|late|weak] [--reps 2] [--jobs 4] [--tasks a,b] [--arms on,off] [--out eval/results]
@@ -160,7 +161,7 @@ const pluginStats = log => {
   const sum = k => forks.reduce((n, m) => n + Number(m[k]), 0)
   const sideCalls = json(/deepseek-supervisor: SIDE_CALL (\{.*\})/g)
   const assistance = json(/deepseek-supervisor: ASSIST (\{.*\})/g)
-  return { passes, items, rules, sideCalls, assistance, input: sum(1), output: sum(2), cached: sum(3) }
+  return { passes, items, rules, sideCalls, assistance, review: reviewMetrics(log), input: sum(1), output: sum(2), cached: sum(3) }
 }
 
 const once = ({ task, arm, rep }) =>

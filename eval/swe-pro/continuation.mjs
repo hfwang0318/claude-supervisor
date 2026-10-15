@@ -57,7 +57,7 @@ export const loadContinuation = (source, config, jobs, { sourceAdapter, currentA
       continue
     }
     const resultBytes = readFileSync(path), row = JSON.parse(resultBytes)
-    validateResult(row, task, mode, fingerprint)
+    validateResult(row, task, mode, fingerprint, previous.armModes?.[mode] ?? previous.runtime?.armModes?.[mode])
     receipts.push([key, hash(resultBytes)])
     const origin = { key, directory: dir, resultSHA256: hash(resultBytes), experimentSHA256: fingerprint, concurrency: previous.concurrency, adaptive: Boolean(previous.memoryPolicy?.capacityFile), ...(previous.environment ? { environment: previous.environment } : {}) }
     if (excludeUnproductive && row.status === 'environment-error' && row.functionalSuccess === null && row.agent === undefined && !existsSync(join(dir, 'gateway.jsonl')) && !existsSync(join(dir, 'agent/model.patch'))) { excluded.push({ ...origin, reason: 'free environment preparation only; no model gateway or agent' }); continue }

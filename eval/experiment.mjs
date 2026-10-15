@@ -15,7 +15,7 @@ export const validateExperiment = config => {
   if (config.externalContextDisabled !== true || config.otherPluginsDisabled !== true) throw Error('disable external context and other plugins for frozen experiments')
   if (!config.prices || typeof config.prices !== 'object') throw Error('price snapshot required; unknown prices remain unknown')
   if (config.executionMode !== undefined && !['off', 'shadow', 'enabled'].includes(config.executionMode)) throw Error('invalid experimental execution mode')
-  if (config.assistanceMode !== undefined && !['existing', 'facts', 'probe', 'recovery'].includes(config.assistanceMode)) throw Error('invalid assistance mode')
+  if (config.assistanceMode !== undefined && !['existing', 'facts', 'probe', 'recovery', 'supervise'].includes(config.assistanceMode)) throw Error('invalid assistance mode')
   if (config.taskTimeoutMs !== undefined && (!Number.isSafeInteger(config.taskTimeoutMs) || config.taskTimeoutMs < 1)) throw Error('invalid task timeout')
   return config.side ? config : { ...config, side: config.worker }
 }

@@ -369,9 +369,9 @@ const engineeringReview = async ($: EngineInterface, list: Rows, final = false, 
       const second = await ask($, prompt, deadlineMs - await $.clock.now(), job.signal)
       return second?.isAnswered ? second.text : null
     } })
-    const event = { kind: 'engineering-review', binding, mode, phase, reviewed: decision.reviewed, unreviewed: REVIEW_DIMENSIONS.filter(d => !decision.reviewed.includes(d)), judgment: decision.judgment, action: decision.action.kind, reason: outcome.reason, independentExecution: outcome.evidence !== null, sourceIds: context.sources.map(source => source.id), supplementalFacts: outcome.view?.facts.map(f => ({ id: f.id, path: f.path, line: f.startLine, fileHash: f.fileHash })) ?? [], observation: outcome.evidence ? { id: outcome.evidence.id, outcome: outcome.evidence.outcome, binding: outcome.evidence.binding, truncated: outcome.evidence.truncated } : null }
+    const event = { kind: 'engineering-review', id, binding, mode, phase, contextScope: context.scope, reviewed: decision.reviewed, unreviewed: REVIEW_DIMENSIONS.filter(d => !decision.reviewed.includes(d)), judgment: decision.judgment, action: decision.action.kind, reason: outcome.reason, independentExecution: outcome.evidence !== null, sourceIds: context.sources.map(source => source.id), supplementalFacts: outcome.view?.facts.map(f => ({ id: f.id, path: f.path, line: f.startLine, fileHash: f.fileHash })) ?? [], observation: outcome.evidence ? { id: outcome.evidence.id, outcome: outcome.evidence.outcome, binding: outcome.evidence.binding, truncated: outcome.evidence.truncated } : null }
     await remember($, event)
-    const { judgment: _judgment, ...metadata } = event
+    const metadata = event
     say($, `REVIEW ${JSON.stringify({ ...metadata, dimension: decision.judgment?.dimension ?? null, recommendation: decision.judgment?.recommendation ?? null })}`)
     if (!await current() || !outcome.note || decision.judgment?.recommendation === 'continue' && decision.action.kind === 'none') return null
     if (!s.coordinator.finish(id, binding, 'succeeded', await $.clock.now())) return null
@@ -390,6 +390,7 @@ const reviewContextNote = async ($: EngineInterface, prepared: PreparedReview): 
   if (!await isOn($) || !sameBinding(prepared.binding, s.coordinator.binding) || !await prepared.outcome.validate()) return null
   const status = await s.coordinator.deliver(prepared.id, prepared.binding, async () => 'unknown')
   if (status === 'dropped' || !sameBinding(prepared.binding, s.coordinator.binding) || await $.clock.now() >= prepared.deadlineMs) return null
+  say($, `REVIEW_DELIVERY ${JSON.stringify({ id: prepared.id, binding: prepared.binding, delivery: 'context-returned', consumption: 'unknown' })}`)
   return prepared.outcome.note
 }
 
@@ -815,6 +816,7 @@ const atAnswer = async ($: EngineInterface, answer: string) => {
       await s.coordinator.deliver(prepared.id, prepared.binding, async () => {
         if (!await isOn($) || !await prepared.outcome.validate() || !sameBinding(prepared.binding, s.coordinator.binding)) return 'dropped'
         const result = await $.prompt.submit({ text: prepared.outcome.note! })
+        say($, `REVIEW_DELIVERY ${JSON.stringify({ id: prepared.id, binding: prepared.binding, delivery: result.drop === undefined ? 'submitted' : 'dropped', consumption: 'unknown' })}`)
         return result.drop === undefined ? 'delivered' : 'dropped'
       })
       return

@@ -6,7 +6,7 @@ import { MODEL, currentRoute, startGateway } from './gateway.mjs'
 
 export const NODE_IMAGE = 'node@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392'
 export const frozenDefaults = mode => {
-  if (!['facts', 'existing'].includes(mode)) throw Error('invalid mode')
+  if (!['facts', 'existing', 'supervise'].includes(mode)) throw Error('invalid mode')
   return { verifier_model: MODEL, execution_mode: 'off', assistance_mode: mode }
 }
 export const agentArgs = mode => {
@@ -32,7 +32,21 @@ export const treeHash = root => {
   walk(root)
   return hash.digest('hex')
 }
-export const freezeRuntime = (root, runtime) => {
+export const armModes = (experimentalMode = 'facts') => {
+  if (!['facts', 'supervise'].includes(experimentalMode)) throw Error('invalid experimental mode')
+  return { existing: 'existing', facts: experimentalMode }
+}
+export const assertRuntimeModes = (runtime, identity, experimentalMode = 'facts') => {
+  const expected = armModes(experimentalMode), actual = identity.armModes ?? armModes()
+  if (JSON.stringify(actual) !== JSON.stringify(expected)) throw Error('runtime assistance mode differs from requested mode')
+  for (const [slot, mode] of Object.entries(expected)) {
+    const config = JSON.parse(readFileSync(join(runtime, `plugin-${slot}/.claude-plugin/plugin.json`)))
+    for (const [key, value] of Object.entries(frozenDefaults(mode))) if (config.userConfig?.[key]?.default !== value) throw Error(`runtime mode config mismatch: ${slot}/${key}`)
+  }
+  return expected
+}
+export const freezeRuntime = (root, runtime, { experimentalMode = 'facts' } = {}) => {
+  const modes = armModes(experimentalMode)
   const manifest = JSON.parse(readFileSync(join(runtime, 'manifest.json')))
   if (manifest.version !== '2.1.295' || createHash('sha256').update(readFileSync(join(runtime, 'claude'))).digest('hex') !== manifest.platforms['linux-x64'].checksum) throw Error('Claude runtime checksum mismatch')
   for (const mode of ['existing', 'facts']) {
@@ -40,11 +54,11 @@ export const freezeRuntime = (root, runtime) => {
     if (existsSync(plugin)) throw Error('runtime already frozen; use stored identity or a new directory')
     for (const dir of ['hooks', 'supervisor', 'types', 'scripts', '.claude-plugin']) cpSync(join(root, dir), join(plugin, dir), { recursive: true, filter: path => !path.includes('/.claude-plugin/types') })
     const file = join(plugin, '.claude-plugin/plugin.json'), config = JSON.parse(readFileSync(file))
-    for (const [key, value] of Object.entries(frozenDefaults(mode))) config.userConfig[key].default = value
+    for (const [key, value] of Object.entries(frozenDefaults(modes[mode]))) config.userConfig[key].default = value
     writeFileSync(file, JSON.stringify(config, null, 2))
   }
   cpSync(join(root, 'eval/swe-pro/gateway.mjs'), join(runtime, 'gateway.mjs'))
-  const receipt = { model: MODEL, sideModel: MODEL, claudeVersion: manifest.version, claudeSHA256: manifest.platforms['linux-x64'].checksum, nodeSHA256: createHash('sha256').update(readFileSync(join(runtime, 'node'))).digest('hex'), nodeImage: NODE_IMAGE, pluginHashes: Object.fromEntries(['existing', 'facts'].map(mode => [mode, treeHash(join(runtime, `plugin-${mode}`))])), gatewaySHA256: createHash('sha256').update(readFileSync(join(runtime, 'gateway.mjs'))).digest('hex') }
+  const receipt = { armModes: modes, model: MODEL, sideModel: MODEL, claudeVersion: manifest.version, claudeSHA256: manifest.platforms['linux-x64'].checksum, nodeSHA256: createHash('sha256').update(readFileSync(join(runtime, 'node'))).digest('hex'), nodeImage: NODE_IMAGE, pluginHashes: Object.fromEntries(['existing', 'facts'].map(mode => [mode, treeHash(join(runtime, `plugin-${mode}`))])), gatewaySHA256: createHash('sha256').update(readFileSync(join(runtime, 'gateway.mjs'))).digest('hex') }
   writeFileSync(join(runtime, 'identity.json'), JSON.stringify(receipt, null, 2))
   return receipt
 }
@@ -67,7 +81,10 @@ export const openModelNetwork = async (runtime, auditPath) => {
 export const runAgent = async (task, instruction, mode, runtime, network, out, { timeoutMs = 3_000_000, preflight = false, signal } = {}) => {
   mkdirSync(out, { recursive: true })
   const name = `dss-agent-${randomUUID()}`, started = Date.now()
-  const receipt = { task: task.instanceId, mode, model: MODEL, status: 'setup-error' }
+  const identity = JSON.parse(readFileSync(join(runtime, 'identity.json')))
+  const modes = assertRuntimeModes(runtime, identity, identity.armModes?.facts ?? 'facts')
+  if (!Object.hasOwn(modes, mode)) throw Error('invalid logical arm')
+  const receipt = { task: task.instanceId, mode, assistanceMode: modes[mode], model: MODEL, status: 'setup-error' }
   let patch = ''
   const checked = async args => { const r = await command(args); if (r.exitCode !== 0) throw Error(r.stderr.slice(-1000)); return r }
   try {

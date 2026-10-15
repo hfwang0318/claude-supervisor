@@ -3,6 +3,12 @@ import { selectIncremental, summarizeIncremental, nextSelection } from './increm
 
 const hash = bytes => createHash('sha256').update(bytes).digest('hex')
 const arms = ['existing', 'facts']
+const modesOf = identity => {
+  const modes = identity.armModes ?? { existing: 'existing', facts: 'facts' }
+  if (modes.existing !== 'existing' || !['facts', 'supervise'].includes(modes.facts) || Object.keys(modes).length !== 2) throw Error('invalid baseline or current assistance mode')
+  return modes
+}
+const comparisonOf = (baseline, identity) => ({ parentArmModes: modesOf(baseline), currentArmModes: modesOf(identity), interpretation: JSON.stringify(modesOf(baseline)) === JSON.stringify(modesOf(identity)) ? 'Same assistance modes; source versions and stochastic behavior may still differ.' : 'Cross-mode follow-up: logical facts slot now uses supervise; historical facts results do not validate the new reviewer.' })
 const sameModels = (baseline, identity) => {
   if (!identity.model || !identity.sideModel || baseline.model !== identity.model || baseline.sideModel !== identity.sideModel) throw Error('baseline model identities differ from current main/side models')
 }
@@ -36,9 +42,10 @@ export const baselineSelections = (name, summaryBytes, { seed = randomBytes(16).
 export const selectRegression = (manifestBytes, selectionBytes, baselineBytes, identity) => {
   const baseline = JSON.parse(baselineBytes), selection = JSON.parse(selectionBytes)
   sameModels(baseline, identity)
+  const comparison = comparisonOf(baseline, identity)
   if (selection.kind !== undefined && selection.kind !== 'incremental' && selection.kind !== 'quick') throw Error('invalid regression kind')
   if (baseline.kind === 'quick') throw Error('quick results cannot be used as an incremental baseline')
-  if (selection.kind !== 'quick') return { ...selectIncremental(manifestBytes, selectionBytes, baselineBytes), kind: 'incremental' }
+  if (selection.kind !== 'quick') return { ...selectIncremental(manifestBytes, selectionBytes, baselineBytes), kind: 'incremental', comparison }
   if (selection.schemaVersion !== 2 || selection.sampling?.method !== 'sha256-seed-v1') throw Error('quick selection requires the seeded single-failure protocol; regenerate in a new file')
   const expected = baselineSelections('validation', baselineBytes, { seed: selection.sampling.seed ?? '' }).quick
   if (!expected) throw Error('quick regression requires a double failure; unknowns cannot substitute')
@@ -50,7 +57,7 @@ export const selectRegression = (manifestBytes, selectionBytes, baselineBytes, i
   selectIncremental(manifestBytes, JSON.stringify(nextSelection('validation', baselineBytes)), baselineBytes)
   const manifest = JSON.parse(manifestBytes), ids = new Set(selection.tasks.map(t => t.instanceId))
   return {
-    kind: 'quick', name: selection.name, manifestSHA256: hash(manifestBytes), baselineSummarySHA256: hash(baselineBytes), selectionSHA256: hash(selectionBytes),
+    comparison, kind: 'quick', name: selection.name, manifestSHA256: hash(manifestBytes), baselineSummarySHA256: hash(baselineBytes), selectionSHA256: hash(selectionBytes),
     tasks: selection.tasks.map(row => manifest.tasks.find(t => t.instanceId === row.instanceId)),
     baseline: Object.fromEntries(selection.tasks.map(row => [row.instanceId, row.baseline])),
     skipped: manifest.tasks.filter(t => !ids.has(t.instanceId)).map(t => ({ instanceId: t.instanceId, repo: t.repo, status: 'quick-not-selected' }))
@@ -58,10 +65,10 @@ export const selectRegression = (manifestBytes, selectionBytes, baselineBytes, i
 }
 
 export const summarizeRegression = (plan, results, identity) => {
-  const summary = { ...summarizeIncremental(plan, results), ...identity, kind: plan.kind }
+  const summary = { ...summarizeIncremental(plan, results), ...identity, kind: plan.kind, ...(plan.comparison ? { comparison: plan.comparison } : {}) }
   if (plan.kind === 'quick') {
     delete summary.remaining
-    summary.interpretation = 'Two fixed baseline representatives only; no full score or next failure union can be inferred.'
+    summary.interpretation = 'One sampled double failure, two mode attempts only; no full score or next failure union can be inferred.'
   }
   return summary
 }
