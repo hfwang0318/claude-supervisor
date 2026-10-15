@@ -161,6 +161,9 @@ prompt signature, even if no answer arrives; larger records use correlated small
 parts remain unavailable. Preparation does not prove network acceptance. Deadline expiry is distinguished from a changed source binding. `SIDE_CALL` also
 retains the typed host outcome (aborted, API error or empty reply) without raw
 error bodies; an aborted request does not establish a provider cause.
+The evaluation gateway records downstream cancellation as `client-disconnected`,
+separately from upstream transport errors. Historical `upstream-error` records
+alone cannot establish which endpoint initiated cancellation.
 `REVIEW` records parsed judgments, scope, dimensions, actions and unknowns;
 `REVIEW_DELIVERY` distinguishes context returned/submitted from confirmed
 consumption, which is unknown. Advice correctness, changed worker decisions and
