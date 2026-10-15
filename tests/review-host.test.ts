@@ -4,13 +4,13 @@ const options = { assistance_mode: 'supervise', execution_mode: 'off', verifier_
 const reply = () => JSON.stringify({ reviewed: ['architecture'], judgment: { dimension: 'architecture', question: 'Should the public interface be replaced?', requirementQuote: 'Preserve the API.', sourceIds: ['req', 'plan-1'], reason: 'The proposed replacement removes the existing entry point.', impact: 'Caller compatibility.', recommendation: 'adjust', uncertainty: 'The complete caller set is unknown.' }, action: { kind: 'none' } })
 const world = (on: Parameters<TestBody>[1]) => {
   mock.store(on); const clock = mock.clock(on, { now: 100000 })
-  const state = { calls: 0, timeouts: [] as number[], prompts: [] as string[], logs: [] as string[], processActions: [] as string[], validateDelay: 0, wait: undefined as Promise<void> | undefined, outputs: [reply(), reply()], rows: [{ role: 'assistant', text: 'Plan: replace the public method.', toolUses: [{ tool: 'Read', input: { file_path: '/p/api.js' }, text: 'exports.old = () => 1' }] }] }
+  const state = { calls: 0, unanswered: false, timeouts: [] as number[], prompts: [] as string[], logs: [] as string[], processActions: [] as string[], validateDelay: 0, wait: undefined as Promise<void> | undefined, outputs: [reply(), reply()], rows: [{ role: 'assistant', text: 'Plan: replace the public method.', toolUses: [{ tool: 'Read', input: { file_path: '/p/api.js' }, text: 'exports.old = () => 1' }] }] }
   on('session.id', () => ({ value: 'review-session' })); on('session.model', () => ({ value: 'fixture' })); on('session.cwd', () => ({ value: '/p' })); on('session.messages', () => ({ value: state.rows }) as never)
   on('env.get', () => ({ value: 'on' })); on('ui.status', () => ({ value: undefined })); on('ui.log', (_$, e) => { state.logs.push(e.text); return { value: undefined } })
   on('command.register', (_$, e) => ({ value: { command: e.name } })); on('session.start', () => ({ cwd: '/p' })); on('prompt.submit', (_$, e) => ({ text: e.text }) as never)
   on('classic.PostToolBatch', () => ({ additionalContext: ['host context'] }) as never); on('classic.Stop', () => ({}) as never)
   on('turn.complete', (_$, e) => ({ text: e.answer }))
-  on('model.complete', async (_$, e) => { state.calls++; state.timeouts.push(e.timeoutMs ?? 0); state.prompts.push(e.prompt); if (state.wait) await state.wait; return { value: { isAnswered: true, text: state.outputs.shift() ?? 'null', usage: { input_tokens: 10, output_tokens: 20 } } } as never })
+  on('model.complete', async (_$, e) => { state.calls++; state.timeouts.push(e.timeoutMs ?? 0); state.prompts.push(e.prompt); if (state.wait) await state.wait; return { value: { isAnswered: !state.unanswered, text: state.outputs.shift() ?? 'null', usage: { input_tokens: 10, output_tokens: 20 } } } as never })
   on('process.run', async (_$, e) => {
     const request = JSON.parse(e.init?.stdin ?? '{}'); state.processActions.push(request.action)
     if (request.action === 'validate-facts' && state.validateDelay) await clock.advance(state.validateDelay)
@@ -193,4 +193,36 @@ for (const unusable of ['failed', 'pending', 'running', 'truncated', 'duplicate'
   state.rows = [{ role: 'assistant', text: '', toolUses: [first, second] }] as never
   expect((await batch($)).additionalContext).toEqual(['host context'])
   expect(state.calls).toBe(0)
+})
+
+test('a review that consumes its deadline records deadline rather than a false stale source', { options }, async ($, on) => {
+  const { state, clock } = world(on); await start($)
+  let release = () => {}; state.wait = new Promise<void>(r => { release = r })
+  const pending = batch($)
+  for (let i = 0; i < 12 && !state.calls; i++) await clock.advance(10)
+  await clock.advance(30001); release()
+  expect((await pending).additionalContext).toEqual(['host context'])
+  const events = state.logs.filter(l => l.includes('REVIEW ')).map(l => JSON.parse(l.slice(l.indexOf('REVIEW ') + 7)))
+  expect(events.some(e => e.reason === 'deadline' && e.reviewed.length === 0)).toBe(true)
+  expect(events.some(e => e.reason === 'stale-binding')).toBe(false)
+})
+test('a real workspace change still records stale binding instead of deadline', { options }, async ($, on) => {
+  const { state, clock } = world(on); await start($)
+  let release = () => {}; state.wait = new Promise<void>(r => { release = r })
+  const pending = batch($)
+  for (let i = 0; i < 12 && !state.calls; i++) await clock.advance(10)
+  state.rows.push({ role: 'assistant', text: '', toolUses: [{ tool: 'Read', input: { file_path: '/p/new.js' }, text: 'new context' }] })
+  await batch($); release(); await pending
+  expect(state.logs.some(l => l.includes('REVIEW ') && l.includes('stale-binding'))).toBe(true)
+})
+test('the exact bounded review input remains auditable even if the provider never answers', { options }, async ($, on) => {
+  const { state } = world(on); await start($); state.unanswered = true
+  expect((await batch($)).additionalContext).toEqual(['host context'])
+  const inputs = state.logs.filter(l => l.includes('REVIEW_INPUT ')).map(l => JSON.parse(l.slice(l.indexOf('REVIEW_INPUT ') + 13)))
+  expect(inputs.length).toBe(1)
+  expect(inputs[0].context.sources[0].text).toBe('Preserve the API.')
+  expect(inputs[0].context.sources.some((s: { text: string }) => s.text.includes('exports.old'))).toBe(true)
+  expect(inputs[0].context).toEqual(JSON.parse(state.prompts[0]!.split('\n\n').at(-1)!))
+  expect(inputs[0].modelId).toBe('fixture')
+  expect(state.calls).toBe(1)
 })

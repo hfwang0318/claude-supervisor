@@ -151,6 +151,9 @@ project. New prompts, cancellation, model/workspace changes and off discard stal
 feedback; off/cancellation do not replenish the prompt budget. Source and
 snapshot observations are revalidated immediately before feedback.
 
+`REVIEW_INPUT` records the bounded, redacted context prepared for a review and a
+prompt signature, even if no answer arrives; preparation does not prove network
+acceptance. Deadline expiry is distinguished from a changed source binding.
 `REVIEW` records parsed judgments, scope, dimensions, actions and unknowns;
 `REVIEW_DELIVERY` distinguishes context returned/submitted from confirmed
 consumption, which is unknown. Advice correctness, changed worker decisions and

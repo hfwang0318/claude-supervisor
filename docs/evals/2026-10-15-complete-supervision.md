@@ -57,3 +57,5 @@ SWE Pro 使用显式 `--experimental-mode supervise`。为兼容旧失败并集�
 ## 单题真实观察结论
 
 [本轮完整行为报告](2026-10-15-supervision-behavior-observation.md)：2/2已结束审计，审查模型0调用、0反馈，唯一事件为no-explicit-plan，实际审查输入输出未覆盖。该结果暴露探索阶段触发覆盖不足，不宣称行为验证通过；没有追加付费试验，官方失败仅描述。
+
+后续单题迭代补充：`REVIEW_INPUT` 另存有界且脱敏的实际已准备上下文／提示签名，不记录模型thinking或原始未解析回复，不证明供应商接受；deadline与stale-binding分别分类。来源变化仍丢弃，原共享预算不变。真实轮次和各维度状态见`2026-10-15-review-iterations.md`。

@@ -368,15 +368,25 @@ const engineeringReview = async ($: EngineInterface, list: Rows, final = false, 
   if (!job) return skipped('review-in-flight-or-budget-unavailable')
   s.reviewSignatures.add(key); s.reviewAttempts++
   const deadlineMs = await $.clock.now() + s.coordinator.remainingTime(await $.clock.now())
-  const current = async () => {
+  const invalidReason = async () => {
     await selectionOf($)
     const enabled = await isOn($)
-    return enabled && !job.signal.aborted && sameBinding(binding, s.coordinator.binding) && await $.clock.now() < deadlineMs
+    if (!enabled) return 'disabled'
+    if (job.signal.aborted) return job.signal.reason === 'cancelled' || job.signal.reason === 'disabled' ? job.signal.reason : 'stale-binding'
+    if (!sameBinding(binding, s.coordinator.binding)) return 'stale-binding'
+    if (await $.clock.now() >= deadlineMs) return 'deadline'
+    return null
   }
+  const current = async () => await invalidReason() === null
   let outcome: ReviewOutcome | undefined, retained = false
   try {
-    const reply = await ask($, reviewPrompt(context, mode as 'supervise' | 'probe' | 'recovery'), deadlineMs - await $.clock.now(), job.signal)
-    if (!await current()) return skipped('stale-binding')
+    const prompt = redact(reviewPrompt(context, mode as 'supervise' | 'probe' | 'recovery'))
+    const inputEvent = { kind: 'engineering-review-input', id, status: 'prepared', modelId: (await selectionOf($)).modelId, promptSignature: signatureOfChange(prompt), context: JSON.parse(prompt.split('\n\n').at(-1)!) }
+    await remember($, inputEvent)
+    say($, `REVIEW_INPUT ${JSON.stringify(inputEvent)}`)
+    const reply = await ask($, prompt, deadlineMs - await $.clock.now(), job.signal)
+    const invalid = await invalidReason()
+    if (invalid) return skipped(invalid)
     if (!reply?.isAnswered) return skipped('review-unanswered')
     const decision = parseReview(context, reply.text)
     if (!decision) return skipped('invalid-review-protocol')
