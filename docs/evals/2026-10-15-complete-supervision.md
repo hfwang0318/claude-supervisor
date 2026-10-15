@@ -52,3 +52,8 @@ SWE Pro 使用显式 `--experimental-mode supervise`。为兼容旧失败并集�
 修复后 `node scripts/check.mjs` 完整通过：215项宿主测试、manifest、TypeScript、真实只读／范围检索／workspace隔离及全部scorer、SWE Pro评测机制检查。该结果是机制验证，不是真实审查质量证明；后续代码采用作者TDD验证，不伪称审查者重审过最终修改。
 
 用户最新要求本轮真实模型只观察行为。已从最新完整 caller-scope 双失败中以固定seed `bdfea61f487625f6804b93d1babef504` 抽中ProtonMail e65，existing／supervise各一次，不重抽，不叠加full。两组显式 `--task-timeout-ms 900000`（15分钟主模型观察窗口，旁路预算不变），区别于旧3000秒完整求解上限；到时保留轨迹和部分patch，不要求官方通过。报告重点是触发、输入来源／输出协议、建议与行动、投递进入主请求及预算正常性，官方成绩只描述。
+
+
+## 单题真实观察结论
+
+[本轮完整行为报告](2026-10-15-supervision-behavior-observation.md)：2/2已结束审计，审查模型0调用、0反馈，唯一事件为no-explicit-plan，实际审查输入输出未覆盖。该结果暴露探索阶段触发覆盖不足，不宣称行为验证通过；没有追加付费试验，官方失败仅描述。
