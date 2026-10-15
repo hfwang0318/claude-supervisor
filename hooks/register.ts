@@ -7,7 +7,7 @@ import { validateObservation, normalizeTrack } from '../supervisor/ledger'
 import { captureSnapshot } from '../supervisor/workspace'
 import { buildAssistPacket, buildLocalAssistPacket, parseFactRequest, assistSignal, assistNote, localFactRequest } from '../supervisor/assist'
 import { Coordinator, sameBinding } from '../supervisor/coordinator'
-import { buildReviewContext, parseReview, reviewPrompt, REVIEW_DIMENSIONS, hasExplorationEvidence } from '../supervisor/review'
+import { buildReviewContext, parseReview, reviewPrompt, reviewInputLogs, REVIEW_DIMENSIONS, hasExplorationEvidence } from '../supervisor/review'
 import { runReviewFlow } from '../supervisor/review-flow'
 import type { ReviewOutcome } from '../supervisor/review-flow'
 import type { ReviewContext } from '../supervisor/contracts'
@@ -385,15 +385,7 @@ const engineeringReview = async ($: EngineInterface, list: Rows, final = false, 
     const prompt = redact(reviewPrompt(context, mode as 'supervise' | 'probe' | 'recovery'))
     const inputEvent = { kind: 'engineering-review-input', id, status: 'prepared', modelId: (await selectionOf($)).modelId, promptSignature: signatureOfChange(prompt), context: JSON.parse(prompt.split('\n\n').at(-1)!) }
     await remember($, inputEvent)
-    const serialized = JSON.stringify(inputEvent)
-    // Native debug logs retain at most 10000 characters per ui.log call.
-    // Escape expansion stays bounded even at a split Unicode surrogate.
-    if (serialized.length <= 6000) say($, `REVIEW_INPUT ${serialized}`)
-    else {
-      const parts = Math.ceil(serialized.length / 1000)
-      say($, `REVIEW_INPUT ${JSON.stringify({ ...inputEvent, context: undefined, contextEncoding: 'json-parts', parts, characters: serialized.length })}`)
-      for (let index = 0; index < parts; index++) say($, `REVIEW_INPUT_PART ${JSON.stringify({ id, promptSignature: inputEvent.promptSignature, index, total: parts, text: serialized.slice(index * 1000, (index + 1) * 1000) })}`)
-    }
+    for (const line of reviewInputLogs(inputEvent)) say($, line)
     const reply = await ask($, prompt, deadlineMs - await $.clock.now(), job.signal)
     const invalid = await invalidReason()
     if (invalid) return skipped(invalid)

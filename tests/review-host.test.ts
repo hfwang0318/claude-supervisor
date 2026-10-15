@@ -215,14 +215,17 @@ test('a real workspace change still records stale binding instead of deadline', 
   await batch($); release(); await pending
   expect(state.logs.some(l => l.includes('REVIEW ') && l.includes('stale-binding'))).toBe(true)
 })
-test('the exact bounded review input remains auditable even if the provider never answers', { options }, async ($, on) => {
+test('bounded review materials remain auditable with declared session omission even if the provider never answers', { options }, async ($, on) => {
   const { state } = world(on); await start($); state.unanswered = true
   expect((await batch($)).additionalContext).toEqual(['host context'])
   const inputs = state.logs.filter(l => l.includes('REVIEW_INPUT ')).map(l => JSON.parse(l.slice(l.indexOf('REVIEW_INPUT ') + 13)))
   expect(inputs.length).toBe(1)
   expect(inputs[0].context.sources[0].text).toBe('Preserve the API.')
   expect(inputs[0].context.sources.some((s: { text: string }) => s.text.includes('exports.old'))).toBe(true)
-  expect(inputs[0].context).toEqual(JSON.parse(state.prompts[0]!.split('\n\n').at(-1)!))
+  const actual = JSON.parse(state.prompts[0]!.split('\n\n').at(-1)!)
+  delete actual.binding.sessionId
+  expect(inputs[0].context).toEqual(actual)
+  expect(inputs[0].omittedBindingFields).toEqual(['sessionId'])
   expect(inputs[0].modelId).toBe('fixture')
   expect(state.calls).toBe(1)
 })
@@ -272,5 +275,23 @@ for (const reason of ['aborted', 'api-error', 'empty-reply']) test(`side call di
   expect(event.hostStatus).toBe(reason === 'api-error' ? 429 : null)
   expect(event.hostError).toBe(reason === 'api-error' ? 'rate_limit' : null)
   expect(event.result).toBe('unknown')
+  expect(state.calls).toBe(1)
+})
+
+for (const large of [false, true]) test(`review input diagnostics omit private session identity before ${large ? 'multipart' : 'short'} native logging without changing the model input`, { options }, async ($, on) => {
+  const { state } = world(on); await start($)
+  if (large) state.rows[0]!.toolUses[0]!.text = 'public-source '.repeat(500)
+  await batch($)
+  const headLine = state.logs.find(l => l.includes('REVIEW_INPUT '))!
+  const head = JSON.parse(headLine.slice(headLine.indexOf('REVIEW_INPUT ') + 13))
+  const parts = state.logs.filter(l => l.includes('REVIEW_INPUT_PART ')).map(l => JSON.parse(l.slice(l.indexOf('REVIEW_INPUT_PART ') + 18)))
+  const event = head.contextEncoding === 'json-parts' ? JSON.parse(parts.sort((a, b) => a.index - b.index).map(p => p.text).join('')) : head
+  expect(event.representation).toBe('session-id-omitted')
+  expect(event.omittedBindingFields).toEqual(['sessionId'])
+  expect(event.context.binding.sessionId).toBe(undefined)
+  const actual = JSON.parse(state.prompts[0]!.split('\n\n').at(-1)!)
+  expect(actual.binding.sessionId).toBe('review-session')
+  expect(event.context.sources).toEqual(actual.sources)
+  expect(event.context.binding.generationId).toBe(actual.binding.generationId)
   expect(state.calls).toBe(1)
 })

@@ -94,3 +94,21 @@ Astra核实当前公开3456入口由`gateway-bootstrap.js`直接运行core，管
 同批新增有限边界元数据：实际转发body的SHA／字节长度、request-forwarded、上游headers时间／状态、首字节时间、累计收到字节、唯一transport-end及结果。这里的上游是该层连接的端点（host层为CCR），不是已经穿透CCR得到的provider时序；forwarded只表示本层HTTP发送完成，不证明接收方处理；completed只表示传输完成，不证明有效判断或主模型消费。没有保存提示正文、回复正文、thinking或凭据。免费真实socket测试覆盖无headers取消、有headers无body取消、部分body后取消及成功／错误／身份拒绝，每个请求恰有一个终态。测试先因缺失终态失败，再修复；232宿主和全部`node scripts/check.mjs`通过（transport-boundary-final-checks.log）。三轮45个关键原文件hash一致。
 
 仍不能判断实际provider排队、生成或网络原因，不凭low effort猜测关闭思考，不扩大30秒／2call／4000token预算。新的单题观察若启动，只回答此前无法核对的实际完整输入、宿主typed reason及边界时序，并统一审计所有自然出现维度；不以官方通过为目标。新冻结版本／新out，旧批次不重跑，无有效判断的能力继续标未观察；本地检查通过不代表服务恢复。
+
+## Round 004：取消边界已核实，仍未取得判断
+
+冻结源码`53f354a99dbd834f2f860d6c8a14760584741501`，固定seed`b40558561cc15fd34995e5b8609ac07f`再次抽中Proton e65，未重抽。2026-10-15 16:51:26Z两组并行启动，17:08:53Z完成2/2及基础审计。两组均到900秒观察上限；existing留下10944字节部分patch，官方仅解析到1项通过、必需3项未齐，整体失败；supervise无patch，官方3项均失败。这些是限制下的任务结果，不将组间差异归因为监督。
+
+E38条请求／38个实际Flash返回起始，S43条请求／42个实际Flash返回起始。唯一审查请求为非流式max4048、实际转发body21652字节：16:51:49.468Z发送，16:52:19.465Z以`client-disconnected`终结，elapsed29997ms、headersMs／firstByteMs／status均null、接收0字节。宿主`SIDE_CALL`保留到`hostReason=aborted`，elapsed29995ms、timeout29988ms，之后deadline／预算停止。没有可解析审查回复、判断或投递，七个判断维度仍未观察。它只说明本层在原时限内未收到CCR回复，不说明provider内部发生了什么。
+
+Router实际窗口80条完成记录，31条引用body只读恢复后80条均可解析、匹配完整原需求且Flash／200；仍无审查max4048原body。203资源样本最低可用9001095168B、最大swap10063872B、OOM0、无429排空。E观察用量input74234/output37512/cache1256704，S51397/26936/1005056，完整用量及费用unknown；宿主取消时的0不当作零消费。四轮共60份关键原文件hash保持一致，原控制器pending快照不改，另存行为审计终态。
+
+### 本轮实际问题及免费修复
+
+18个`REVIEW_INPUT_PART`全部到齐，但总长度17259小于声明17286，第0段由1000变为973字符。实际宿主把内层JSON中的`binding.sessionId`遮蔽为`[REDACTED]`并破坏引号，因此现有reader正确拒绝。这里受损的是诊断表示，不能宣称模型实际输入受损，也不能放松校验或以编码绕过遮蔽。
+
+用同字节native CLI／Node／GNU loader、断网、本地命令和公开合成材料复现：旧格式14段均到齐，13153→13126字符、0可重组输入。修复只在生成debug表示前省略私有sessionId，明确`representation=session-id-omitted`及省略字段；模型输入、内部证据和运行时Binding不变。其余来源逐字保留。新reader明确计数该表示，拒绝虚假省略标记及头／分段表示不一致；旧格式继续按原严格规则读取，历史损坏记录仍不可用。
+
+宿主回归先RED232通过／2失败，再GREEN234；协议指标先因缺少省略状态失败后通过。原生免费复测调用实际生产`reviewInputLogs`：1份完整隐私归一化输入、0缺段／格式错误，29字符需求和12600字符公开来源逐字一致；无模型调用。证据在`.superpowers/sdd/2026-10-15-review-iterations/native-redaction-contract/comparison-receipt.json`。初次合成fixture的hook配置键错误已隔离留存，只重做免费fixture，不影响任何真实评测。最后全部`node scripts/check.mjs`通过，日志`privacy-final-checks.log`；本批为作者TDD，Astra的只读路由诊断不冒充新全分支审查。
+
+本轮对触发、有限预算停止、typed宿主失败、取消边界有明确证据；完整真实来源输入仍因旧日志损坏无法核对，全部判断质量与反馈行为仍未验证。新代码修复观测性，未证明解决无回复。当前无活动评测任务；不自动第五轮、不改预算／effort，不用重复付费替代尚缺的CCR/provider内部时序证据。全维度优化未达成，剩余真实阻碍如实保留。

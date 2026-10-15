@@ -5,6 +5,7 @@ export const readReviewInputs = debug => {
   const heads = [], parts = [], inputs = []
   let malformedEvents = 0, incompleteInputs = 0
   const key = e => `${e.id}\n${e.promptSignature}`
+  const validPrivacy = e => e.representation === undefined && e.omittedBindingFields === undefined || e.representation === 'session-id-omitted' && Array.isArray(e.omittedBindingFields) && e.omittedBindingFields.length === 1 && e.omittedBindingFields[0] === 'sessionId' && object(e.context?.binding) && !Object.hasOwn(e.context.binding, 'sessionId')
   for (const line of debug.split('\n')) {
     const at = line.indexOf('deepseek-supervisor: ')
     if (at < 0) continue
@@ -19,14 +20,14 @@ export const readReviewInputs = debug => {
   }
   for (const head of heads) {
     if (head.status !== 'prepared') { incompleteInputs++; continue }
-    if (object(head.context) && Array.isArray(head.context.sources)) { inputs.push(head); continue }
+    if (object(head.context) && Array.isArray(head.context.sources)) { if (validPrivacy(head)) inputs.push(head); else incompleteInputs++; continue }
     const group = parts.filter(p => key(p) === key(head))
     if (head.contextEncoding !== 'json-parts' || !Number.isSafeInteger(head.parts) || head.parts < 1 || head.parts > 128 || !Number.isSafeInteger(head.characters) || head.characters < 1 || head.characters > 131072 || group.length !== head.parts || new Set(group.map(p => p.index)).size !== head.parts || group.some(p => p.total !== head.parts || !Number.isSafeInteger(p.index) || p.index < 0 || p.index >= head.parts || typeof p.text !== 'string' || p.text.length > 2000)) { incompleteInputs++; continue }
     try {
       const text = group.toSorted((a, b) => a.index - b.index).map(p => p.text).join('')
       if (text.length !== head.characters) throw Error('incomplete input')
       const e = JSON.parse(text)
-      if (!object(e) || key(e) !== key(head) || e.modelId !== head.modelId || e.status !== 'prepared' || !object(e.context) || !Array.isArray(e.context.sources)) throw Error('input metadata mismatch')
+      if (!object(e) || key(e) !== key(head) || e.modelId !== head.modelId || e.status !== 'prepared' || !object(e.context) || !Array.isArray(e.context.sources) || !validPrivacy(e) || e.representation !== head.representation || JSON.stringify(e.omittedBindingFields) !== JSON.stringify(head.omittedBindingFields)) throw Error('input metadata mismatch')
       inputs.push(e)
     } catch { incompleteInputs++ }
   }
@@ -38,7 +39,7 @@ export const reviewMetrics = debug => {
   const reviews = parse('REVIEW'), deliveries = parse('REVIEW_DELIVERY')
   const inputs = readReviewInputs(debug)
   return {
-    inputAudit: { prepared: inputs.inputs.length, incompleteInputs: inputs.incompleteInputs, malformedEvents: inputs.malformedEvents, orphanPartGroups: inputs.orphanPartGroups },
+    inputAudit: { prepared: inputs.inputs.length, sessionIdentityOmitted: inputs.inputs.filter(e => e.representation === 'session-id-omitted').length, incompleteInputs: inputs.incompleteInputs, malformedEvents: inputs.malformedEvents, orphanPartGroups: inputs.orphanPartGroups },
     factsReturned: parse('ASSIST').filter(e => e.delivery === 'context-returned' && e.packet?.kind === 'location').length,
     sourceFactCount: deliveries.filter(d => ['context-returned', 'submitted'].includes(d.delivery)).reduce((n, d) => n + (Number.isSafeInteger(d.sourceFactCount) && d.sourceFactCount > 0 && d.sourceFactCount <= 6 ? d.sourceFactCount : 0), 0),
     reviews, deliveries, deliveryCount: deliveries.filter(d => ['context-returned', 'submitted'].includes(d.delivery)).length,

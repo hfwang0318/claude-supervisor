@@ -70,5 +70,9 @@ try {
   const { readReviewInputs } = await import('./swe-pro/review-metrics.mjs')
   assert.deepEqual(readReviewInputs([inputHead, ...inputParts].join('\n')).inputs, [prepared])
   assert.deepEqual(readReviewInputs(eventLine('REVIEW_INPUT', prepared)).inputs, [prepared], 'short legacy complete inputs remain readable')
+  const normalized = { ...prepared, representation: 'session-id-omitted', omittedBindingFields: ['sessionId'], context: { ...prepared.context, binding: { generationId: 'g' } } }
+  assert.equal(reviewMetrics(eventLine('REVIEW_INPUT', normalized)).inputAudit.sessionIdentityOmitted, 1, 'privacy-normalized input must be distinguishable from an exact session binding')
+  const mislabeled = { ...normalized, context: { ...normalized.context, binding: { sessionId: 'must-not-be-logged' } } }
+  assert.equal(readReviewInputs(eventLine('REVIEW_INPUT', mislabeled)).inputs.length, 0, 'claimed omission must not conceal a retained private identity')
   console.log('Comprehensive review identity/behavior metrics self-tests passed; fixture processes only, no model calls')
 } finally { rmSync(dir, { recursive: true, force: true }) }

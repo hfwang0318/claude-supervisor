@@ -107,6 +107,20 @@ export const reviewPrompt = (context: ReviewContext, mode: 'supervise' | 'probe'
   JSON.stringify(context),
 ].join('\n\n')
 
+// Only the debug representation omits the private session identity. Native
+// logging redacts that field inside encoded parts, invalidating the inner JSON.
+// Keep model input, persisted evidence and runtime Binding validation unchanged.
+export const reviewInputLogs = (input: { kind: string; id: string; status: string; modelId: string | null; promptSignature: string; context: ReviewContext }): string[] => {
+  const diagnostic = { ...input, representation: 'session-id-omitted', omittedBindingFields: ['sessionId'], context: { ...input.context, binding: { ...input.context.binding, sessionId: undefined } } }
+  const serialized = JSON.stringify(diagnostic)
+  if (serialized.length <= 6000) return [`REVIEW_INPUT ${serialized}`]
+  const parts = Math.ceil(serialized.length / 1000)
+  return [
+    `REVIEW_INPUT ${JSON.stringify({ ...diagnostic, context: undefined, contextEncoding: 'json-parts', parts, characters: serialized.length })}`,
+    ...Array.from({ length: parts }, (_, index) => `REVIEW_INPUT_PART ${JSON.stringify({ id: input.id, promptSignature: input.promptSignature, index, total: parts, text: serialized.slice(index * 1000, (index + 1) * 1000) })}`),
+  ]
+}
+
 export const reviewNote = (context: ReviewContext, reply: ReviewReply) => {
   const j = reply.judgment
   return [
