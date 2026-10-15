@@ -29,7 +29,7 @@
     "assistance_mode": {
       "type": "string",
       "title": "Experimental assistance",
-      "description": "existing (default), facts (read-only location help), probe/recovery reserved for later trials. Selects one model flow; record rules remain active.",
+      "description": "existing (default), facts (legacy location help), supervise (requirements, plan, architecture, direction and validation review), probe or recovery (single-action review). One shared model flow and budget; record rules remain active.",
       "default": "existing"
     }
   },

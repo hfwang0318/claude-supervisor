@@ -6,6 +6,7 @@ export type Host = {
   cwd(): Promise<string>
   inspectFacts(request: FactRequest, deadlineMs: number, options?: { filesOnly?: boolean }): Promise<FactView>
   validateFacts(view: FactView, deadlineMs: number): Promise<boolean>
+  validateSnapshot?(snapshot: Snapshot, deadlineMs: number): Promise<boolean>
   capture(binding: Binding, deadlineMs: number): Promise<Snapshot | null>
   execute(command: string, snapshot: Snapshot, deadlineMs: number, files: { path: string; content: string }[]): Promise<ExecutionEvidence>
   cleanup(snapshot: Snapshot): Promise<void>

@@ -7,6 +7,11 @@ import { validateObservation, normalizeTrack } from '../supervisor/ledger'
 import { captureSnapshot } from '../supervisor/workspace'
 import { buildAssistPacket, buildLocalAssistPacket, parseFactRequest, assistSignal, assistNote, localFactRequest } from '../supervisor/assist'
 import { Coordinator, sameBinding } from '../supervisor/coordinator'
+import { buildReviewContext, parseReview, reviewPrompt, REVIEW_DIMENSIONS } from '../supervisor/review'
+import { runReviewFlow } from '../supervisor/review-flow'
+import type { ReviewOutcome } from '../supervisor/review-flow'
+import type { ReviewContext } from '../supervisor/contracts'
+import { recoveryObservations } from '../supervisor/recovery'
 import { selectSideModel, createHost } from './host'
 import { registerBand } from './band'
 import { HISTORY as READINGS_KEPT, readingOf } from './weather'
@@ -59,11 +64,11 @@ const isHidden = atom({ plugin: 'deepseek-supervisor', key: 'isHidden' } as cons
 const EMPTY: Track = { schemaVersion: 2, nextId: 1, issues: [], seen: [], runs: 0 }
 const track = atom({ plugin: 'deepseek-supervisor', key: 'track' } as const, EMPTY)
 
-type Config = { verifierModel: string; reviewChanges: boolean; executionMode: 'off' | 'shadow' | 'enabled'; assistanceMode: 'existing' | 'facts' | 'probe' | 'recovery' }
+type Config = { verifierModel: string; reviewChanges: boolean; executionMode: 'off' | 'shadow' | 'enabled'; assistanceMode: 'existing' | 'facts' | 'supervise' | 'probe' | 'recovery' }
 const configOf = (options: PluginOptions | undefined): Config => ({
   // Empty means follow the host's current worker; no capability ranking applies.
   verifierModel: typeof options?.verifier_model === 'string' ? options.verifier_model.trim() : '',
-  assistanceMode: options?.assistance_mode === 'facts' || options?.assistance_mode === 'probe' || options?.assistance_mode === 'recovery' ? options.assistance_mode : 'existing',
+  assistanceMode: options?.assistance_mode === 'facts' || options?.assistance_mode === 'supervise' || options?.assistance_mode === 'probe' || options?.assistance_mode === 'recovery' ? options.assistance_mode : 'existing',
   reviewChanges: options?.review_changes !== false,
   executionMode: options?.execution_mode === 'enabled' || options?.execution_mode === 'shadow' ? options.execution_mode : 'off',
 })
@@ -99,6 +104,7 @@ type Runtime = {
   held: Set<number>; followUps: number; turnFrom: number; isInteractive: boolean
   asked: string; told: number; last: string; coordinator: Coordinator
   jobNumber: number; modelDisabled: boolean; cfg: Config; stateUsable: boolean; journal: Promise<unknown>; recordEnd: number; workerModel: string | null; factsAttempted: boolean
+  reviewSignatures: Set<string>; reviewAttempts: number; reviewStopSent: boolean; reviewRecoveryUsed: boolean
 }
 const sessions = new Map<string, Runtime>()
 const runtimeOf = async ($: EngineInterface): Promise<Runtime> => {
@@ -106,7 +112,7 @@ const runtimeOf = async ($: EngineInterface): Promise<Runtime> => {
   let s = sessions.get(sessionId)
   if (s) return s
   const binding: Binding = { sessionId, generationId: String(await $.clock.now()), turnId: 'initial', taskRevision: 0, workspaceRevision: 'unknown', snapshotId: 'unknown' }
-  s = { steps: 0, isBusy: false, promptsSinceCards: 0, blocks: 0, held: new Set(), followUps: 0, turnFrom: 0, isInteractive: true, asked: '', told: 0, last: '', coordinator: new Coordinator(binding), jobNumber: 0, modelDisabled: false, cfg: configOf(undefined), stateUsable: true, journal: Promise.resolve(), recordEnd: 0, workerModel: null, factsAttempted: false }
+  s = { steps: 0, isBusy: false, promptsSinceCards: 0, blocks: 0, held: new Set(), followUps: 0, turnFrom: 0, isInteractive: true, asked: '', told: 0, last: '', coordinator: new Coordinator(binding), jobNumber: 0, modelDisabled: false, cfg: configOf(undefined), stateUsable: true, journal: Promise.resolve(), recordEnd: 0, workerModel: null, factsAttempted: false, reviewSignatures: new Set(), reviewAttempts: 0, reviewStopSent: false, reviewRecoveryUsed: false }
   sessions.set(sessionId, s)
   return s
 }
@@ -321,6 +327,70 @@ const signatureOfChange = (s: string) => {
   let h = 0x811c9dc5
   for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 0x01000193)
   return `${s.length}:${(h >>> 0).toString(16)}`
+}
+
+type PreparedReview = { id: string; binding: Binding; outcome: ReviewOutcome; deadlineMs: number }
+const engineeringReview = async ($: EngineInterface, list: Rows, final = false, answer = ''): Promise<PreparedReview | null> => {
+  const s = await runtimeOf($), mode = s.cfg.assistanceMode
+  if (!['supervise', 'probe', 'recovery'].includes(mode) || !s.stateUsable || s.modelDisabled || !s.asked || s.reviewAttempts >= 2 || final && s.reviewStopSent) return null
+  const latestPrompt = list.findLastIndex(r => r.role === 'user' && r.text.trim() && !r.text.includes('[deepseek-supervisor]') && !/^\s*<(?:system-reminder|command-|local-command|teammate-message)|^\s*Another Claude session/.test(r.text))
+  const rows = latestPrompt < 0 ? list : list.slice(latestPrompt + 1)
+  const record = evidenceOf(list), since = record.prompts.at(-1)?.at ?? 0
+  const changes = changesOf(record, 24576), lastRun = record.runs.filter(r => r.at >= since).at(-1)
+  const lastEdit = record.edits.filter(e => e.at >= since).at(-1)?.at ?? -1
+  const phase: ReviewContext['phase'] = final ? 'completion' : lastRun && !lastRun.ok ? 'failure' : changes && lastRun && lastRun.at >= lastEdit ? 'implementation' : 'plan'
+  const binding = { ...s.coordinator.binding }
+  const context = buildReviewContext(binding, s.asked, answer ? [...rows, { role: 'assistant', text: answer, toolUses: [] }] : rows, changes, phase)
+  if (!context || !final && phase === 'plan' && (changes !== '' || !context.sources.some(source => source.kind === 'plan'))) return null
+  if (mode === 'recovery' && (s.reviewRecoveryUsed || !recoveryObservations(context).length)) return null
+  const material = phase === 'plan' ? context.sources.filter(source => source.kind === 'plan' || source.kind === 'requirement') : context.sources
+  const key = `${phase}:${signatureOfChange(JSON.stringify(material))}`
+  if (s.reviewSignatures.has(key)) return null
+  const id = `review-${++s.jobNumber}`, job = s.coordinator.start(id, await $.clock.now())
+  if (!job) return null
+  s.reviewSignatures.add(key); s.reviewAttempts++
+  const deadlineMs = await $.clock.now() + s.coordinator.remainingTime(await $.clock.now())
+  const current = async () => {
+    await selectionOf($)
+    const enabled = await isOn($)
+    return enabled && !job.signal.aborted && sameBinding(binding, s.coordinator.binding) && await $.clock.now() < deadlineMs
+  }
+  let outcome: ReviewOutcome | undefined, retained = false
+  try {
+    const reply = await ask($, reviewPrompt(context, mode as 'supervise' | 'probe' | 'recovery'), deadlineMs - await $.clock.now(), job.signal)
+    if (!await current() || !reply?.isAnswered) return null
+    const decision = parseReview(context, reply.text)
+    if (!decision || mode === 'probe' && !['none', 'probe'].includes(decision.action.kind) || mode === 'recovery' && !['none', 'recovery'].includes(decision.action.kind)) return null
+    if (decision.action.kind === 'recovery') {
+      if (s.reviewRecoveryUsed) return null
+      s.reviewRecoveryUsed = true
+    }
+    outcome = await runReviewFlow(context, decision, { host: hostOf($, job.signal), executionMode: s.cfg.executionMode, deadlineMs, current, ask: async prompt => {
+      const second = await ask($, prompt, deadlineMs - await $.clock.now(), job.signal)
+      return second?.isAnswered ? second.text : null
+    } })
+    const event = { kind: 'engineering-review', binding, mode, phase, reviewed: decision.reviewed, unreviewed: REVIEW_DIMENSIONS.filter(d => !decision.reviewed.includes(d)), judgment: decision.judgment, action: decision.action.kind, reason: outcome.reason, independentExecution: outcome.evidence !== null, sourceIds: context.sources.map(source => source.id), supplementalFacts: outcome.view?.facts.map(f => ({ id: f.id, path: f.path, line: f.startLine, fileHash: f.fileHash })) ?? [], observation: outcome.evidence ? { id: outcome.evidence.id, outcome: outcome.evidence.outcome, binding: outcome.evidence.binding, truncated: outcome.evidence.truncated } : null }
+    await remember($, event)
+    const { judgment: _judgment, ...metadata } = event
+    say($, `REVIEW ${JSON.stringify({ ...metadata, dimension: decision.judgment?.dimension ?? null, recommendation: decision.judgment?.recommendation ?? null })}`)
+    if (!await current() || !outcome.note || decision.judgment?.recommendation === 'continue' && decision.action.kind === 'none') return null
+    if (!s.coordinator.finish(id, binding, 'succeeded', await $.clock.now())) return null
+    retained = true
+    return { id, binding, outcome, deadlineMs }
+  } catch {
+    say($, `REVIEW ${JSON.stringify({ phase, mode, reason: 'review-unavailable' })}`)
+    return null
+  } finally {
+    if (!retained) { s.coordinator.finish(id, binding, 'failed', await $.clock.now()); await outcome?.cleanup() }
+  }
+}
+
+const reviewContextNote = async ($: EngineInterface, prepared: PreparedReview): Promise<string | null> => {
+  const s = await runtimeOf($)
+  if (!await isOn($) || !sameBinding(prepared.binding, s.coordinator.binding) || !await prepared.outcome.validate()) return null
+  const status = await s.coordinator.deliver(prepared.id, prepared.binding, async () => 'unknown')
+  if (status === 'dropped' || !sameBinding(prepared.binding, s.coordinator.binding) || await $.clock.now() >= prepared.deadlineMs) return null
+  return prepared.outcome.note
 }
 
 /**
@@ -737,6 +807,18 @@ const atAnswer = async ($: EngineInterface, answer: string) => {
   try {
     await settleTags($, answer)
     const list = await messages($)
+    if (['supervise', 'probe', 'recovery'].includes(s.cfg.assistanceMode)) {
+      const prepared = await engineeringReview($, list, true, answer)
+      await prepared?.outcome.cleanup()
+      if (!prepared?.outcome.note || s.followUps >= FOLLOW_UPS_PER_PROMPT || !sameBinding(requested, s.coordinator.binding)) return
+      s.followUps++; s.reviewStopSent = true
+      await s.coordinator.deliver(prepared.id, prepared.binding, async () => {
+        if (!await isOn($) || !await prepared.outcome.validate() || !sameBinding(prepared.binding, s.coordinator.binding)) return 'dropped'
+        const result = await $.prompt.submit({ text: prepared.outcome.note! })
+        return result.drop === undefined ? 'delivered' : 'dropped'
+      })
+      return
+    }
     const claims = claimsSince(list, await read($, track), [answer])
     const found = await check($, list, { kind: 'answer', claims, answer, verifier: true })
     await update($, track, t => ({ ...t, scanned: list.length }))
@@ -771,6 +853,7 @@ export const register: Register = (on, options) => {
     s.modelDisabled = false
     s.cfg = configOf(options)
     s.factsAttempted = false
+    s.reviewSignatures.clear(); s.reviewAttempts = 0; s.reviewStopSent = false; s.reviewRecoveryUsed = false
     s.isInteractive = e.isInteractive !== false
     // A reload starts here too: what was raised before it does not hold a turn after it.
     s.turnFrom = await $.clock.now()
@@ -793,6 +876,7 @@ export const register: Register = (on, options) => {
       s.modelDisabled = false
       s.asked = e.text
       s.factsAttempted = false
+      s.reviewSignatures.clear(); s.reviewAttempts = 0; s.reviewStopSent = false; s.reviewRecoveryUsed = false
       s.turnFrom = await $.clock.now()
       s.blocks = 0
       s.held = new Set()
@@ -822,7 +906,9 @@ export const register: Register = (on, options) => {
     const claims = [...new Set(said.flatMap(claimsOf))]
     const found = await check($, list, { kind: 'batch', claims, verifier: false })
     const assistance = s.cfg.assistanceMode === 'facts' ? await locationFacts($, list) : null
-    if (found.length === 0 && assistance === null) return result
+    const review = await engineeringReview($, list)
+    await review?.outcome.cleanup()
+    if (found.length === 0 && assistance === null && review === null) return result
     if (found.length > 0) await showCards($, found)
     await show($)
     await selectionOf($)
@@ -836,6 +922,7 @@ export const register: Register = (on, options) => {
         if (current && !assistance.signal.aborted && sameBinding(batchBinding, s.coordinator.binding)) note = assistance.note
       }
     }
+    const engineeringNote = review ? await reviewContextNote($, review) : null
     // No awaited UI or storage operations after this final binding/source gate.
     if (!sameBinding(batchBinding, s.coordinator.binding)) return result
     if (note && assistance) {
@@ -843,7 +930,7 @@ export const register: Register = (on, options) => {
       void remember($, event)
       say($, `ASSIST ${JSON.stringify(event)}`)
     }
-    return { ...result, additionalContext: [...(result.additionalContext ?? []), ...(found.length ? [noteText(found)] : []), ...(note ? [note] : [])] }
+    return { ...result, additionalContext: [...(result.additionalContext ?? []), ...(found.length ? [noteText(found)] : []), ...(note ? [note] : []), ...(engineeringNote ? [engineeringNote] : [])] }
   }).catch(($, e, next) => next(e))
 
   // Before the turn ends: the answer held to the record (and, where nobody watches,
@@ -855,6 +942,8 @@ export const register: Register = (on, options) => {
     const answer = e.last_assistant_message ?? ''
     await settleTags($, answer)
     const list = await messages($)
+    const prepared = !s.isInteractive ? await engineeringReview($, list, true, answer) : null
+    await prepared?.outcome.cleanup()
     const found = await check($, list, { kind: 'answer', claims: claimsSince(list, await read($, track), [answer]), answer, verifier: !s.isInteractive })
     // Where the verifier ran here, what it read is read; where it runs after the turn, not yet.
     if (!s.isInteractive) await update($, track, t => ({ ...t, scanned: list.length }))
@@ -864,10 +953,12 @@ export const register: Register = (on, options) => {
     // check raised it first: an item the model never got to act on is not done with.
     const pending = (await read($, track)).issues.filter(i => i.status === 'open' && i.at >= s.turnFrom && !found.some(f => f.id === i.id))
     const blocking = [...found, ...pending].filter(i => keepsTurnGoing(i) && !s.held.has(i.id))
-    if (blocking.length === 0 || s.blocks >= BLOCKS_PER_PROMPT) return result
+    const engineeringNote = prepared ? await reviewContextNote($, prepared) : null
+    if (engineeringNote) s.reviewStopSent = true
+    if (blocking.length === 0 || s.blocks >= BLOCKS_PER_PROMPT) return engineeringNote ? { ...result, block: engineeringNote } : result
     s.blocks += 1
     for (const i of blocking) s.held.add(i.id)
-    return { ...result, block: noteText(blocking, { final: true }) }
+    return { ...result, block: [noteText(blocking, { final: true }), ...(engineeringNote ? [engineeringNote] : [])].join('\n\n') }
   }).catch(($, e, next) => next(e))
 
   // The main loop's finished steps; a subagent's are its own.
@@ -896,11 +987,11 @@ export const register: Register = (on, options) => {
   on('turn.complete', async ($, e, next) => {
     const s = await runtimeOf($)
     const result = await next(e)
-    if (e.agentId === undefined && e.reason !== 'answer') s.coordinator.invalidate({ ...s.coordinator.binding, generationId: `cancel-${await $.clock.now()}-${++s.jobNumber}` }, { reason: 'cancelled' })
+    if (e.agentId === undefined && e.reason !== 'answer') s.coordinator.invalidate({ ...s.coordinator.binding, generationId: `cancel-${await $.clock.now()}-${++s.jobNumber}` }, { reason: 'cancelled', preserveBudget: true, now: await $.clock.now() })
     if (e.agentId === undefined) await takeReading($) // main-loop turns only
     // Only a turn the model finished on its own: one the person interrupted says nothing.
     // Where nobody watches, the verifier already ran before the turn could end.
-    if (e.agentId !== undefined || e.reason !== 'answer' || s.cfg.assistanceMode !== 'existing' || !s.isInteractive || !(await isOn($))) return result
+    if (e.agentId !== undefined || e.reason !== 'answer' || s.cfg.assistanceMode === 'facts' || !s.isInteractive || !(await isOn($))) return result
     const answer = e.answer
     const scheduled = { ...s.coordinator.binding }
     $.clock.after(0, () => {
@@ -943,7 +1034,7 @@ export const register: Register = (on, options) => {
       if (arg === 'auto') await $.store.delete('mode')
       else await $.store.set('mode', arg)
       if (!(await isOn($))) {
-        s.coordinator.invalidate({ ...s.coordinator.binding, generationId: `off-${await $.clock.now()}-${++s.jobNumber}` }, { reason: 'disabled' })
+        s.coordinator.invalidate({ ...s.coordinator.binding, generationId: `off-${await $.clock.now()}-${++s.jobNumber}` }, { reason: 'disabled', preserveBudget: true, now: await $.clock.now() })
         await update($, cards, () => null)
       }
       await show($)

@@ -32,6 +32,10 @@ export const createHost = (deps: Dependencies): Host => ({
     return value
   },
   validateFacts: async (view, deadlineMs) => await deps.service({ action: 'validate-facts', root: await deps.cwd(), view, deadlineMs }, deadlineMs) === true,
+  validateSnapshot: async (snapshot, deadlineMs) => {
+    const current = await deps.service({ action: 'manifest', root: await deps.cwd(), deadlineMs }, deadlineMs) as { hash?: string }
+    return !!snapshot.sourceManifestHash && current?.hash === snapshot.sourceManifestHash
+  },
   capture: async (binding: Binding, deadlineMs: number) => {
     const value = await deps.service({ action: 'capture', root: await deps.cwd(), binding, deadlineMs }, deadlineMs) as Snapshot
     if (!value?.id || !value.root || !value.binding) return null

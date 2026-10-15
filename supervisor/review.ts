@@ -20,7 +20,14 @@ export const buildReviewContext = (binding: Binding, asked: string, rows: readon
   const plans = rows.filter(r => r.role === 'assistant' && /\bplan\s*:|\bapproach\s*:|\bI (?:will|intend to)\b|\bI'll\b|方案|计划|打算/i.test(r.text))
   if (plans.length > 2) context.scope.omitted.push('earlier-plans')
   for (const [index, row] of plans.slice(-2).entries()) add({ id: `plan-${index + 1}`, kind: 'plan', text: row.text }, 8192)
-  if (changes.trim()) add({ id: 'change', kind: 'change', text: changes }, 24576)
+  if (changes.trim()) {
+    context.scope.omitted.push('changes-are-bounded-record-excerpts')
+    add({ id: 'change', kind: 'change', text: changes }, 24576)
+  }
+  if (phase === 'completion') {
+    const answer = rows.findLast(r => r.role === 'assistant' && r.text.trim())
+    if (answer) add({ id: 'answer', kind: 'answer', text: answer.text }, 8192)
+  }
   const tools = rows.filter(r => r.role === 'assistant').flatMap(r => r.toolUses ?? [])
   if (tools.length > 6) context.scope.omitted.push('earlier-tools')
   for (const [index, use] of tools.slice(-6).entries()) {
@@ -31,7 +38,7 @@ export const buildReviewContext = (binding: Binding, asked: string, rows: readon
 
 export const availableDimensions = (context: ReviewContext): ReviewDimension[] => {
   const has = (kind: ReviewSource['kind']) => context.sources.some(s => s.kind === kind)
-  return REVIEW_DIMENSIONS.filter(d => d === 'requirement-plan' ? has('plan') : d === 'plan-implementation' ? has('plan') && has('change') : d === 'verification' || d === 'recovery' ? has('observation') : has('plan') || has('change') || has('tool') || has('observation'))
+  return REVIEW_DIMENSIONS.filter(d => d === 'requirement-plan' ? has('plan') : d === 'plan-implementation' ? has('plan') && has('change') : d === 'verification' || d === 'recovery' ? has('observation') : has('plan') || has('change') || has('tool') || has('observation') || has('answer'))
 }
 
 export const parseReview = (context: ReviewContext, text: string): ReviewReply | null => {
