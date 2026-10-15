@@ -226,3 +226,20 @@ test('the exact bounded review input remains auditable even if the provider neve
   expect(inputs[0].modelId).toBe('fixture')
   expect(state.calls).toBe(1)
 })
+
+test('generic discovery plus a directory listing waits for source evidence without spending review budget', { options }, async ($, on) => {
+  const { state } = world(on); await start($)
+  state.rows = [{ role: 'assistant', text: "I'll start by exploring the repository structure to understand the codebase.", toolUses: [{ tool: 'Bash', input: { command: 'ls /p' }, text: 'api.js caller.js' }] }] as never
+  expect((await batch($)).additionalContext).toEqual(['host context'])
+  expect(state.calls).toBe(0)
+  state.rows.push({ role: 'assistant', text: '', toolUses: [
+    { tool: 'Read', input: { file_path: '/p/api.js' }, text: 'exports.old = () => 1' },
+    { tool: 'Read', input: { file_path: '/p/caller.js' }, text: 'api.old()' }
+  ] } as never)
+  const d = JSON.parse(reply()); d.judgment.sourceIds = ['req', 'tool-2', 'tool-3']; state.outputs = [JSON.stringify(d)]
+  expect((await batch($)).additionalContext?.join('\n')).toContain('Dimension: architecture')
+  expect(state.calls).toBe(1)
+  const input = JSON.parse(state.prompts[0]!.split('\n\n').at(-1)!)
+  expect(input.phase).toBe('exploration')
+  expect(input.sources.some((s: { kind: string }) => s.kind === 'plan')).toBe(false)
+})

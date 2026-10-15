@@ -9,10 +9,17 @@ const record = (value: unknown): value is Record<string, unknown> => !!value && 
 const only = (value: Record<string, unknown>, fields: string[]) => Object.keys(value).every(key => fields.includes(key))
 const strings = (value: unknown, max = 8): value is string[] => Array.isArray(value) && value.length <= max && value.every(v => safeText(v, 128)) && new Set(value).size === value.length
 
-const explicitPlan = (text: string) => text.replace(/```[\s\S]*?(?:```|$)/g, '').split('\n').some(line => {
-  if (/^\s*(?:>|["'“「])/.test(line)) return false
-  return /^\s*(?:Plan|Approach|方案|计划)\s*[:：]\s*(?!(?:none|unknown|not)(?:\b)|暂无|没有|尚未|未定|待定)\S/i.test(line) || /^\s*(?:I (?:will|intend to)\s+|I'll\s+|我(?:打算|计划|将)\s*[^，。！？])/i.test(line)
-})
+const explicitPlan = (text: string) => {
+  const visible = text.replace(/```[\s\S]*?(?:```|$)/g, '').trim()
+  const intention = visible.replace(/^(?:(?:Plan|Approach|方案|计划)\s*[:：]\s*|I (?:will|intend to)\s+|I'll\s+|我(?:打算|计划|将)\s*)/i, '')
+  // Generic reconnaissance narration supplies no design decision to compare
+  // against requirements. Concrete mechanisms and multi-step plans remain plans.
+  if (/^(?:(?:start|begin)\s+by\s+|first\s+)?(?:explor(?:e|ing)|inspect(?:ing)?|brows(?:e|ing)|read(?:ing)?|list(?:ing)?)\s+(?:the\s+)?(?:repository|repo|project|codebase)(?:\s+(?:structure|layout|files))?(?:\s+to\s+understand\s+(?:the\s+)?(?:codebase|project|repository))?[.!]?$/i.test(intention) || /^(?:先|首先)?(?:查看|检查|阅读|浏览|探索)(?:仓库|项目|代码库)(?:结构|目录|布局)?[。！]?$/u.test(intention)) return false
+  return visible.split('\n').some(line => {
+    if (/^\s*(?:>|["'“「])/.test(line)) return false
+    return /^\s*(?:Plan|Approach|方案|计划)\s*[:：]\s*(?!(?:none|unknown|not)(?:\b)|暂无|没有|尚未|未定|待定)\S/i.test(line) || /^\s*(?:I (?:will|intend to)\s+|I'll\s+|我(?:打算|计划|将)\s*[^，。！？])/i.test(line)
+  })
+}
 
 export const buildReviewContext = (binding: Binding, asked: string, rows: readonly ReviewRow[], changes: string, phase: ReviewContext['phase']): ReviewContext | null => {
   if (!safeText(asked, 16384)) return null

@@ -81,3 +81,14 @@ test('verification context retains actual exit status, stderr and truncation ins
   expect(pending.sources.some(s => s.kind === 'observation')).toBe(false)
   expect(parseReview(pending, JSON.stringify({ reviewed: ['verification'], judgment: null, action: { kind: 'none' } }))).toBeNull()
 })
+
+test('generic repository reconnaissance is not attributed as a technical plan', async () => {
+  for (const text of ["I'll start by exploring the repository structure to understand the codebase.", 'I will first inspect the repository.', 'Plan: browse the project structure.', '我将先查看项目结构。']) {
+    const c = buildReviewContext(binding, asked, [{ role: 'assistant', text, toolUses: [] }], '', 'plan')!
+    expect(c.sources.some(s => s.kind === 'plan')).toBe(false)
+    expect(parseReview(c, JSON.stringify({ reviewed: ['requirement-plan'], judgment: null, action: { kind: 'none' } }))).toBeNull()
+  }
+  for (const text of ["I'll preserve the API by adding an adapter around the shared scheduler.", 'Plan: inspect the timer ownership, then centralize cancellation in Scheduler.', '我将保留接口并将取消操作集中到调度器。']) {
+    expect(buildReviewContext(binding, asked, [{ role: 'assistant', text, toolUses: [] }], '', 'plan')!.sources.some(s => s.kind === 'plan')).toBe(true)
+  }
+})
