@@ -112,3 +112,18 @@ Router实际窗口80条完成记录，31条引用body只读恢复后80条均可�
 宿主回归先RED232通过／2失败，再GREEN234；协议指标先因缺少省略状态失败后通过。原生免费复测调用实际生产`reviewInputLogs`：1份完整隐私归一化输入、0缺段／格式错误，29字符需求和12600字符公开来源逐字一致；无模型调用。证据在`.superpowers/sdd/2026-10-15-review-iterations/native-redaction-contract/comparison-receipt.json`。初次合成fixture的hook配置键错误已隔离留存，只重做免费fixture，不影响任何真实评测。最后全部`node scripts/check.mjs`通过，日志`privacy-final-checks.log`；本批为作者TDD，Astra的只读路由诊断不冒充新全分支审查。
 
 本轮对触发、有限预算停止、typed宿主失败、取消边界有明确证据；完整真实来源输入仍因旧日志损坏无法核对，全部判断质量与反馈行为仍未验证。新代码修复观测性，未证明解决无回复。当前无活动评测任务；不自动第五轮、不改预算／effort，不用重复付费替代尚缺的CCR/provider内部时序证据。全维度优化未达成，剩余真实阻碍如实保留。
+
+
+## Round005：异步等待恢复，暴露真实输出预算问题
+
+用户再次要求继续循环后，冻结91c8722，以seed`6f80427e1b2388704876f087c3ab84b3`从最新完整caller-scope双失败集合一次抽中Flipt c172。existing／supervise各一次15分钟并行观察，2026-10-16T13:20:10Z完成2/2并通过基础审计；没有重抽、重跑或full。原生CLI／Node／GNUloader保持原字节；253普通宿主检查和一次6.1sol历史接入审查＋重要修复TDD绑定launchgate。两组均达到外层观察上限，均为空patch；官方命令失败，0项parsed／2项required，不能写成“两项测试明确失败”。该成绩只描述本轮，不作为审查收益目标。
+
+supervise触发一次exploration审查，prepared输入1份、无缺段／格式错误。已恢复Router实际请求并逐字核对去除私有sessionId后的上下文，与prepared记录完全一致。真实调用106555ms后结束、timeout=null，证明不再被原30秒模型等待中止；但返回host empty-reply，无有效JSON、无判断、无反馈。Router原记录200，stop_reason=max_tokens，content只有thinking，无最终公开文本，usage3290input／4048output。只保存规范化输入和bodySHA，未复制thinking。
+
+免费公开API对照先在macOS、再在同一冻结Linux／Node／GNUloader证实：maxTokens2000实际发送max_tokens4048；low／high仅加入output_config.effort，不去掉2048；1952发送4000，1发送2049。两者均网络none／合成loopback／0付费调用。当前budget仅预留requested cap2000，实际wire可用4048，首个真实调用也确实消耗4048，超过声明的4000总上限48；旧预算声明不能作为本轮已严格守住上限的证据。另一个独立问题是usage>=requested cap不能独立证明provider截断；本次只有结合Router stop_reason才确定。
+
+智谱当前[GLM-5.3-Flash官方说明](https://docs.bigmodel.cn/cn/guide/models/vlm/glm-5.3-flash)明确不支持关闭thinking，因此不能用“关闭思考”冒充有效方案。公开effort低档在当前Anthropic原生端点的实际效果尚未验证；不得猜测已关闭thinking、改全局Router或扩大预算。下一批只在仓库内修复请求／wire／实际usage的预算预留和诊断，先免费RED→GREEN及全普通检查；之后才允许一个新的受控单题观察问题，不无变化重试本轮。
+
+两组实际请求E49／S35，Flash响应起始E31／S20；本窗口84条Router body均可解析，其中51条完整原需求匹配、均Flash／200，其余不归因。全部本地身份事件均Flash。资源177样本、最低可用10614722560B、swap0／OOM0／无429排空。两组完整usage缺失，观察量E77406input／23115output／962880cache，S285997input／18326output／431680cache仅为下界；费用unknown。七个判断维度仍全部未观察，不能把等待／输入链路正常当审查能力达标。
+
+本轮15项关键hash另存completed-receipts-sha256.json；连同前四轮共75项，旧回执保持。控制器与所有评测容器均退出。预算诊断的6.1sol是只读咨询，不冒充新整组代码审查。具体资料在round005目录及`.superpowers/sdd/2026-10-15-review-iterations/round005-budget-diagnosis/`。
