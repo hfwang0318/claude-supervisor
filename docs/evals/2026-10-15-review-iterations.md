@@ -224,3 +224,30 @@ probe的真实新问题已免费复现：candidate.files返回了两个现有源
 冻结source `3a4c224dc793d410c637b344ca6b651cab5389a2`，seed `1cb72b2bae465af5b8213a8f92c9fd6b` 从最新完整caller-scope full4双失败集合一次抽中Proton e65；不因再次抽中同题重抽。仅existing／supervise各一次900000ms，并行两槽，于2026-10-16T16:49:32Z实际starting，controller41340／monitor41343，最新PID文件优先。runtime／adapter／selection／父summary均冻结，父SHA `a2c437f9785105429f1e4c3ba4de9e9e8a533c0c3e58e5af70be6006ae09d676`；免费dryrun2、断网nativepreflight7968ms／0付费、273宿主及全部普通检查／实际候选回放／105旧hash保全绑定launchgate。
 
 本轮问题：实际模型能否遵守生成文件对象与命令约束、将静态定位与执行反例分清，actionProtocol是否如实独立于历史适用性；判断内容、真实反馈可见性及全部自然维度统一审计。预算、公开low字段、取消／无模型等待超时、Flash身份与资源规则不变。此处仅启动证据，真实行为结果尚未取得；不求官方pass、不叠加full、不重启或重试已接受任务。自然结束先基础audit，再做行为审计，原始回执冻结不覆盖。
+
+
+## Round008：有效location候选，实施阶段仍缺少观察预算
+
+2026-10-16T17:07:05Z已2/2自然结束及基础审计，controller41340／monitor41343与全部容器退出；原audit未重跑。E/S主观察均约900秒timeout，partial patch分别12421B／17510B；官方命令失败，两组仅1项parsed／3项required，不写成“三项明确失败”。官方成绩仅描述，不是当前优化目标。
+
+supervise仅一次语义调用，16746ms、timeout=null、5703input／770output、wire4000、公开low、Router200/end_turn；严格原始JSON及checkpoint标识通过。prepared输入一份完整且去除sessionId后与实际Router上下文逐字一致：完整原需求、目录观察、elementsActions.ts及elementsReducers.ts两份源码，没有技术方案、改动或测试结果。
+
+本次探索判断有真实依据：loadFulfilled实际解构Total／Elements、没有在所见分支检查Stale，旧失败路径确实2000ms后dispatch(retry(...))；建议检查slice、selectors、elementQuery和移动操作入口，以评估精确重试时机与同步补发机制。引用需求真实，影响具体，明确只是历史覆盖缺口／不等于设计错误。它选择location，actionProtocol=valid-protocol、reason=historical-advice；候选未对新源执行、0新事实。没有probe候选，所以本次不能证明新files／command说明已获真实模型遵守。
+
+16:50:06.399Z仅一次context返回，16:50:06.427Z下一真实主请求已包含相同审查／checkpoint及建议。14个后续请求含同一反馈，不计14次投递。按该检查点lastTool toolUseId或精确反馈绑定supervise侧公开请求，避免混入existing轨迹；slice／selectors在16:49:47.805Z、elementQuery在16:49:51.418Z已经出现在主请求，早于反馈。其后动作不能自动归因审查，实际采纳／决策改变unknown。
+
+| 维度 | 观察与限制 |
+| --- | --- |
+| 需求—方案 | 检查点无显式方案；之后phase=plan只是分类标签，跳过前未构造上下文，不能冒充真实方案 |
+| 方案—实现 | 检查点无方案／改动；17:00:21Z实际implementation阶段因预算用尽跳过，未观察质量 |
+| 探索、决策方向 | 一条引用准确、影响及不确定性清楚的gather-evidence建议；多数补读主模型已自行完成 |
+| 架构 | 自报reviewed，无独立架构判断，不认证该能力 |
+| 验证完成 | 检查点没有实际测试，后续未审，输入不足 |
+| 失败恢复 | 检查点没有失败；17:04:26Z失败阶段因预算用尽，未观察 |
+| 需求来源反例 | 选择location而非probe；候选协议状态正常不等于有效反例 |
+
+资源205样本、最低可用8485912576B、swap0／OOM0／无429排空。E/S各67请求，响应起始64／59；本地带模型事件全Flash。Router窗口133条，47inline可解析／46原需求匹配；另本地只读引用body恢复86条后133可解析／123原需求匹配，补充单独归档，未复制raw/thinking。两组完整usage及费用unknown，观察下界仍保留在原回执。
+
+另补清前面对default的解释：评测`reasoning:default`只在本地metadata，不是发送给GLM的合法档位。本轮Router记录的主请求实际有`output_config:{effort:high}`和`thinking:{type:adaptive,display:updates}`，旁路为low；这说明原生客户端/路由请求有实际字段，不能继续把主模型请求说成没有effort。当前证据到Router记录层，尚未证明最终GLM参数映射或内部思考档位。规范化记录observed-main-controls.json／router-body-recovery.json；不修改活动／冻结配置。
+
+本轮没发现需要放宽安全边界的新产品错误。明确覆盖瓶颈是一次4000wire预留在探索阶段耗尽，后续真实implementation／failure机会不可审。下一阶段保留总预算和默认auto行为，增加可选择的审查阶段，让单次调用留给指定的真实阶段（优先implementation），不伪造方案、没有目标机会则不调用、不回退探索。该批先本地TDD及免费真实轨迹回放，再完整普通检查和新冻结版本，才下一单题；不无变化重跑探索或扩预算。120项关键hash保全；全维度质量目标尚未完成。

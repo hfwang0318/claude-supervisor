@@ -171,3 +171,12 @@ Round007契约批次已实现：明确probe生成文件对象和现有命令限�
 
 
 Round008已完成免费门禁并唯一启动：source3a4c224，seed1cb72b2bae465af5b8213a8f92c9fd6b固定抽Protone65，E/S900000ms并行2槽2026-10-16T16:49:32Z starting，controller41340/monitor41343。目标probe契约遵守、纯协议诊断与历史适用分开及全部自然维度，不预设模型成功；自然结束审计后才下一批决定。
+
+
+### Round008后：在固定预算下按阶段观察未覆盖能力
+
+008已2/2完整审计，有效历史探索location候选、下一真实主请求可见，candidateprotocol与历史适用独立正常。没有probe行为，不能认证files/command遵守；后续真实implementation／failure都被一次预留耗尽跳过。主模型已在建议送达前完成多项读源，效益unknown。原120hash保全，无活跃任务。
+
+下一批是已授权全维度分阶段观察的最小准入选择：可配置review_phase，默认auto维持现状；选定plan/exploration/implementation/failure/completion时，只在原证据规则判断为该阶段后准入，不提前预留／发模型、不自动fallback、不伪造方案。阶段选择不收窄判断维度，同次审查仍看全部当时可用材料；取消／绑定／独立执行／4000wire／无模型等待timeout均不变。生产插件、冻结runtime身份及实验配置要绑定同一选择，未知选择必须拒绝，避免配置声称目标阶段而实际auto。
+
+本地RED覆盖：早期实质探索延后不消费；真实目标阶段一次调用；编辑未检查不能冒充implementation；无明确方案不能满足plan；取消／off／预算边界保持；目标未发生不回退；默认auto兼容；冻结配置与identity不同拒绝。免费用008真实公开轨迹核对探索被延后而implementation可准入，0付费不重建旧工作区。批次全node scripts/check.mjs通过后才新source/out抽一双失败E/S；优先implementation的质量问题而非重复探索。此处仅后续设计，尚未实现或启动009。
