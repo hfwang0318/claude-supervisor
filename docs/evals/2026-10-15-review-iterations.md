@@ -269,3 +269,31 @@ supervise仅一次语义调用，16746ms、timeout=null、5703input／770output�
 冻结source `a87caad07a3bbd258de6d1a4d02cfc1053026f38`，seed `9a4a12c8a9940428d0f926f794cc1dad` 固定一次从最新完整caller-scope双失败抽中Flipt c172。existing／supervise各一次900000ms并行2槽，2026-10-16T17:29:29Z实际starting，controller44171／monitor44174；最新文件为准。S显式review_phase=implementation，Eauto，runtime／experiment／插件默认值及audit均绑定阶段差异，不当作默认auto的效果。
 
 免费dryrun2、同native／Node／GNUloader断网preflight2738ms0paid，280宿主及全部普通检查、008真实公开轨迹的免费阶段回放及120旧hash保全绑定launchgate。本轮观察早期是否不消费、真实编辑后成功check才准入，以及改动／架构／方向／验证等可用维度判断质量；没有方案不能伪造一致性，目标阶段没发生即无机会，不延长、不强触发或自动替换任务。主旁路Flash、4000wire／low／模型等待无插件timeout及原资源规则保持；仍不求官方pass、不叠加full，完整实际行为尚待自然结束后审计。
+
+
+## Round009：实施阶段识别了无效的stub验证，意见在窗口结束前仅排队
+
+2026-10-16T17:48:24Z已2/2结束及基础审计，controller44171／monitor44174与全部容器退出。E主模型completed、5348Bpatch；S主观察900秒timeout、6768Bpartialpatch。两组官方commandfailed、0parsed／2required，不能当作两项明确测试失败。existing旧验证路径一次30006ms取消、usage缺失；不把SDK0当零消费。旧配置及回执保留。
+
+S明确review_phase=implementation：早期探索phase-deferred、编辑后未检查awaiting-post-edit-check、失败阶段phase-deferred，均未预留调用。17:43:52Z记录到编辑后成功check时才触发；prepared一份完整，去sessionId后与实际Router上下文逐字一致。材料含真实需求、有限改动（含临时compile stubs）、最近六工具；无技术方案。模型20615ms／timeout=null，5812input／897output、wire4000／low／Router200end_turn，原样JSON/checkpoint、需求引文、来源及probe协议通过。
+
+本次verification判断抓到了实际过程问题：主模型把CUE和testify换为手写stub，Validate／Err返回nil、断言不报告测试失败，却把`go test`的ok当验证。审查建议在真实cuеlang.org/go依赖上运行精确错误文本的TestValidate，区分“能编译”与需求行为已测；其需求依据和主要影响成立。这正是研究中验证深度／过早确信的过程差异。它没有因成功check分类就认证实现正确。
+
+判断也有两项精度限制，不能包装为全对：Unify实际返回Value{}，模型把它与Validate／Err合写为“都返回nil”不精确；earlier-tools已省略时，“only executed／has ever”超过有范围记录能证明的历史，应只解释为当前提供证据未显示真实依赖验收。核心stub警告仍有直接证据；这两项记为措辞／范围质量问题待后续集中优化，不为单个措辞微改付费。
+
+真实probe选择files:[]、项目测试命令、invariant标签及需求绑定；同冻结Linux断网免费round009-probe-replay/receipt.json用原helper复验有效，0模型／0候选执行。它遵守本次已有格式／命令gate，但oracle仍是假设，没有独立运行或验证真实依赖。未产生新增事实。
+
+17:44:13.641Z明确REVIEW_QUEUED，0REVIEW_DELIVERY。主请求从17:43:52.966Z仍在进行，模型意见到达后约15秒即达到固定15分钟外层窗口；到结束没有下一主请求。以S session元数据只在内存绑定，42条真实主请求均无反馈标识，不能把queued说成投递或采纳，也没有证据称产品投递坏了。保留自然结束，不延长／重跑本任务。
+
+| 维度 | 本轮结论 |
+| --- | --- |
+| 验证与完成 | 有实质verification判断，识别no-op stub的测试失真；未观察最终完成声明审查，判断精度限制保留 |
+| 决策方向 | 建议改用真实依赖补证据，方向有根据；未进入主模型，无法观察实际纠正 |
+| 需求来源反例 | 首次本组实际probe符合协议／需求引用；未执行、非可信oracle认证 |
+| 架构 | 自报reviewed、提出schema可能风险；没有独立架构判断，不认证 |
+| 需求—方案、方案—实现 | 无明确方案，正确未列入reviewed，不伪造 |
+| 探索、失败恢复 | 被目标时机有意延后，未观察质量；不能因没调用记为正常 |
+
+Router窗口115条body经只读引用恢复后全可解析，73条完整原需求匹配Flash／200，其余不归因；本地请求返回均Flash。E52请求31响应起始、S64请求42响应起始；221资源样本，最低可用10201931776B、swap最高6459392B、OOM0／无429排空。完整usage／cost unknown，观察下界见原回执。新增15关键hash，累计135保持，原pending快照由另存behavior-status终结，不重跑已冻结audit。
+
+下一轮没有声称修复产品bug，不无变化重复implementation。明确尚未回答的问题是**失败阶段的诊断／恢复方向质量**：同一实现a87caad、同一预算，仅冻结review_phase=failure，审是否区分环境／依赖错误与实现缺陷、保留反证、提出有用下一问题而非重复失败命令，及当时自然可用维度。该选项已有本批280全普通检查及失败触发／取消／绑定测试；无新产品代码就不为报告改动重复整套检查。新source/out、固定seed抽一双失败E/S，不自动full、不追求官方pass，不强求出现三连失败或重放旧模型。
