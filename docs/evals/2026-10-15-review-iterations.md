@@ -317,3 +317,10 @@ Router窗口115条body经只读引用恢复后全可解析，73条完整原需�
 两个行为回归RED280pass2fail→GREEN282pass0fail，全部node scripts/check.mjs exit0（grounding-batch-final-checks.log）。同冻结Linux CLI／Node／GNUloader断网grounding-native-replay/receipt.json以真实009公开输入／回复对照旧／新生产helper：旧无显式fidelity边界，新有；原“Unify返回nil”错误句原样保留，原引用中Value{}也保留；history／change警示存在、在Reason前，实际上下文逐字不变、严格模板仍可解析，note16242字符未超原32768bytes限制。0模型／0候选命令。这只验证边界呈现和输入契约，不能声称真实模型已学会正确复述。
 
 下一新版本单题选implementation：明确验证有有限改动／历史遗漏时的来源复述、范围结论和所有自然出现维度，不为0call的failure重复随机。目标未出现仍无机会；不追加窗口、不自动full、不追求官方pass。后续如仍缺自然方案／恢复材料，明确覆盖限制，不用无变化付费替代证据。
+
+
+### Round011：来源忠实与范围边界的新版本实施阶段观察
+
+冻结sourcead2f994e3fbe6b15488784096e4dd6a38c707996（本批真实产品修改），固定seed273726c6a6889c2f10109ec20ca8c167从最新完整caller-scope双失败一次抽中Protone65，未重抽。Eexisting/Ssupervise各900000ms并行2槽，Sreview_phase=implementation/Eauto，于2026-10-16T18:21:47Z实际starting，controller48171／monitor48174（最新PID文件优先）。runtime.phaseOnlyObservation=false，体现本轮有代码修正，与010仅阶段变化分开。
+
+282宿主及全部普通检查、真实009公开回复的断网新旧边界回放、150旧criticalhash保全、免费dryrun2／nativepreflight8167ms0paid绑定launchgate。问题是有有限改动与历史遗漏时，实际模型是否忠实区分源码行为并限制缺失证据的推断；反馈呈现边界不等于判断自动正确。真实输入、公开输出及全部自然维度等自然结束后统一审计；没有目标仍无机会，不重复失败阶段碰运气，不延长、不自动full或求官方pass。
