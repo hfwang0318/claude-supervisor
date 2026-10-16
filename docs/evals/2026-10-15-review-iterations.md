@@ -143,3 +143,12 @@ Coordinator 现在把请求与宿主allowance一起预留，并补扣已观察�
 
 
 最终生产复验：budget-batch-native-verified/receipt.json，未修改的同冻结Linux CLI／Node／GNUloader、networknone、0付费。真实插件公开请求1952／effortlow成为wire4000；35035ms后合成最终text，报告output3000高于requested仍正常接收，timeout=null；一条可解析SIDE_CALL保留1952／4000／4000，providerStopReason未知。历史建议恰一次submitted，后续main6请求实际可见，2个result／exit0；这是固定回复机制证据，非真实模型能力。生产源文件SHA与当前仓库逐一一致。没有活动fixture／评测容器，旧75hash再次核对一致。
+
+
+## Round006：一次真实 wire 预算下的审查观察（在途）
+
+新冻结源码25e40297dc9f699ab0962b2be045fbd6d05f24e9，seed `c6076a06302fb2070811cf9a2acf29b8` 从最新完整caller-scope full4一次抽中Flipt c172，未重抽。existing／supervise各一次900秒并行，2026-10-16T13:42:28Z两槽实际starting，唯一controller11639／monitor11642；最新PID文件为准。仅新观察，不重跑005回执，不追加full。
+
+免费dryrun验证2个arm；相同native CLI／Node／GNUloader的本地命令preflight2865ms、networknone、0付费。最初包装脚本把runAgent返回的{receipt,patch}误当扁平receipt，断言未通过；原生运行本身completed／exit0，保留envelope后规范化已有回执，没有重跑。launchgate绑定266宿主＋全普通检查、原生预算fixture、runtime/helper/selection/父summary及75旧关键hash。语义请求1952／预留wire4000／公开effortlow／模型等待无插件timeout；该版本每提示最多一次语义调用，后续阶段未获预算不算正常。
+
+本轮明确问题是公开low条件下是否有可解析、来源充分、带历史checkpoint的判断和实际模型可见反馈；low的实际供应商意义仍未知。自然出现的所有维度统一审计，不以官方通过为目标；结论待全部自然结束与行为审计后给出，未声称当前运行成功。
