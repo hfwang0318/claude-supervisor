@@ -157,7 +157,13 @@ is not a demonstrated defect or a repair certificate.
 The reviewer gives at most one important judgment per review, recommends
 continue/adjust/replan/gather-evidence, and chooses at most one supplemental
 action: safe source inspection, a requirement-bound probe, or recovery from
-three actual matching failures. `probe` and `recovery` restrict that action while
+three actual matching failures. Probe `files` contains only new `{path, content}`
+scripts under `__supervisor_probes/`; existing source paths are references, not
+file entries. Static lookup uses `location`; probe commands retain the existing
+import-and-print, workspace-script or project-check restrictions. Review diagnostics
+record `actionProtocol` separately from source applicability, execution and
+judgment quality, including historical advice. An invalid optional action does not
+discard a grounded judgment or authorize execution. `probe` and `recovery` restrict that action while
 using the same protocol. Generated expectations remain hypotheses; recovery
 never invents eliminated causes. One recovery packet and one semantic completion
 follow-up are allowed per prompt. Plans are reviewed before editing, changes

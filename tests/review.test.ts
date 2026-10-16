@@ -134,3 +134,12 @@ test('historical response template is valid raw JSON with all mandatory echo ide
   expect(parseReview(tracked, '```json\n{"reviewed":["exploration","verification"],"judgment":null,"action":{"kind":"none"}}\n```')).toBeNull()
   expect(parseReview(tracked, '{"reviewed":["exploration","verification"],"judgment":null,"action":{"kind":"none"}}')).toBeNull()
 })
+
+test('probe instructions distinguish generated file objects from existing source and restrict commands', async () => {
+  const prompt = reviewPrompt(context(), 'supervise')
+  expect(prompt).toContain('"path":"__supervisor_probes/check.js","content":"console.log(0)"')
+  expect(prompt).toContain('Existing source paths are not files entries')
+  expect(prompt).toContain('one import-and-print line, one workspace script, or a project check')
+  expect(prompt).toContain('grep pipelines are not probes; use location')
+  expect(prompt).toContain('existing-test requires the exact command in a supplied tool observation')
+})

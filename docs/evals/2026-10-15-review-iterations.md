@@ -204,3 +204,16 @@ probe的真实新问题已免费复现：candidate.files返回了两个现有源
 下一批只处理这组实证契约问题：提示明确files的新脚本对象格式与现有源码引用的区别，并写出已有命令限制；历史降级也单独记录纯协议验证状态，保留有效判断，不认证旧源动作、不扩大命令权限。不为这几个小改动逐个付费，集中各自RED→GREEN、全部node scripts/check.mjs后再决定一个新的单题观察。
 
 资源204样本、最低可用8999321600B、swap0／OOM0／无429。E37请求37个响应起始，S29请求27个响应起始，全部本地模型身份Flash。Router66窗口49body可解析，47完整原需求匹配Flash／200，其余不归因。完整用量与费用unknown；模型低effort字段的内部作用、质量收益及完成率收益均未证明。新增15项关键hash，累计105项保持；behavior-status单独终结原pending快照，不重跑已冻结audit。基础链路与一次真实探索判断有证据，全部审查能力仍未验证完成。
+
+
+## Round007 后：probe 契约与独立协议诊断批次
+
+已集中补齐实际候选暴露的两项提示遗漏：`files` 明确为 `__supervisor_probes/` 下新脚本 `{path,content}` 对象，已有源码路径不能作为文件条目；命令明确复用原 import-and-print／工作区脚本／项目检查限制，静态检索走 location 或只给建议，不将 grep 管道伪装成执行反例。没有改 parser、命令权限、隔离、预算或宿主代码。
+
+新增独立 `actionProtocol`：not-requested／valid-protocol／invalid-protocol，使用既有纯候选 gate，并进入持久化及 REVIEW 事件。历史降级也保留该诊断；它只表示候选相对冻结上下文通过协议，不表示当前适用、已执行、oracle真实或判断正确。真实源已前进时仍只保留有依据的判断、不执行或投递旧候选命令。
+
+四项行为回归 RED269通过4失败→GREEN273通过0失败；完整 `node scripts/check.mjs` 最终exit0（action-contract-final-checks.log，含273宿主与全部普通工程检查）。首次完整检查发现新增测试把readonly元组转换为可变ReviewAction的类型错误，已修测试类型并重新全部运行；不是产品执行失败。本批作者TDD及差异审查，不声称旧6.1sol审查覆盖新代码。
+
+同冻结Linux CLI2.1.295／Node／GNUloader、networknone免费原生回放 `action-contract-native-replay/receipt.json`：原007候选、仅修files、仅修command仍invalid；合成合法控制valid、none为not-requested；历史候选invalid但判断保留、候选命令未进入反馈，0源码事实、0独立执行、0模型调用。提示模板仍过严格parseReview。仅是机制与真实候选诊断，不能称真实模型已经遵守新提示或有效反例已完成。旧105关键hash完整保全。
+
+下一轮只观察一个新冻结版本的双失败E/S：候选是否遵守文件／命令约束，动作状态与历史判断是否分开；并审全部自然出现维度。缺少方案／实现／恢复机会仍明确未观察，不因单题链路正常宣称全能力完成。

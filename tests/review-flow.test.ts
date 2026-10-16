@@ -92,3 +92,32 @@ test('historical fallback is cancelled across tasks and suppressed in shadow mod
   const shadow = await runHistoricalReviewFlow(context, decision, { ...ports(host, 'shadow'), taskCurrent: async () => true, sourceCurrent: async () => false })
   expect(shadow.note).toBeNull()
 })
+
+for (const historical of [false, true]) test(`action protocol is independent of historical applicability (${historical})`, async () => {
+  const { host, counts } = world()
+  const run = (reply: ReviewReply) => runHistoricalReviewFlow(context, reply, { ...ports(host), taskCurrent: async () => true, sourceCurrent: async () => !historical })
+  expect((await run(decision)).actionProtocol).toBe('not-requested')
+  expect((await run(probe)).actionProtocol).toBe('valid-protocol')
+  const invalidFiles = { ...probe, action: { kind: 'probe' as const, candidate: { ...probe.action.candidate, files: ['api.js'] } } }
+  const invalidCommand = { ...probe, action: { kind: 'probe' as const, candidate: { ...probe.action.candidate, command: 'grep -rn retry api.js | head -50' } } }
+  for (const reply of [invalidFiles, invalidCommand]) {
+    const result = await run(reply)
+    expect(result.actionProtocol).toBe('invalid-protocol')
+    expect(result.note).toContain('Caller compatibility')
+    expect(result.reason).toBe(historical ? 'historical-advice' : 'invalid-action')
+  }
+  expect(counts.runs + counts.captures).toBe(0)
+})
+test('location and recovery protocol diagnostics use bounded existing validators without execution', async () => {
+  const { host, counts } = world()
+  for (const [action, expected] of [
+    [{ kind: 'location', request: { paths: ['api.js'], terms: [] } }, 'valid-protocol'],
+    [{ kind: 'location', request: { paths: ['../api.js'], terms: [] } }, 'invalid-protocol'],
+    [{ kind: 'recovery', observationIds: ['tool-1'], question: 'What failed?' }, 'invalid-protocol'],
+  ] as [ReviewReply['action'], string][]) {
+    const result = await runHistoricalReviewFlow(context, { ...decision, action }, { ...ports(host, 'enabled'), taskCurrent: async () => true, sourceCurrent: async () => false })
+    expect(result.actionProtocol).toBe(expected)
+    expect(result.note).toContain('Historical advice only')
+  }
+  expect(counts.reads + counts.runs + counts.captures).toBe(0)
+})

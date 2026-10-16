@@ -6,10 +6,22 @@ import { reviewNote } from './review'
 import { parseProbeCandidate, probeNote } from './probes'
 import { buildRecoveryPacket } from './recovery'
 import { captureSnapshot } from './workspace'
+import { parseFactRequest } from './assist'
 import { executeProbe } from './runner'
 
 export type ReviewFlowPorts = { host: Host; executionMode: 'off' | 'shadow' | 'enabled'; deadlineMs: number; excludeModelWait?: boolean; current(): Promise<boolean>; ask(prompt: string): Promise<string | null> }
-export type ReviewOutcome = { note: string | null; reason: string; view: FactView | null; sourceFactIds: string[]; evidence: ExecutionEvidence | null; validate(): Promise<boolean>; cleanup(): Promise<void> }
+export type ActionProtocol = 'not-requested' | 'valid-protocol' | 'invalid-protocol'
+// Pure validation against the frozen context, not current applicability, execution
+// permission, an authenticated oracle, or a judgment-quality certificate.
+export const reviewActionProtocol = (context: ReviewContext, reply: ReviewReply): ActionProtocol => {
+  const action = reply.action
+  if (action.kind === 'none') return 'not-requested'
+  const valid = action.kind === 'probe' ? parseProbeCandidate(context, action.candidate)
+    : action.kind === 'location' ? parseFactRequest(JSON.stringify(action.request))
+    : buildRecoveryPacket(context, action.observationIds, action.question)
+  return valid ? 'valid-protocol' : 'invalid-protocol'
+}
+export type ReviewOutcome = { actionProtocol: ActionProtocol; note: string | null; reason: string; view: FactView | null; sourceFactIds: string[]; evidence: ExecutionEvidence | null; validate(): Promise<boolean>; cleanup(): Promise<void> }
 
 export const runReviewFlow = async (context: ReviewContext, reply: ReviewReply, ports: ReviewFlowPorts): Promise<ReviewOutcome> => {
   const { host } = ports
@@ -19,6 +31,7 @@ export const runReviewFlow = async (context: ReviewContext, reply: ReviewReply, 
   let reason = 'prepared', note = reply.judgment ? reviewNote(context, reply) : ''
   const current = async () => await host.now() < deadlineMs && await ports.current()
   const outcome = (): ReviewOutcome => ({
+    actionProtocol: reviewActionProtocol(context, reply),
     note: ports.executionMode === 'shadow' || !note ? null : note, reason, view, sourceFactIds, evidence,
     validate: async () => await current() && (!view || await host.validateFacts(view, deadlineMs)) && (!snapshot || !!host.validateSnapshot && await host.validateSnapshot(snapshot, deadlineMs)) && await current(),
     cleanup: async () => { if (!closed) { closed = true; if (snapshot) await host.cleanup(snapshot) } },
@@ -79,6 +92,7 @@ export const runReviewFlow = async (context: ReviewContext, reply: ReviewReply, 
 // source version. Never execute a stale action against the live workspace.
 export const historicalReviewOutcome = (context: ReviewContext, reply: ReviewReply, executionMode: ReviewFlowPorts['executionMode'], taskCurrent: () => Promise<boolean>): ReviewOutcome => ({
   note: executionMode === 'shadow' || !reply.judgment ? null : `${reviewNote(context, reply)}\n\nHistorical advice only: current applicability is unknown. Supplemental actions/evidence are not established for the current workspace; no historical test or source excerpt certifies later code. The main assistant may gather fresh evidence or reject this advice with counterevidence.`,
+  actionProtocol: reviewActionProtocol(context, reply),
   reason: 'historical-advice', view: null, sourceFactIds: [], evidence: null,
   validate: taskCurrent, cleanup: async () => {},
 })
