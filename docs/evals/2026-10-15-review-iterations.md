@@ -217,3 +217,10 @@ probe的真实新问题已免费复现：candidate.files返回了两个现有源
 同冻结Linux CLI2.1.295／Node／GNUloader、networknone免费原生回放 `action-contract-native-replay/receipt.json`：原007候选、仅修files、仅修command仍invalid；合成合法控制valid、none为not-requested；历史候选invalid但判断保留、候选命令未进入反馈，0源码事实、0独立执行、0模型调用。提示模板仍过严格parseReview。仅是机制与真实候选诊断，不能称真实模型已经遵守新提示或有效反例已完成。旧105关键hash完整保全。
 
 下一轮只观察一个新冻结版本的双失败E/S：候选是否遵守文件／命令约束，动作状态与历史判断是否分开；并审全部自然出现维度。缺少方案／实现／恢复机会仍明确未观察，不因单题链路正常宣称全能力完成。
+
+
+### Round008：probe契约与协议诊断单题观察已启动
+
+冻结source `3a4c224dc793d410c637b344ca6b651cab5389a2`，seed `1cb72b2bae465af5b8213a8f92c9fd6b` 从最新完整caller-scope full4双失败集合一次抽中Proton e65；不因再次抽中同题重抽。仅existing／supervise各一次900000ms，并行两槽，于2026-10-16T16:49:32Z实际starting，controller41340／monitor41343，最新PID文件优先。runtime／adapter／selection／父summary均冻结，父SHA `a2c437f9785105429f1e4c3ba4de9e9e8a533c0c3e58e5af70be6006ae09d676`；免费dryrun2、断网nativepreflight7968ms／0付费、273宿主及全部普通检查／实际候选回放／105旧hash保全绑定launchgate。
+
+本轮问题：实际模型能否遵守生成文件对象与命令约束、将静态定位与执行反例分清，actionProtocol是否如实独立于历史适用性；判断内容、真实反馈可见性及全部自然维度统一审计。预算、公开low字段、取消／无模型等待超时、Flash身份与资源规则不变。此处仅启动证据，真实行为结果尚未取得；不求官方pass、不叠加full、不重启或重试已接受任务。自然结束先基础audit，再做行为审计，原始回执冻结不覆盖。

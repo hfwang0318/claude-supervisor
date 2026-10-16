@@ -168,3 +168,6 @@ Round007已按以上批次完整门禁启动：source66dffe8，269宿主及全�
 
 
 Round007契约批次已实现：明确probe生成文件对象和现有命令限制，纯actionProtocol状态独立进入历史／当前结果及REVIEW事件；历史判断保留、旧候选不执行。RED269/4→GREEN273及全部普通检查通过；同冻结Linux断网真实候选回放0模型／0执行，105旧hash保全。下一轮新source/out单题只验证提示遵守和动作诊断及自然维度，不求官方通过、不自动full。
+
+
+Round008已完成免费门禁并唯一启动：source3a4c224，seed1cb72b2bae465af5b8213a8f92c9fd6b固定抽Protone65，E/S900000ms并行2槽2026-10-16T16:49:32Z starting，controller41340/monitor41343。目标probe契约遵守、纯协议诊断与历史适用分开及全部自然维度，不预设模型成功；自然结束审计后才下一批决定。
