@@ -6,11 +6,11 @@ import type { Binding, ExecutionEvidence, AssistInput, AssistPacket, FactView } 
 import { validateObservation, normalizeTrack } from '../supervisor/ledger'
 import { captureSnapshot } from '../supervisor/workspace'
 import { buildAssistPacket, buildLocalAssistPacket, parseFactRequest, assistSignal, assistNote, localFactRequest } from '../supervisor/assist'
-import { Coordinator, sameBinding } from '../supervisor/coordinator'
+import { Coordinator, sameBinding, sameTask } from '../supervisor/coordinator'
 import { buildReviewContext, parseReview, reviewPrompt, reviewInputLogs, REVIEW_DIMENSIONS, hasExplorationEvidence } from '../supervisor/review'
-import { runReviewFlow } from '../supervisor/review-flow'
+import { runHistoricalReviewFlow, historicalReviewOutcome } from '../supervisor/review-flow'
 import type { ReviewOutcome } from '../supervisor/review-flow'
-import type { ReviewContext } from '../supervisor/contracts'
+import type { ReviewContext, ReviewReply } from '../supervisor/contracts'
 import { recoveryObservations } from '../supervisor/recovery'
 import { selectSideModel, createHost } from './host'
 import { registerBand } from './band'
@@ -105,6 +105,7 @@ type Runtime = {
   asked: string; told: number; last: string; coordinator: Coordinator
   jobNumber: number; modelDisabled: boolean; cfg: Config; stateUsable: boolean; journal: Promise<unknown>; recordEnd: number; workerModel: string | null; factsAttempted: boolean
   reviewSignatures: Set<string>; reviewAttempts: number; reviewStopSent: boolean; reviewRecoveryUsed: boolean; reviewSkipKeys: Set<string>
+  reviewPending?: { binding: Binding; token: number }; reviewReady?: PreparedReview; reviewDraining?: { binding: Binding }; reviewInputPending?: string; reviewSequence: number; mainActive: boolean; reviewCwd: string
 }
 const sessions = new Map<string, Runtime>()
 const runtimeOf = async ($: EngineInterface): Promise<Runtime> => {
@@ -112,7 +113,7 @@ const runtimeOf = async ($: EngineInterface): Promise<Runtime> => {
   let s = sessions.get(sessionId)
   if (s) return s
   const binding: Binding = { sessionId, generationId: String(await $.clock.now()), turnId: 'initial', taskRevision: 0, workspaceRevision: 'unknown', snapshotId: 'unknown' }
-  s = { steps: 0, isBusy: false, promptsSinceCards: 0, blocks: 0, held: new Set(), followUps: 0, turnFrom: 0, isInteractive: true, asked: '', told: 0, last: '', coordinator: new Coordinator(binding), jobNumber: 0, modelDisabled: false, cfg: configOf(undefined), stateUsable: true, journal: Promise.resolve(), recordEnd: 0, workerModel: null, factsAttempted: false, reviewSignatures: new Set(), reviewAttempts: 0, reviewStopSent: false, reviewRecoveryUsed: false, reviewSkipKeys: new Set() }
+  s = { steps: 0, isBusy: false, promptsSinceCards: 0, blocks: 0, held: new Set(), followUps: 0, turnFrom: 0, isInteractive: true, asked: '', told: 0, last: '', coordinator: new Coordinator(binding), jobNumber: 0, modelDisabled: false, cfg: configOf(undefined), stateUsable: true, journal: Promise.resolve(), recordEnd: 0, workerModel: null, factsAttempted: false, reviewSignatures: new Set(), reviewAttempts: 0, reviewStopSent: false, reviewRecoveryUsed: false, reviewSkipKeys: new Set(), reviewSequence: 0, mainActive: true, reviewCwd: '' }
   sessions.set(sessionId, s)
   return s
 }
@@ -227,20 +228,24 @@ const ask = async ($: EngineInterface, prompt: string, timeoutMs = 30000, jobSig
   if (!budget) return undefined
   const callBinding = { ...s.coordinator.binding }
   const startedAt = await $.clock.now()
-  const reply = await $.model.complete({ model: selection.modelId, prompt: redact(prompt), maxTokens: budget.maxTokens, timeoutMs: Math.min(timeoutMs, budget.timeoutMs) }, jobSignal ? { signal: jobSignal } : undefined).catch((err: unknown) => {
+  const modelTimeout = budget.timeoutMs === undefined ? undefined : Math.min(timeoutMs, budget.timeoutMs)
+  s.coordinator.pauseModel(callBinding, startedAt)
+  const reply = await $.model.complete({ model: selection.modelId, prompt: redact(prompt), maxTokens: budget.maxTokens, ...(modelTimeout === undefined ? {} : { timeoutMs: modelTimeout }) }, jobSignal ? { signal: jobSignal } : undefined).catch((err: unknown) => {
     say($, `configured side model unavailable: ${String(err)}`)
     return undefined
   })
+  if (sessions.get(callBinding.sessionId) !== s) return undefined
+  s.coordinator.resumeModel(callBinding, await $.clock.now())
   const elapsedMs = Math.max(0, await $.clock.now() - startedAt)
   const outputCapped = !!reply && reply.usage.output_tokens >= budget.maxTokens
   const hostFailure = reply && !reply.isAnswered ? reply : null
   const hostDiagnostic = { hostReason: hostFailure?.reason ?? null, hostStatus: hostFailure?.reason === 'api-error' ? hostFailure.status : null, hostError: hostFailure?.reason === 'api-error' ? hostFailure.error : null }
   const reason = outputCapped ? 'output-limit' : !reply ? 'provider-error' : !reply.isAnswered ? 'provider-unanswered' : null
-  const callEvent = { schemaVersion: 1, kind: 'side-call', callId: `${callBinding.sessionId}/${callBinding.generationId}/${callBinding.turnId}/${++s.jobNumber}`, modelId: selection.modelId, binding: callBinding, usage: reply?.usage ?? null, elapsedMs, timeoutMs: Math.min(timeoutMs, budget.timeoutMs), reason, ...hostDiagnostic, result: reply?.isAnswered && !outputCapped ? 'answered' : 'unknown' }
+  const callEvent = { schemaVersion: 1, kind: 'side-call', callId: `${callBinding.sessionId}/${callBinding.generationId}/${callBinding.turnId}/${++s.jobNumber}`, modelId: selection.modelId, binding: callBinding, usage: reply?.usage ?? null, elapsedMs, timeoutMs: modelTimeout ?? null, reason, ...hostDiagnostic, result: reply?.isAnswered && !outputCapped ? 'answered' : 'unknown' }
   await remember($, callEvent)
   say($, `SIDE_CALL ${JSON.stringify({ callId: callEvent.callId, modelId: callEvent.modelId, result: callEvent.result, reason, ...hostDiagnostic, elapsedMs, timeoutMs: callEvent.timeoutMs, input: reply?.usage.input_tokens ?? null, output: reply?.usage.output_tokens ?? null, cached: reply?.usage.cache_read_input_tokens ?? null, created: reply?.usage.cache_creation_input_tokens ?? null })}`)
   await selectionOf($)
-  if (!sameBinding(callBinding, s.coordinator.binding)) return reply
+  if (!s.coordinator.matches(callBinding)) return undefined
   if (!reply || !reply.isAnswered || outputCapped) { s.coordinator.recordFailure(); s.modelDisabled = true }
   if (reply) s.coordinator.recordUsage(reply.usage.output_tokens)
   return outputCapped ? undefined : reply
@@ -331,15 +336,16 @@ const signatureOfChange = (s: string) => {
   return `${s.length}:${(h >>> 0).toString(16)}`
 }
 
-type PreparedReview = { id: string; binding: Binding; outcome: ReviewOutcome; deadlineMs: number }
-const engineeringReview = async ($: EngineInterface, list: Rows, final = false, answer = ''): Promise<PreparedReview | null> => {
+type PreparedReview = { id: string; binding: Binding; context: ReviewContext; decision: ReviewReply; outcome: ReviewOutcome; deadlineMs: number }
+type ReviewCapture = { binding: Binding; asked: string; sequence: number; capturedAt: number; cwd: string }
+const engineeringReview = async ($: EngineInterface, list: Rows, final = false, answer = '', captured?: ReviewCapture): Promise<PreparedReview | null> => {
   const s = await runtimeOf($), mode = s.cfg.assistanceMode
-  if (!['supervise', 'probe', 'recovery'].includes(mode)) return null
+  if (!['supervise', 'probe', 'recovery'].includes(mode) || !captured || !sameTask(captured.binding, s.coordinator.binding)) return null
   const record = evidenceOf(list), since = record.prompts.at(-1)?.at ?? 0
   const changes = changesOf(record, 24576), lastRun = record.runs.filter(r => r.at >= since).at(-1)
   const lastEdit = record.edits.filter(e => e.at >= since).at(-1)?.at ?? -1
   let phase: ReviewContext['phase'] = final ? 'completion' : lastRun && !lastRun.ok ? 'failure' : changes && lastRun && lastRun.at >= lastEdit ? 'implementation' : 'plan'
-  const binding = { ...s.coordinator.binding }
+  const binding = { ...captured.binding }
   const skipped = async (reason: string) => {
     const key = `${phase}:${reason}`
     if (s.reviewSkipKeys.has(key) || s.reviewSkipKeys.size >= 32) return null
@@ -349,13 +355,13 @@ const engineeringReview = async ($: EngineInterface, list: Rows, final = false, 
     say($, `REVIEW ${JSON.stringify(event)}`)
     return null
   }
-  if (!s.stateUsable || !s.asked) return skipped('context-unavailable')
-  if (s.reviewAttempts >= 2 || s.coordinator.remainingTime(await $.clock.now()) <= 0) return skipped('budget-exhausted')
+  if (!s.stateUsable || !captured.asked) return skipped('context-unavailable')
+  if (s.reviewAttempts >= 2) return skipped('budget-exhausted')
   if (s.modelDisabled) return skipped('side-model-unavailable')
   if (final && s.reviewStopSent) return skipped('completion-feedback-already-offered')
   const latestPrompt = list.findLastIndex(r => r.role === 'user' && r.text.trim() && !r.text.includes('[deepseek-supervisor]') && !/^\s*<(?:system-reminder|command-|local-command|teammate-message)|^\s*Another Claude session/.test(r.text))
   const rows = latestPrompt < 0 ? list : list.slice(latestPrompt + 1)
-  const context = buildReviewContext(binding, s.asked, answer ? [...rows, { role: 'assistant', text: answer, toolUses: [] }] : rows, changes, phase)
+  const context = buildReviewContext(binding, captured.asked, answer ? [...rows, { role: 'assistant', text: answer, toolUses: [] }] : rows, changes, phase)
   if (!context) return skipped('context-rejected')
   if (!final && phase === 'plan' && changes !== '') return skipped('awaiting-post-edit-check')
   if (!final && phase === 'plan' && !context.sources.some(source => source.kind === 'plan')) {
@@ -366,17 +372,28 @@ const engineeringReview = async ($: EngineInterface, list: Rows, final = false, 
   const material = phase === 'exploration' ? context.sources.filter(source => source.kind === 'requirement') : phase === 'plan' ? context.sources.filter(source => source.kind === 'plan' || source.kind === 'requirement') : context.sources
   const key = `${phase}:${signatureOfChange(JSON.stringify(material))}`
   if (s.reviewSignatures.has(key)) return skipped('already-considered-context')
-  const id = `review-${++s.jobNumber}`, job = s.coordinator.start(id, await $.clock.now())
+  const launchAt = await $.clock.now()
+  if (!sameTask(binding, s.coordinator.binding)) return null
+  const id = `review-${++s.jobNumber}`, job = s.coordinator.start(id, launchAt)
   if (!job) return skipped('review-in-flight-or-budget-unavailable')
   s.reviewSignatures.add(key); s.reviewAttempts++
-  const deadlineMs = await $.clock.now() + s.coordinator.remainingTime(await $.clock.now())
+  const lastTool = context.sources.filter(source => source.kind === 'tool' || source.kind === 'observation').at(-1)
+  const uses = rows.filter(row => row.role === 'assistant').flatMap(row => row.toolUses ?? []).slice(-6)
+  const use = lastTool ? uses[Number(lastTool.id.slice(5)) - 1] : undefined
+  const input = use?.input as { file_path?: unknown; path?: unknown } | undefined
+  const rawPath = input?.file_path ?? input?.path
+  const path = typeof rawPath === 'string' ? rawPath.startsWith(captured.cwd + '/') ? rawPath.slice(captured.cwd.length + 1) : rawPath : ''
+  const safePath = path && !path.startsWith('/') && !path.split('/').some(part => part === '..') && redact(path) === path ? path : undefined
+  context.checkpoint = { reviewId: id, checkpointId: `checkpoint-${captured.sequence}-${id}`, observedAt: captured.capturedAt, sequence: captured.sequence, requirementSignature: signatureOfChange(captured.asked), materialSignature: signatureOfChange(JSON.stringify(context.sources)), sourceIds: context.sources.map(source => source.id), ...(lastTool && use ? { lastTool: { tool: use.tool, ...(use.tool_use_id ? { toolUseId: use.tool_use_id } : {}), ...(safePath ? { path: safePath } : {}) } } : {}) }
+  let deadlineMs = Infinity
   const invalidReason = async () => {
+    if (sessions.get(binding.sessionId) !== s) return 'cancelled'
     await selectionOf($)
     const enabled = await isOn($)
     if (!enabled) return 'disabled'
     if (job.signal.aborted) return job.signal.reason === 'cancelled' || job.signal.reason === 'disabled' ? job.signal.reason : 'stale-binding'
-    if (!sameBinding(binding, s.coordinator.binding)) return 'stale-binding'
-    if (await $.clock.now() >= deadlineMs) return 'deadline'
+    if (!sameTask(binding, s.coordinator.binding)) return 'stale-binding'
+    if (await $.session.cwd() !== captured.cwd) { s.coordinator.invalidate({ ...s.coordinator.binding, generationId: `project-${++s.jobNumber}` }, { preserveBudget: true, now: await $.clock.now() }); return 'project-changed' }
     return null
   }
   const current = async () => await invalidReason() === null
@@ -391,13 +408,14 @@ const engineeringReview = async ($: EngineInterface, list: Rows, final = false, 
     if (invalid) return skipped(invalid)
     if (!reply?.isAnswered) return skipped('review-unanswered')
     const decision = parseReview(context, reply.text)
+    deadlineMs = await $.clock.now() + s.coordinator.remainingTime(await $.clock.now())
     if (!decision) return skipped('invalid-review-protocol')
     if (mode === 'probe' && !['none', 'probe'].includes(decision.action.kind) || mode === 'recovery' && !['none', 'recovery'].includes(decision.action.kind)) return skipped('invalid-action-for-mode')
     if (decision.action.kind === 'recovery') {
       if (s.reviewRecoveryUsed) return null
       s.reviewRecoveryUsed = true
     }
-    outcome = await runReviewFlow(context, decision, { host: hostOf($, job.signal), executionMode: s.cfg.executionMode, deadlineMs, current, ask: async prompt => {
+    outcome = await runHistoricalReviewFlow(context, decision, { host: hostOf($, job.signal), executionMode: s.cfg.executionMode, deadlineMs, excludeModelWait: true, current, taskCurrent: current, sourceCurrent: async () => s.coordinator.remainingTime(await $.clock.now()) > 0 && sameBinding(binding, s.coordinator.binding), ask: async prompt => {
       const second = await ask($, prompt, deadlineMs - await $.clock.now(), job.signal)
       return second?.isAnswered ? second.text : null
     } })
@@ -407,7 +425,7 @@ const engineeringReview = async ($: EngineInterface, list: Rows, final = false, 
     say($, `REVIEW ${JSON.stringify({ ...metadata, dimension: decision.judgment?.dimension ?? null, recommendation: decision.judgment?.recommendation ?? null })}`)
     if (!await current() || !outcome.note || decision.judgment?.recommendation === 'continue' && decision.action.kind === 'none') return null
     retained = true
-    return { id, binding, outcome, deadlineMs }
+    return { id, binding, context, decision, outcome, deadlineMs }
   } catch {
     say($, `REVIEW ${JSON.stringify({ phase, mode, reason: 'review-unavailable' })}`)
     return null
@@ -423,13 +441,90 @@ const finishReview = async ($: EngineInterface, prepared: PreparedReview | null)
   finally { s.coordinator.finish(prepared.id, prepared.binding, 'succeeded', await $.clock.now()) }
 }
 
-const reviewContextNote = async ($: EngineInterface, prepared: PreparedReview): Promise<string | null> => {
+const semanticMode = (s: Runtime) => ['supervise', 'probe', 'recovery'].includes(s.cfg.assistanceMode)
+const reviewLifecycle = ($: EngineInterface, s: Runtime) => say($, `REVIEW_LIFECYCLE ${JSON.stringify({ active: !!(s.reviewPending || s.reviewReady || s.reviewDraining), followUps: s.followUps })}`)
+
+const refreshReviewProject = async ($: EngineInterface, s: Runtime) => {
+  await selectionOf($)
+  const cwd = await $.session.cwd()
+  if (cwd !== s.reviewCwd) {
+    s.coordinator.invalidate({ ...s.coordinator.binding, generationId: `project-${++s.jobNumber}` }, { preserveBudget: true, now: await $.clock.now() })
+    s.reviewCwd = cwd
+  }
+  if (s.reviewDraining && !sameTask(s.reviewDraining.binding, s.coordinator.binding)) s.reviewDraining = undefined
+  if (s.reviewPending && !sameTask(s.reviewPending.binding, s.coordinator.binding)) s.reviewPending = undefined
+  if (s.reviewReady && !sameTask(s.reviewReady.binding, s.coordinator.binding)) s.reviewReady = undefined
+}
+
+const takeReviewNote = async ($: EngineInterface, prepared: PreparedReview): Promise<{ note: string; facts: string[] } | null> => {
   const s = await runtimeOf($)
-  if (!await isOn($) || !sameBinding(prepared.binding, s.coordinator.binding) || !await prepared.outcome.validate()) return null
-  const status = await s.coordinator.deliver(prepared.id, prepared.binding, async () => 'unknown')
-  if (status === 'dropped' || !sameBinding(prepared.binding, s.coordinator.binding) || await $.clock.now() >= prepared.deadlineMs) return null
-  say($, `REVIEW_DELIVERY ${JSON.stringify({ id: prepared.id, binding: prepared.binding, delivery: 'context-returned', consumption: 'unknown', sourceFactCount: prepared.outcome.sourceFactIds.length, sourceFactIds: prepared.outcome.sourceFactIds })}`)
-  return prepared.outcome.note
+  await refreshReviewProject($, s)
+  if (!await isOn($) || !sameTask(prepared.binding, s.coordinator.binding)) return null
+  let outcome = prepared.outcome
+  const started = await $.clock.now(), left = s.coordinator.remainingTime(started)
+  // Queued model advice does not expire with the tool budget. Evidence still
+  // requires its original version, deadline and manifest; failure falls back to advice.
+  if (!sameBinding(prepared.binding, s.coordinator.binding) || left <= 0 || !await outcome.validate().catch(() => false)) outcome = historicalReviewOutcome(prepared.context, prepared.decision, s.cfg.executionMode, async () => sameTask(prepared.binding, s.coordinator.binding))
+  s.coordinator.chargeActivity(prepared.binding, Math.max(0, await $.clock.now() - started))
+  await refreshReviewProject($, s)
+  if (!await isOn($) || !sameTask(prepared.binding, s.coordinator.binding) || !outcome.note) return null
+  if (!sameBinding(prepared.binding, s.coordinator.binding)) outcome = historicalReviewOutcome(prepared.context, prepared.decision, s.cfg.executionMode, async () => true)
+  if (!outcome.note) return null
+  return { note: `${outcome.note}\n\nDelivery at local observation sequence ${s.reviewSequence}. Execution after checkpoint ${prepared.context.checkpoint?.checkpointId ?? 'unknown'} was not reviewed; whether this concern was subsequently corrected is unknown.`, facts: outcome.sourceFactIds }
+}
+
+const drainReview = async ($: EngineInterface, followup = false): Promise<string | null> => {
+  const s = await runtimeOf($), prepared = s.reviewReady
+  if (!prepared || s.reviewDraining) return null
+  const draining = { binding: prepared.binding }
+  s.reviewDraining = draining
+  try {
+    // Claim the single slot before awaiting validation or submitting feedback.
+    s.reviewReady = undefined
+    const ready = await takeReviewNote($, prepared)
+    if (!ready) return null
+    if (followup && s.followUps >= FOLLOW_UPS_PER_PROMPT) return null
+    if (followup) { s.followUps++; s.reviewStopSent = true }
+    let note: string | null = null
+    const status = await s.coordinator.deliver(prepared.id, prepared.binding, async () => {
+      if (!await isOn($) || !sameTask(prepared.binding, s.coordinator.binding)) return 'dropped'
+      if (followup) {
+        const result = await $.prompt.submit({ text: ready.note })
+        return result.drop === undefined ? 'delivered' : 'dropped'
+      }
+      note = ready.note
+      return 'unknown'
+    })
+    say($, `REVIEW_DELIVERY ${JSON.stringify({ id: prepared.id, checkpoint: prepared.context.checkpoint, binding: prepared.binding, delivery: status === 'dropped' ? 'dropped' : followup ? status === 'delivered' ? 'submitted' : 'unknown' : note ? 'context-returned' : 'unknown', consumption: 'unknown', sourceFactCount: ready.facts.length, sourceFactIds: ready.facts })}`)
+    return status === 'dropped' || !sameTask(prepared.binding, s.coordinator.binding) ? null : note
+  } finally { if (s.reviewDraining === draining) s.reviewDraining = undefined; await reviewLifecycle($, s) }
+}
+
+const scheduleReview = async ($: EngineInterface, list: Rows, final = false, answer = '') => {
+  const s = await runtimeOf($)
+  if (!semanticMode(s)) return
+  await refreshReviewProject($, s)
+  if (s.reviewInputPending || s.reviewPending || s.reviewReady || s.reviewDraining || !await isOn($)) return
+  const captured: ReviewCapture = { binding: { ...s.coordinator.binding }, asked: s.asked, sequence: s.reviewSequence, capturedAt: await $.clock.now(), cwd: s.reviewCwd }
+  const frozen: Rows = JSON.parse(JSON.stringify(list))
+  const pending = { binding: captured.binding, token: ++s.jobNumber }
+  s.reviewPending = pending
+  await reviewLifecycle($, s)
+  $.clock.after(0, () => { void (async () => {
+    let prepared: PreparedReview | null = null
+    try {
+      if (!sameTask(captured.binding, s.coordinator.binding) || !await isOn($)) return
+      prepared = await engineeringReview($, frozen, final, answer, captured)
+      await finishReview($, prepared)
+      if (s.reviewPending !== pending || !sameTask(captured.binding, s.coordinator.binding)) return
+      if (prepared) {
+        s.reviewReady = prepared
+        say($, `REVIEW_QUEUED ${JSON.stringify({ id: prepared.id, checkpoint: prepared.context.checkpoint, consumption: 'unknown' })}`)
+      }
+      if (!s.mainActive) await drainReview($, true)
+    } catch (error) { say($, `background review failed: ${redact(String(error))}`) }
+    finally { if (s.reviewPending === pending) { s.reviewPending = undefined; await reviewLifecycle($, s) } }
+  })() })
 }
 
 /**
@@ -564,7 +659,7 @@ const unopenedClaimed = (facts: Facts, claims: readonly string[]) =>
 // The model's own word that it told the person: `[ysk#3 told]`, `[ysk#3 refuted: …]`.
 const TAG = /\[ysk#(\d+)\s+(told|refuted)\b[^\]]*\]/g
 
-type Rows = { role: string; text: string; toolUses?: readonly { tool: string; input: unknown; text?: string; result?: unknown; isError?: true }[] }[]
+type Rows = { role: string; text: string; toolUses?: readonly { tool_use_id?: string; tool: string; input: unknown; text?: string; result?: unknown; isError?: true }[] }[]
 
 // Whether an item already stands for what a finding says: one open item per
 // question (whether the checks pass is one; a file, a command, a test edit, each
@@ -846,21 +941,6 @@ const atAnswer = async ($: EngineInterface, answer: string) => {
   try {
     await settleTags($, answer)
     const list = await messages($)
-    if (['supervise', 'probe', 'recovery'].includes(s.cfg.assistanceMode)) {
-      const prepared = await engineeringReview($, list, true, answer)
-      try {
-        await prepared?.outcome.cleanup()
-        if (!prepared?.outcome.note || s.followUps >= FOLLOW_UPS_PER_PROMPT || !sameBinding(requested, s.coordinator.binding)) return
-        s.followUps++; s.reviewStopSent = true
-        await s.coordinator.deliver(prepared.id, prepared.binding, async () => {
-          if (!await isOn($) || !await prepared.outcome.validate() || !sameBinding(prepared.binding, s.coordinator.binding)) return 'dropped'
-          const result = await $.prompt.submit({ text: prepared.outcome.note! })
-          say($, `REVIEW_DELIVERY ${JSON.stringify({ id: prepared.id, binding: prepared.binding, delivery: result.drop === undefined ? 'submitted' : 'dropped', consumption: 'unknown', sourceFactCount: prepared.outcome.sourceFactIds.length, sourceFactIds: prepared.outcome.sourceFactIds })}`)
-          return result.drop === undefined ? 'delivered' : 'dropped'
-        })
-        return
-      } finally { await finishReview($, prepared) }
-    }
     const claims = claimsSince(list, await read($, track), [answer])
     const found = await check($, list, { kind: 'answer', claims, answer, verifier: true })
     await update($, track, t => ({ ...t, scanned: list.length }))
@@ -894,13 +974,16 @@ export const register: Register = (on, options) => {
     else await $.store.set('unknown-state-original', await read($, track)).catch(() => undefined)
     s.modelDisabled = false
     s.cfg = configOf(options)
+    s.coordinator = new Coordinator({ ...s.coordinator.binding }, { historical: semanticMode(s) })
+    s.reviewPending = undefined; s.reviewReady = undefined; s.mainActive = true; s.reviewCwd = await $.session.cwd()
     s.factsAttempted = false
     s.reviewSignatures.clear(); s.reviewAttempts = 0; s.reviewStopSent = false; s.reviewRecoveryUsed = false; s.reviewSkipKeys.clear()
     s.isInteractive = e.isInteractive !== false
+    if (semanticMode(s)) await reviewLifecycle($, s)
     // A reload starts here too: what was raised before it does not hold a turn after it.
     s.turnFrom = await $.clock.now()
     await $.command
-      .register({ name: 'deepseek-supervisor', description: 'Checks the model at work: rules on what it ran, and a second model running its claims. on, off, auto, log, or issues', argumentHint: '[on|off|auto|log|issues]' })
+      .register({ name: 'deepseek-supervisor', immediate: true, description: 'Checks the model at work: rules on what it ran, and a second model running its claims. on, off, auto, log, or issues', argumentHint: '[on|off|auto|log|issues]' })
       .catch(err => say($, `command not registered: ${err}`))
     await show($)
     return result
@@ -910,13 +993,23 @@ export const register: Register = (on, options) => {
   // band aging as "You should know" cards do.
   on('prompt.submit', async ($, e, next) => {
     const s = await runtimeOf($)
+    const human = e.origin.kind === 'composer' || e.origin.kind === 'bridge' || e.origin.kind === 'sdk' || e.origin.kind === 'peer'
+    const inputGeneration = human && semanticMode(s) ? `input-${++s.jobNumber}` : null
+    if (inputGeneration) {
+      // Admission can await a native safe boundary. Cancel before next(), not
+      // after accepting: a new task must not wait for an unlimited old review.
+      s.reviewInputPending = inputGeneration
+      s.coordinator.invalidate({ ...s.coordinator.binding, generationId: inputGeneration }, { preserveBudget: true, now: await $.clock.now(), reason: 'cancelled' })
+      s.reviewPending = undefined; s.reviewReady = undefined
+    }
     const result = await next(e)
-    // The person's own: typed, from a phone, or the SDK host's turn (`claude -p`); or
-    // another session's message, the way a lead session hands work over (ccds).
-    if (result.drop === undefined && (e.origin.kind === 'composer' || e.origin.kind === 'bridge' || e.origin.kind === 'sdk' || e.origin.kind === 'peer')) {
+    if (inputGeneration && s.reviewInputPending === inputGeneration) s.reviewInputPending = undefined
+    // A plugin followup is not a new user requirement and never restores budget.
+    if (result.drop === undefined && human && (!inputGeneration || s.coordinator.binding.generationId === inputGeneration)) {
       s.coordinator.invalidate({ ...s.coordinator.binding, taskRevision: s.coordinator.binding.taskRevision + 1, turnId: `prompt-${s.coordinator.binding.taskRevision + 1}` })
       s.modelDisabled = false
       s.asked = e.text
+      s.reviewPending = undefined; s.reviewReady = undefined; s.mainActive = true
       s.factsAttempted = false
       s.reviewSignatures.clear(); s.reviewAttempts = 0; s.reviewStopSent = false; s.reviewRecoveryUsed = false; s.reviewSkipKeys.clear()
       s.turnFrom = await $.clock.now()
@@ -940,7 +1033,7 @@ export const register: Register = (on, options) => {
     if (!s.stateUsable) return result
     const list = await messages($)
     const end = evidenceOf(list).end
-    if (end !== s.recordEnd) { s.coordinator.changedWorkspace(`tool-record-${end}`, await $.clock.now()); s.recordEnd = end }
+    if (end !== s.recordEnd) { s.coordinator.changedWorkspace(`tool-record-${end}`, await $.clock.now()); s.recordEnd = end; s.reviewSequence++ }
     const batchBinding = { ...s.coordinator.binding }
     const said = list.filter(r => r.role === 'assistant').map(r => r.text)
     // A `[ysk#3 told]` written in passing settles #3 as one in the final answer does.
@@ -948,33 +1041,32 @@ export const register: Register = (on, options) => {
     const claims = [...new Set(said.flatMap(claimsOf))]
     const found = await check($, list, { kind: 'batch', claims, verifier: false })
     const assistance = s.cfg.assistanceMode === 'facts' ? await locationFacts($, list) : null
-    const review = await engineeringReview($, list)
-    try {
-      await review?.outcome.cleanup()
-      if (found.length === 0 && assistance === null && review === null) return result
-      if (found.length > 0) await showCards($, found)
-      await show($)
-      await selectionOf($)
-      if (!(await isOn($)) || !sameBinding(batchBinding, s.coordinator.binding)) return result
-      let note: string | null = null
-      if (assistance) {
-        // Reserve once, but the hook has no engine acknowledgement of consumption.
-        const status = await s.coordinator.deliver(assistance.id, assistance.packet.binding, async () => 'unknown')
-        if (status !== 'dropped' && await $.clock.now() < assistance.deadlineMs) {
-          const current = await hostOf($, assistance.signal).validateFacts(assistance.view, assistance.deadlineMs).catch(() => false)
-          if (current && !assistance.signal.aborted && sameBinding(batchBinding, s.coordinator.binding)) note = assistance.note
-        }
+    if (semanticMode(s)) s.mainActive = true
+    const engineeringNote = semanticMode(s) ? await drainReview($) : null
+    await scheduleReview($, list)
+    if (found.length === 0 && assistance === null && engineeringNote === null) return result
+    if (found.length > 0) await showCards($, found)
+    await show($)
+    await selectionOf($)
+    if (!(await isOn($)) || !sameBinding(batchBinding, s.coordinator.binding)) return result
+    let note: string | null = null
+    if (assistance) {
+      // Reserve once, but the hook has no engine acknowledgement of consumption.
+      const status = await s.coordinator.deliver(assistance.id, assistance.packet.binding, async () => 'unknown')
+      if (status !== 'dropped' && await $.clock.now() < assistance.deadlineMs) {
+        const current = await hostOf($, assistance.signal).validateFacts(assistance.view, assistance.deadlineMs).catch(() => false)
+        if (current && !assistance.signal.aborted && sameBinding(batchBinding, s.coordinator.binding)) note = assistance.note
       }
-      const engineeringNote = review ? await reviewContextNote($, review) : null
-      // No awaited UI or storage operations after this final binding/source gate.
-      if (!sameBinding(batchBinding, s.coordinator.binding)) return result
-      if (note && assistance) {
-        const event = { kind: 'assistance', binding: assistance.packet.binding, packet: assistance.packet, sources: assistance.view.facts.filter(f => assistance.packet.factIds.includes(f.id)), sourceManifestHash: assistance.view.manifestHash, delivery: 'context-returned' }
-        void remember($, event)
-        say($, `ASSIST ${JSON.stringify(event)}`)
-      }
-      return { ...result, additionalContext: [...(result.additionalContext ?? []), ...(found.length ? [noteText(found)] : []), ...(note ? [note] : []), ...(engineeringNote ? [engineeringNote] : [])] }
-    } finally { await finishReview($, review) }
+    }
+    // No awaited UI or storage operations after this final binding/source gate.
+    if (!sameBinding(batchBinding, s.coordinator.binding)) return result
+    if (note && assistance) {
+      const event = { kind: 'assistance', binding: assistance.packet.binding, packet: assistance.packet, sources: assistance.view.facts.filter(f => assistance.packet.factIds.includes(f.id)), sourceManifestHash: assistance.view.manifestHash, delivery: 'context-returned' }
+      void remember($, event)
+      say($, `ASSIST ${JSON.stringify(event)}`)
+    }
+    return { ...result, additionalContext: [...(result.additionalContext ?? []), ...(found.length ? [noteText(found)] : []), ...(note ? [note] : []), ...(engineeringNote ? [engineeringNote] : [])] }
+
   }).catch(($, e, next) => next(e))
 
   // Before the turn ends: the answer held to the record (and, where nobody watches,
@@ -986,25 +1078,23 @@ export const register: Register = (on, options) => {
     const answer = e.last_assistant_message ?? ''
     await settleTags($, answer)
     const list = await messages($)
-    const prepared = !s.isInteractive ? await engineeringReview($, list, true, answer) : null
-    try {
-      await prepared?.outcome.cleanup()
-      const found = await check($, list, { kind: 'answer', claims: claimsSince(list, await read($, track), [answer]), answer, verifier: !s.isInteractive })
-      // Where the verifier ran here, what it read is read; where it runs after the turn, not yet.
-      if (!s.isInteractive) await update($, track, t => ({ ...t, scanned: list.length }))
-      await show($)
-      if (found.length > 0) await showCards($, found)
-      // What this turn raised and the record has not settled holds the turn too, whichever
-      // check raised it first: an item the model never got to act on is not done with.
-      const pending = (await read($, track)).issues.filter(i => i.status === 'open' && i.at >= s.turnFrom && !found.some(f => f.id === i.id))
-      const blocking = [...found, ...pending].filter(i => keepsTurnGoing(i) && !s.held.has(i.id))
-      const engineeringNote = prepared ? await reviewContextNote($, prepared) : null
-      if (engineeringNote) s.reviewStopSent = true
-      if (blocking.length === 0 || s.blocks >= BLOCKS_PER_PROMPT) return engineeringNote ? { ...result, block: engineeringNote } : result
-      s.blocks += 1
-      for (const i of blocking) s.held.add(i.id)
-      return { ...result, block: [noteText(blocking, { final: true }), ...(engineeringNote ? [engineeringNote] : [])].join('\n\n') }
-    } finally { await finishReview($, prepared) }
+    const engineeringNote = semanticMode(s) && !s.reviewStopSent ? await drainReview($) : null
+    if (engineeringNote) s.reviewStopSent = true
+    await scheduleReview($, list, true, answer)
+    const found = await check($, list, { kind: 'answer', claims: claimsSince(list, await read($, track), [answer]), answer, verifier: !s.isInteractive })
+    // Where the verifier ran here, what it read is read; where it runs after the turn, not yet.
+    if (!s.isInteractive) await update($, track, t => ({ ...t, scanned: list.length }))
+    await show($)
+    if (found.length > 0) await showCards($, found)
+    // What this turn raised and the record has not settled holds the turn too, whichever
+    // check raised it first: an item the model never got to act on is not done with.
+    const pending = (await read($, track)).issues.filter(i => i.status === 'open' && i.at >= s.turnFrom && !found.some(f => f.id === i.id))
+    const blocking = [...found, ...pending].filter(i => keepsTurnGoing(i) && !s.held.has(i.id))
+    if (blocking.length === 0 || s.blocks >= BLOCKS_PER_PROMPT) return engineeringNote ? { ...result, block: engineeringNote } : result
+    s.blocks += 1
+    for (const i of blocking) s.held.add(i.id)
+    return { ...result, block: [noteText(blocking, { final: true }), ...(engineeringNote ? [engineeringNote] : [])].join('\n\n') }
+
   }).catch(($, e, next) => next(e))
 
   // The main loop's finished steps; a subagent's are its own.
@@ -1012,6 +1102,7 @@ export const register: Register = (on, options) => {
     const s = await runtimeOf($)
     const result = yield* next(e)
     if (e.agentId !== undefined || result.stopReason === null) return result
+    s.reviewSequence++
     await selectionOf($)
     s.steps += 1
     // The step that ends the turn is the turn's end's to check: two checks of one answer
@@ -1034,10 +1125,15 @@ export const register: Register = (on, options) => {
     const s = await runtimeOf($)
     const result = await next(e)
     if (e.agentId === undefined && e.reason !== 'answer') s.coordinator.invalidate({ ...s.coordinator.binding, generationId: `cancel-${await $.clock.now()}-${++s.jobNumber}` }, { reason: 'cancelled', preserveBudget: true, now: await $.clock.now() })
+    if (e.agentId === undefined && semanticMode(s)) {
+      s.mainActive = false
+      if (e.reason === 'answer') $.clock.after(0, () => { void drainReview($, true).catch(error => say($, `review followup unavailable: ${redact(String(error))}`)) })
+      else { s.reviewReady = undefined; s.reviewPending = undefined }
+    }
     if (e.agentId === undefined) await takeReading($) // main-loop turns only
     // Only a turn the model finished on its own: one the person interrupted says nothing.
     // Where nobody watches, the verifier already ran before the turn could end.
-    if (e.agentId !== undefined || e.reason !== 'answer' || s.cfg.assistanceMode === 'facts' || !s.isInteractive || !(await isOn($))) return result
+    if (e.agentId !== undefined || e.reason !== 'answer' || s.cfg.assistanceMode !== 'existing' || !s.isInteractive || !(await isOn($))) return result
     const answer = e.answer
     const scheduled = { ...s.coordinator.binding }
     $.clock.after(0, () => {

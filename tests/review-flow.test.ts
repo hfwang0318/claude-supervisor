@@ -2,7 +2,7 @@ import { test, expect } from 'claude-code/testing'
 import type { Host } from '../supervisor/ports'
 import type { ReviewReply } from '../supervisor/contracts'
 import { buildReviewContext } from '../supervisor/review'
-import { runReviewFlow } from '../supervisor/review-flow'
+import { runReviewFlow, runHistoricalReviewFlow } from '../supervisor/review-flow'
 const binding = { sessionId: 's', generationId: 'g', turnId: 't', taskRevision: 1, workspaceRevision: 'v', snapshotId: 'unknown' }
 const context = buildReviewContext(binding, 'Preserve the API.', [{ role: 'assistant', text: 'Plan: replace the public method.', toolUses: [] }], 'file.js\n+ replacement()', 'implementation')!
 const decision: ReviewReply = { reviewed: ['architecture'], judgment: { dimension: 'architecture', question: 'Is replacing the interface necessary?', requirementQuote: 'Preserve the API.', sourceIds: ['req', 'plan-1'], reason: 'The plan removes an interface that callers still use.', impact: 'Caller compatibility.', recommendation: 'adjust', uncertainty: 'Callers have not been fully inspected.' }, action: { kind: 'none' } }
@@ -66,4 +66,29 @@ test('verified supplemental source is delivered only while its manifest remains 
   expect(await result.validate()).toBe(true)
   counts.valid = false
   expect(await result.validate()).toBe(false)
+})
+
+for (const action of ['probe', 'location', 'recovery']) test(`historical ${action} advice cannot execute or certify later code`, async () => {
+  const { host, counts } = world()
+  const reply = action === 'probe' ? probe : action === 'location' ? { ...decision, action: { kind: 'location' as const, request: { paths: ['api.js'], terms: [] } } } : { ...decision, action: { kind: 'recovery' as const, observationIds: ['tool-1'], question: 'What failed?' } }
+  const result = await runHistoricalReviewFlow(context, reply, { ...ports(host, 'enabled'), taskCurrent: async () => true, sourceCurrent: async () => false })
+  expect(result.note).toContain('Caller compatibility')
+  expect(result.note).toContain('current applicability is unknown')
+  expect(await result.validate()).toBe(true)
+  expect(counts.captures + counts.runs + counts.reads).toBe(0)
+  expect(result.sourceFactIds).toEqual([])
+})
+test('historical fallback after source changes during an action retains only advisory judgment', async () => {
+  const { host } = world(); let current = true
+  host.inspectFacts = async () => { current = false; return { facts: [], files: [], manifestHash: '', incomplete: true } }
+  const result = await runHistoricalReviewFlow(context, { ...decision, action: { kind: 'location', request: { paths: ['api.js'], terms: [] } } }, { ...ports(host), taskCurrent: async () => true, sourceCurrent: async () => current })
+  expect(result.note).toContain('Caller compatibility')
+  expect(result.sourceFactIds).toEqual([])
+})
+test('historical fallback is cancelled across tasks and suppressed in shadow mode', async () => {
+  const { host } = world()
+  const cancelled = await runHistoricalReviewFlow(context, decision, { ...ports(host), taskCurrent: async () => false, sourceCurrent: async () => false })
+  expect(cancelled.note).toBeNull()
+  const shadow = await runHistoricalReviewFlow(context, decision, { ...ports(host, 'shadow'), taskCurrent: async () => true, sourceCurrent: async () => false })
+  expect(shadow.note).toBeNull()
 })

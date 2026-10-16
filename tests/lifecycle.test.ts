@@ -1,5 +1,5 @@
 import { test, expect } from 'claude-code/testing'
-import { Coordinator } from '../supervisor/coordinator'
+import { Coordinator, sameBinding } from '../supervisor/coordinator'
 import type { Binding } from '../supervisor/contracts'
 
 const binding: Binding = { sessionId: 's', generationId: 'g', turnId: 't', taskRevision: 1, workspaceRevision: 'w', snapshotId: 'snap' }
@@ -53,4 +53,51 @@ test('a model switch cancels old work without replenishing the prompt budget', a
   expect(job?.signal.aborted).toBe(true)
   expect(c.reserveCall(10000, 2000)).toEqual({ maxTokens: 2000, timeoutMs: 20000 })
   expect(c.reserveCall(10000, 1)).toBeNull()
+})
+
+test('historical review keeps a pending job and exactly-once advice when execution advances', async () => {
+  const c = new Coordinator(binding, { historical: true })
+  const job = c.start('old-review', 0)
+  c.changedWorkspace('later-edit', 50000)
+  expect(job?.signal.aborted).toBe(false)
+  expect(sameBinding(binding, c.binding)).toBe(false)
+  expect(c.finish('old-review', binding, 'succeeded', 50000)).toBe(true)
+  let delivered = 0
+  await c.deliver('old-review', binding, async () => { delivered++; return 'delivered' })
+  await c.deliver('old-review', binding, async () => { delivered++; return 'delivered' })
+  expect(delivered).toBe(1)
+})
+test('model waiting does not spend the historical tool budget or add a model timeout', async () => {
+  const c = new Coordinator(binding, { historical: true })
+  c.start('review', 0)
+  expect(c.reserveCall(10, 2000)).toEqual({ maxTokens: 2000 })
+  c.pauseModel(binding, 10)
+  c.resumeModel(binding, 90010)
+  expect(c.remainingTime(90010)).toBe(29990)
+  c.finish('review', binding, 'succeeded', 100010)
+  expect(c.remainingTime(100010)).toBe(19990)
+  c.start('review-two', 100010)
+  expect(c.reserveCall(100010, 2000)).toEqual({ maxTokens: 2000 })
+  expect(c.reserveCall(100011, 1)).toBeNull()
+})
+test('an old historical request cannot resume accounting or deliver into a new prompt', async () => {
+  const c = new Coordinator(binding, { historical: true })
+  const job = c.start('old-review', 0)
+  c.reserveCall(0, 2000); c.pauseModel(binding, 0)
+  const next = { ...binding, taskRevision: 2, turnId: 'new-prompt' }
+  c.invalidate(next)
+  c.start('new-review', 100000)
+  c.resumeModel(binding, 200000)
+  expect(job?.signal.aborted).toBe(true)
+  expect(await c.deliver('old-review', binding, async () => 'delivered')).toBe('dropped')
+  expect(c.remainingTime(100001)).toBe(29999)
+})
+
+test('an in-flight delivery invalidated by a new prompt never commits its completion into the new task', async () => {
+  const c = new Coordinator(binding, { historical: true })
+  let release = () => {}; const waiting = new Promise<void>(r => { release = r })
+  const delivery = c.deliver('r1', binding, async () => { await waiting; return 'delivered' })
+  c.invalidate({ ...binding, turnId: 'new', taskRevision: 2 })
+  release()
+  expect(await delivery).toBe('dropped')
 })

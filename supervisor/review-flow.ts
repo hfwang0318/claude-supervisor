@@ -8,11 +8,12 @@ import { buildRecoveryPacket } from './recovery'
 import { captureSnapshot } from './workspace'
 import { executeProbe } from './runner'
 
-export type ReviewFlowPorts = { host: Host; executionMode: 'off' | 'shadow' | 'enabled'; deadlineMs: number; current(): Promise<boolean>; ask(prompt: string): Promise<string | null> }
+export type ReviewFlowPorts = { host: Host; executionMode: 'off' | 'shadow' | 'enabled'; deadlineMs: number; excludeModelWait?: boolean; current(): Promise<boolean>; ask(prompt: string): Promise<string | null> }
 export type ReviewOutcome = { note: string | null; reason: string; view: FactView | null; sourceFactIds: string[]; evidence: ExecutionEvidence | null; validate(): Promise<boolean>; cleanup(): Promise<void> }
 
 export const runReviewFlow = async (context: ReviewContext, reply: ReviewReply, ports: ReviewFlowPorts): Promise<ReviewOutcome> => {
-  const { host, deadlineMs } = ports
+  const { host } = ports
+  let deadlineMs = ports.deadlineMs
   let snapshot: Snapshot | null = null, view: FactView | null = null, evidence: ExecutionEvidence | null = null, closed = false
   let sourceFactIds: string[] = []
   let reason = 'prepared', note = reply.judgment ? reviewNote(context, reply) : ''
@@ -33,7 +34,9 @@ export const runReviewFlow = async (context: ReviewContext, reply: ReviewReply, 
         view = inspected
         let selected = inspected.facts.slice(0, 6)
         if (inspected.facts.length > 6) {
+          const waitingAt = await host.now()
           const answer = await ports.ask(localPacketPrompt(inspected))
+          if (ports.excludeModelWait) deadlineMs += Math.max(0, await host.now() - waitingAt)
           let value: unknown
           try { value = JSON.parse(answer ?? 'null') } catch { value = null }
           const ids = value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length === 1 ? (value as { factIds?: unknown }).factIds : null
@@ -69,4 +72,23 @@ export const runReviewFlow = async (context: ReviewContext, reply: ReviewReply, 
     note = ''; reason = 'service-error'
     return outcome()
   }
+}
+
+
+// Historical judgments belong to the task; action evidence belongs to an exact
+// source version. Never execute a stale action against the live workspace.
+export const historicalReviewOutcome = (context: ReviewContext, reply: ReviewReply, executionMode: ReviewFlowPorts['executionMode'], taskCurrent: () => Promise<boolean>): ReviewOutcome => ({
+  note: executionMode === 'shadow' || !reply.judgment ? null : `${reviewNote(context, reply)}\n\nHistorical advice only: current applicability is unknown. Supplemental actions/evidence are not established for the current workspace; no historical test or source excerpt certifies later code. The main assistant may gather fresh evidence or reject this advice with counterevidence.`,
+  reason: 'historical-advice', view: null, sourceFactIds: [], evidence: null,
+  validate: taskCurrent, cleanup: async () => {},
+})
+export const runHistoricalReviewFlow = async (context: ReviewContext, reply: ReviewReply, ports: ReviewFlowPorts & { taskCurrent(): Promise<boolean>; sourceCurrent(): Promise<boolean> }): Promise<ReviewOutcome> => {
+  if (!await ports.taskCurrent()) return { ...historicalReviewOutcome(context, reply, 'shadow', ports.taskCurrent), reason: 'cancelled' }
+  if (!await ports.sourceCurrent()) return historicalReviewOutcome(context, reply, ports.executionMode, ports.taskCurrent)
+  const outcome = await runReviewFlow(context, reply, { ...ports, current: async () => await ports.taskCurrent() && await ports.sourceCurrent() })
+  if (await ports.taskCurrent() && !await ports.sourceCurrent()) {
+    await outcome.cleanup()
+    return historicalReviewOutcome(context, reply, ports.executionMode, ports.taskCurrent)
+  }
+  return outcome
 }

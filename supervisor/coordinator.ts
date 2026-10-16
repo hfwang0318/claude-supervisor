@@ -3,6 +3,9 @@ import type { Binding, DeliveryStatus, JobStatus } from './contracts'
 export const sameBinding = (a: Binding, b: Binding) =>
   a.sessionId === b.sessionId && a.generationId === b.generationId && a.turnId === b.turnId && a.taskRevision === b.taskRevision && a.workspaceRevision === b.workspaceRevision && a.snapshotId === b.snapshotId
 
+export const sameTask = (a: Binding, b: Binding) =>
+  a.sessionId === b.sessionId && a.generationId === b.generationId && a.turnId === b.turnId && a.taskRevision === b.taskRevision
+
 export class Coordinator {
   private jobs = new Map<string, { status: JobStatus; binding: Binding; controller: AbortController }>()
   private deliveries = new Map<string, DeliveryStatus>()
@@ -12,10 +15,13 @@ export class Coordinator {
   private startedAt: number | null = null
   private failures = 0
 
-  constructor(public binding: Binding) {}
+  constructor(public binding: Binding, private policy: { historical?: boolean } = {}) {}
+
+  get historical() { return this.policy.historical === true }
+  matches(binding: Binding) { return this.historical ? sameTask(binding, this.binding) : sameBinding(binding, this.binding) }
 
   start(id: string, now: number) {
-    if (this.jobs.has(id) || [...this.jobs.values()].some(j => j.status === 'running') || this.activeMs <= 0) return null
+    if (this.jobs.has(id) || [...this.jobs.values()].some(j => j.status === 'running') || !this.historical && this.activeMs <= 0) return null
     const controller = new AbortController()
     if (this.jobs.size >= 200) {
       const first = [...this.jobs].find(([, job]) => job.status !== 'running')?.[0]
@@ -29,7 +35,7 @@ export class Coordinator {
   finish(id: string, binding: Binding, status: JobStatus, now?: number): boolean {
     const job = this.jobs.get(id)
     if (!job || job.status !== 'running' || status === 'queued' || status === 'running') return false
-    if (!sameBinding(binding, this.binding) || !sameBinding(binding, job.binding)) { job.status = 'stale'; return false }
+    if (!this.matches(binding) || !(this.historical ? sameTask(binding, job.binding) : sameBinding(binding, job.binding))) { job.status = 'stale'; return false }
     job.status = status
     if (now !== undefined && this.startedAt !== null) this.activeMs = Math.max(0, this.activeMs - Math.max(0, now - this.startedAt))
     this.startedAt = null
@@ -55,12 +61,13 @@ export class Coordinator {
     const key = `${binding.sessionId}/${binding.generationId}/${binding.turnId}/${id}`
     const old = this.deliveries.get(key)
     if (old) return old === 'prepared' ? 'unknown' : old
-    if (!sameBinding(binding, this.binding)) return 'dropped'
+    if (!this.matches(binding)) return 'dropped'
     // Reserve before awaiting: concurrent hooks cannot send the same finding twice.
     if (this.deliveries.size >= 200) return 'dropped'
     this.deliveries.set(key, 'prepared')
     let status: DeliveryStatus
     try { status = await send() } catch { status = 'unknown' }
+    if (!this.matches(binding) || this.deliveries.get(key) !== 'prepared') return 'dropped'
     this.deliveries.set(key, status === 'prepared' ? 'unknown' : status)
     return this.deliveries.get(key) ?? 'unknown'
   }
@@ -68,6 +75,7 @@ export class Coordinator {
   remainingTime(now: number) { return Math.max(0, this.activeMs - (this.startedAt === null ? 0 : Math.max(0, now - this.startedAt))) }
 
   changedWorkspace(revision: string, now: number) {
+    if (this.historical) { this.binding = { ...this.binding, workspaceRevision: revision }; return }
     if (this.startedAt !== null) this.activeMs = Math.max(0, this.activeMs - Math.max(0, now - this.startedAt))
     this.startedAt = null
     for (const job of this.jobs.values()) if (job.status === 'running') { job.status = 'stale'; job.controller.abort('stale-binding') }
@@ -77,12 +85,26 @@ export class Coordinator {
   reserveCall(now: number, tokens: number) {
     const elapsed = this.startedAt === null ? 0 : Math.max(0, now - this.startedAt)
     const left = Math.max(0, this.activeMs - elapsed)
-    if (this.calls <= 0 || this.tokens <= 0 || left <= 0 || this.failures >= 2 || tokens < 1) return null
+    if (this.calls <= 0 || this.tokens <= 0 || !this.historical && left <= 0 || this.failures >= 2 || tokens < 1) return null
     this.startedAt ??= now
     const maxTokens = Math.min(Math.floor(tokens), this.tokens)
     this.calls--
     this.tokens -= maxTokens // reserve the provider's upper bound, including retries
-    return { maxTokens, timeoutMs: left }
+    return this.historical ? { maxTokens } : { maxTokens, timeoutMs: left }
+  }
+
+  pauseModel(binding: Binding, now: number) {
+    if (!this.historical || !sameTask(binding, this.binding) || ![...this.jobs.values()].some(j => j.status === 'running' && sameTask(j.binding, binding))) return
+    if (this.startedAt !== null) this.activeMs = Math.max(0, this.activeMs - Math.max(0, now - this.startedAt))
+    this.startedAt = null
+  }
+
+  resumeModel(binding: Binding, now: number) {
+    if (this.historical && sameTask(binding, this.binding) && [...this.jobs.values()].some(j => j.status === 'running' && sameTask(j.binding, binding))) this.startedAt ??= now
+  }
+
+  chargeActivity(binding: Binding, elapsedMs: number) {
+    if (sameTask(binding, this.binding) && Number.isFinite(elapsedMs) && elapsedMs >= 0) this.activeMs = Math.max(0, this.activeMs - elapsedMs)
   }
 
   recordUsage(tokens: number) { if (!Number.isFinite(tokens) || tokens < 0 || tokens > 4000) this.failures = 2 }

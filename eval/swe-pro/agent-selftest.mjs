@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { reviewSessionCanClose, parseReviewLifecycle } from './review-session.mjs'
 import { agentArgs, agentEnvironment, frozenDefaults, patchArgs } from './agent.mjs'
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -33,3 +34,16 @@ try {
   assert.match(git(patchArgs(base)), /\+fixed/)
 } finally { rmSync(repo, { recursive: true, force: true }) }
 console.log('SWE Pro agent configuration self-tests passed')
+
+const active = { active: true, followUps: 0 }
+assert.equal(reviewSessionCanClose(1, active), false)
+assert.equal(reviewSessionCanClose(0, { active: false, followUps: 0 }), false)
+assert.equal(reviewSessionCanClose(1, { active: false, followUps: 0 }), true)
+assert.equal(reviewSessionCanClose(1, { active: false, followUps: 1 }), false)
+assert.equal(reviewSessionCanClose(2, { active: false, followUps: 1 }), true)
+assert.equal(reviewSessionCanClose(1, null), false)
+assert.deepEqual(parseReviewLifecycle('2026-10-16T00:00:00.000Z [DEBUG] [deepseek-supervisor] $.ui.log (to debug): deepseek-supervisor: REVIEW_LIFECYCLE {"active":true,"followUps":0}'), active)
+assert.equal(parseReviewLifecycle('REVIEW_LIFECYCLE {"active":false,"followUps":-1}'), null)
+assert.equal(parseReviewLifecycle('REVIEW_LIFECYCLE invalid'), null)
+
+assert.equal(parseReviewLifecycle('tool stdout REVIEW_LIFECYCLE {"active":false,"followUps":0}'), null)

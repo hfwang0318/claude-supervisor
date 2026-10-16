@@ -58,7 +58,8 @@ export const freezeRuntime = (root, runtime, { experimentalMode = 'facts' } = {}
     writeFileSync(file, JSON.stringify(config, null, 2))
   }
   cpSync(join(root, 'eval/swe-pro/gateway.mjs'), join(runtime, 'gateway.mjs'))
-  const receipt = { armModes: modes, model: MODEL, sideModel: MODEL, claudeVersion: manifest.version, claudeSHA256: manifest.platforms['linux-x64'].checksum, nodeSHA256: createHash('sha256').update(readFileSync(join(runtime, 'node'))).digest('hex'), nodeImage: NODE_IMAGE, pluginHashes: Object.fromEntries(['existing', 'facts'].map(mode => [mode, treeHash(join(runtime, `plugin-${mode}`))])), gatewaySHA256: createHash('sha256').update(readFileSync(join(runtime, 'gateway.mjs'))).digest('hex') }
+  cpSync(join(root, 'eval/swe-pro/review-session.mjs'), join(runtime, 'review-session.mjs'))
+  const receipt = { reviewSessionSHA256: createHash('sha256').update(readFileSync(join(runtime, 'review-session.mjs'))).digest('hex'), armModes: modes, model: MODEL, sideModel: MODEL, claudeVersion: manifest.version, claudeSHA256: manifest.platforms['linux-x64'].checksum, nodeSHA256: createHash('sha256').update(readFileSync(join(runtime, 'node'))).digest('hex'), nodeImage: NODE_IMAGE, pluginHashes: Object.fromEntries(['existing', 'facts'].map(mode => [mode, treeHash(join(runtime, `plugin-${mode}`))])), gatewaySHA256: createHash('sha256').update(readFileSync(join(runtime, 'gateway.mjs'))).digest('hex') }
   writeFileSync(join(runtime, 'identity.json'), JSON.stringify(receipt, null, 2))
   return receipt
 }
@@ -94,7 +95,11 @@ export const runAgent = async (task, instruction, mode, runtime, network, out, {
     await checked(['exec', name, 'bash', '-c', 'mkdir -p /logs/agent /root/.claude-eval; test ! -e /tests/test.sh; test ! -e /solution/gold_patch.diff'])
     const env = Object.entries(agentEnvironment()).flatMap(([k, v]) => ['-e', `${k}=${v}`])
     // Shell text contains only fixed command/paths and quoted argv; task text goes to stdin.
-    const args = preflight ? ['/opt/eval/claude', '--plugin-dir', '/opt/eval/plugin-facts', '--setting-sources', '', '-p', '/deepseek-supervisor issues'] : agentArgs(mode)
+    const historical = !preflight && modes[mode] === 'supervise'
+    if (historical && (!identity.reviewSessionSHA256 || createHash('sha256').update(readFileSync(join(runtime, 'review-session.mjs'))).digest('hex') !== identity.reviewSessionSHA256)) throw Error('historical session driver identity mismatch; freeze a new runtime')
+    receipt.headlessLifecycle = historical ? 'stream-open-review-terminal' : 'single-shot'
+    const nativeArgs = preflight ? ['/opt/eval/claude', '--plugin-dir', '/opt/eval/plugin-facts', '--setting-sources', '', '-p', '/deepseek-supervisor issues'] : agentArgs(mode)
+    const args = historical ? ['/opt/eval/node', '/opt/eval/review-session.mjs', ...nativeArgs] : nativeArgs
     const ran = await command(['exec', '-i', ...env, name, 'bash', '-c', `cd /app 2>/dev/null || cd /testbed; export PATH="/opt/eval:$PATH"; ${args.map(quote).join(' ')}`], { input: preflight ? undefined : instruction, timeoutMs, signal, log: join(out, 'trajectory.jsonl') })
     receipt.status = ran.cancelled ? 'cancelled' : ran.timedOut ? 'timeout' : ran.exitCode === 0 ? 'completed' : 'agent-error'
     receipt.trajectoryTruncated = ran.truncated

@@ -92,3 +92,15 @@ test('generic repository reconnaissance is not attributed as a technical plan', 
     expect(buildReviewContext(binding, asked, [{ role: 'assistant', text, toolUses: [] }], '', 'plan')!.sources.some(s => s.kind === 'plan')).toBe(true)
   }
 })
+
+
+test('checkpointed judgments must echo the host review and checkpoint identity exactly', async () => {
+  const c = buildReviewContext(binding, asked, [{ role: 'assistant', text: 'Plan: preserve the interface with an adapter.' }], '', 'plan')!
+  const checkpoint = { reviewId: 'r7', checkpointId: 'c12', observedAt: 100, sequence: 12, requirementSignature: 'req-sig', materialSignature: 'material-sig', sourceIds: c.sources.map(s => s.id), lastTool: { tool: 'Read', toolUseId: 'real-tool-id', path: 'api.js' } }
+  const tracked = { ...c, checkpoint }
+  const result = { reviewed: [], judgment: null, action: { kind: 'none' } }
+  expect(parseReview(tracked, JSON.stringify(result))).toBeNull()
+  expect(parseReview(tracked, JSON.stringify({ ...result, reviewId: 'other', checkpointId: 'c12' }))).toBeNull()
+  expect(parseReview(tracked, JSON.stringify({ ...result, reviewId: 'r7', checkpointId: 'c12' }))).not.toBeNull()
+  expect(reviewPrompt(tracked, 'supervise')).toContain('checkpointId')
+})

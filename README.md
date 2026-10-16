@@ -45,6 +45,12 @@ If anything raised this turn is still open, **the turn does not end**: the model
 
 ### 3. Side-model checks (experimental P0 foundation)
 
+The historical semantic scheduler on this development branch is a candidate with
+an open native SDK cancellation gate. Late feedback works, but a second SDK input
+or `/off` can remain queued until its model request ends; immediate cancellation
+is not established. Do not start another paid observation from this candidate.
+See [the lifecycle evidence and remaining gate](docs/evals/2026-10-16-historical-review.md).
+
 Leave `verifier_model` empty to use the host's current worker model, including
 host aliases. Set it to use another side model. No model-ID capability ranking,
 worker match or relationship profile is required. The design must remain useful
@@ -52,12 +58,16 @@ when the side model is weak or its capability relationship is unknown. Switching
 the worker invalidates old results; refusal uses rules without selecting a fallback.
 
 Each user prompt shares at most 2 side calls (including protocol retries), 4,000
-output tokens and 30 seconds of active work. Inputs and JSON responses are limited
+output tokens. Existing/facts modes retain the 30-second activity limit; semantic
+review modes exclude model waiting and retain 30 seconds for tools, validation
+and cleanup. Inputs and JSON responses are limited
 to 64KiB, candidates to three commands of 4KiB each. Oversized protocols are rejected.
 
 `execution_mode=off` is the default. `shadow` records independent checks without
 model feedback; `enabled` sends advisory findings for main-model judgment.
-New prompts, off, reload, session end and changed tool batches invalidate old jobs.
+New prompts, off, reload and session end invalidate old jobs. In semantic review
+modes, ordinary execution advances retain historical advice; source-bound
+actions and evidence still require their original version.
 Semantic hypotheses do not block completion. Record rules retain at most two holds
 and the complete final-answer behavior.
 
@@ -135,7 +145,9 @@ using the same protocol. Generated expectations remain hypotheses; recovery
 never invents eliminated causes. One recovery packet and one semantic completion
 follow-up are allowed per prompt. Plans are reviewed before editing, changes
 after a recorded check, and completion when needed, sharing the same 2-call,
-4,000-output-token, 30-second budget. Without an explicit plan, two distinct
+4,000-output-token budget and 30 seconds of tool/validation/cleanup activity.
+Semantic model requests run in the background without a plugin model-wait timeout;
+PostToolBatch and Stop return without waiting for the model. Without an explicit plan, two distinct
 successful bounded Read/Grep results allow one exploration review per prompt,
 covering architecture, direction and exploration from the actual records. The
 missing plan remains unknown; plan-consistency dimensions are not reviewed.
@@ -147,8 +159,8 @@ probe suggestions. `shadow` keeps observations without worker feedback.
 `enabled` can execute only through the validated isolated-copy capability;
 unsupported hosts, including current Linux evaluation containers, return
 unexecuted suggestions. No side-generated commands or files run in the actual
-project. New prompts, cancellation, model/workspace changes and off discard stale
-feedback; off/cancellation do not replenish the prompt budget. Source and
+project. New prompts, cancellation, model/project changes and off discard stale
+feedback; normal tool/answer progress within the task preserves historical advice; off/cancellation do not replenish the prompt budget. Source and
 snapshot observations are revalidated immediately before feedback.
 
 Generic repository-browsing narration alone is not a technical plan and cannot
@@ -165,6 +177,27 @@ Input diagnostics explicitly omit the private session ID before native logging,
 mark that representation and retain other supplied materials. This does not
 change the actual model input or runtime binding checks. Other host redaction or
 missing parts still make reconstruction unavailable.
+
+Every semantic request freezes a host-generated review/checkpoint ID, task revision,
+local observation sequence, actual last included tool ID when available, supplied
+source IDs and material signatures. The model must echo both IDs; feedback uses
+that saved checkpoint and explicitly says later execution was not reviewed.
+The local sequence is not a permanent host message ID. A later edit preserves the
+judgment but cannot reuse its old action or certify current source/tests. Source
+revalidation failure downgrades feedback to historical advice with zero current
+source facts. Advice may be refuted using later fixes or counterevidence.
+
+One in-flight review and one ready slot avoid per-tool queues. Ready advice is
+returned once at a later tool/Stop boundary, or submitted as at most one plugin
+follow-up while the session remains bound. Delivery is not proof of consumption.
+A one-shot headless process can close its session before a late reply; the SWE Pro
+supervise adapter therefore keeps stream-json input open until the journaled
+`REVIEW_LIFECYCLE` becomes idle and any submitted follow-up has finished. The
+external task observation window still ends the session and cancels pending work;
+plugin unload also cancels it. Existing/facts adapters retain their previous policy.
+New runtimes bind the streaming helper hash; old frozen runs remain unchanged.
+Free native delayed-reply evidence and live-model limits are recorded in
+[the historical-review report](docs/evals/2026-10-16-historical-review.md).
 The evaluation gateway records downstream cancellation as `client-disconnected`,
 separately from upstream transport errors. Historical `upstream-error` records
 alone cannot establish which endpoint initiated cancellation.
