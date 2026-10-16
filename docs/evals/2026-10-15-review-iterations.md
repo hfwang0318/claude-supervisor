@@ -262,3 +262,10 @@ supervise仅一次语义调用，16746ms、timeout=null、5703input／770output�
 宿主新增7项：首次RED274pass6fail，其中取消控制原已通过；目标时机、无回退、未知值等失败修复后GREEN280pass0fail。后补的实质探索／无方案等输入变体与全部旧测试共同通过。adapter首次RED预期implementation实际undefined，修复后含identity mismatch／旧auto兼容等自测通过。最后完整node scripts/check.mjs exit0（phase-batch-final-checks.log），不是只跑host。
 
 免费同冻结Linux原生phase-native-replay/receipt.json，networknone／0模型／0项目命令：从008真实supervise session的Router记录在内存绑定，排除thinking和metadata，只重放公开工具记录并经生产redact；原实质探索在auto允许、implementation选择下延后。真实17:00:21检查点的公开轨迹由生产evidenceOf／changesOf得到16088字符改动、末次检查成功且在编辑之后，生产buildReviewContext含真实change／observation，implementation可准入而failure不匹配。没有重建旧项目工作区，实际模型判断质量仍待新版本单题观察。120旧关键hash保持。本批作者TDD及差异审查，不把历史freshreview扩大到新代码。
+
+
+### Round009：固定预算下的实施阶段观察
+
+冻结source `a87caad07a3bbd258de6d1a4d02cfc1053026f38`，seed `9a4a12c8a9940428d0f926f794cc1dad` 固定一次从最新完整caller-scope双失败抽中Flipt c172。existing／supervise各一次900000ms并行2槽，2026-10-16T17:29:29Z实际starting，controller44171／monitor44174；最新文件为准。S显式review_phase=implementation，Eauto，runtime／experiment／插件默认值及audit均绑定阶段差异，不当作默认auto的效果。
+
+免费dryrun2、同native／Node／GNUloader断网preflight2738ms0paid，280宿主及全部普通检查、008真实公开轨迹的免费阶段回放及120旧hash保全绑定launchgate。本轮观察早期是否不消费、真实编辑后成功check才准入，以及改动／架构／方向／验证等可用维度判断质量；没有方案不能伪造一致性，目标阶段没发生即无机会，不延长、不强触发或自动替换任务。主旁路Flash、4000wire／low／模型等待无插件timeout及原资源规则保持；仍不求官方pass、不叠加full，完整实际行为尚待自然结束后审计。
