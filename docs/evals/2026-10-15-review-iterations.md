@@ -172,8 +172,35 @@ Coordinator 现在把请求与宿主allowance一起预留，并补扣已观察�
 本批最终全部 `node scripts/check.mjs` 通过：269宿主0失败和全部普通检查，日志round006-batch-final-checks.log。首次完整检查发现新测试夹具对只读工具数组调用push、lastTool填null的类型错误，修正夹具后完整重跑通过；未改宿主类型。免费同冻结Linux原生本地命令回放actual prepared上下文：旧探索触发true、新false，3条负面查询仍保留；旧实际回复在新旧parser均拒绝；新完整模板含原样review-15／checkpoint-8-review-15，按原校验可接受。networknone、0模型调用，记录round006-real-replay/receipt.json；没有重建旧临时工作区或声称供应商会遵守新提示。原90关键hash再次保持。
 
 
-## Round007：三项修复后的单题观察（在途）
+## Round007：三项修复后的单题观察（已完成）
 
 冻结source66dffe8410b7b8e590ad56e929e3252ff32beb63，固定seed `47262fd5849a608b6986da03ec534969` 从同一最新完整caller-scope full4一次抽中Proton e65，未重抽。existing／supervise各900秒并行，2026-10-16T14:15:53Z两槽starting，唯一controller14248／monitor14251，以最新PID文件为准。免费dryrun2、同native／Node／GNUloader断网preflight8135ms，launchgate绑定269宿主＋全部普通检查、真实输入免费回放和90旧关键hash。预算4000／公开low／无插件模型等待超时及其他安全边界保持。
 
 本轮观察实质材料触发、完整raw JSON与两个原样checkpoint标识、预算跳过准确性，并统一审所有自然出现的能力维度。只做本轮单题两组，不追加full；未宣称真实模型会遵从新模板或技术判断已达标。
+
+
+### Round007：首次有效历史判断与实际主模型可见反馈
+
+2026-10-16T14:33:24Z已2/2结束及基础审计，controller14248／monitor14251与所有容器退出，没有重启或补跑。两组主观察均约900秒timeout、空patch；官方均解析3项／必需3项且整体失败。该成绩只描述运行限制，不能据此认定审查无用或有效。
+
+supervise侧19718ms、timeout=null，4555input／739output，实际wire4000／公开effortlow；Router200／end_turn，含thinking和公开text，只保存公开text及规范化元数据。首次返回单个原始JSON，两个review／checkpoint标识原样正确，来源和需求引用均通过原严格gate。一份prepared上下文完整，实际Router上下文在明确省略sessionId后逐字一致；输入是目录观察加elementsActions.ts／elementsSlice.ts两份真实源码，触发不再依赖负面搜索。
+
+有效判断属于探索维度：建议先核对dispatch调用点、pendingRequest／retry状态机和移动操作入口，再决定holdback机制。引用的需求句子真实，源码确有2000ms setTimeout和retry(newRetry(...))，影响与“未看到后续代码”的不确定性均明确；这是有依据的历史建议，不是已证实代码缺陷。模型同时自报看过architecture／direction／verification，不能据计数认证这些维度质量。
+
+14:16:39.431Z返回一次context，14:16:39.462Z的下一真实主请求已包含该review和checkpoint标识及建议；后续8个主请求继续携带同一反馈，不计作8次投递。完整证据在feedback-and-actions-audit.json。主模型其实已在14:16:09及14:16:13读过reducers和elementQuery，早于投递；之后才读useElements及useApplyLabels，与建议方向一致但不能据时间顺序证明是建议改变了决策。历史参考点与当前未知状态明确，主动作改变／采纳仍unknown；0新增事实包、0独立执行。
+
+| 维度 | 本轮可支持的结论 |
+| --- | --- |
+| 需求—方案 | 没有显式技术方案，未观察，不伪造方案 |
+| 方案—实现 | 审查checkpoint尚无改动／方案，后续无调用预算，未观察 |
+| 探索 | 一条来源充分的具体建议、反证和范围限制；部分建议在投递前已被主模型自行完成 |
+| 架构、决策方向 | 自报reviewed，探索判断含状态机兼容性影响；没有独立该维度质量结论 |
+| 验证完成 | 没有实际测试结果，输入不足；不能把目录Bash观察当测试通过 |
+| 失败恢复 | 没有对应失败轨迹机会，未观察 |
+| 需求来源反例／probe | 实际提议的probe协议无效，需集中修复提示与诊断，不算有效反例 |
+
+probe的真实新问题已免费复现：candidate.files返回了两个现有源码路径字符串，而协议只接收__supervisor_probes/下新脚本的{path,content}对象；命令是grep管道，不属于已有允许的单脚本／import-and-print／项目check。仅修files或仅换命令均不能通过，二者同时使用合成合法协议对照才通过；未执行候选命令、未创建生成文件、0模型调用。记录round007-action-replay/receipt.json。当前因源版本已前进，只投递历史判断，候选命令没有进入主模型反馈或执行；安全边界有效。但原REVIEW只记录action=probe，没有说明该候选协议未验证／无效，不能据action计数称probe正常。
+
+下一批只处理这组实证契约问题：提示明确files的新脚本对象格式与现有源码引用的区别，并写出已有命令限制；历史降级也单独记录纯协议验证状态，保留有效判断，不认证旧源动作、不扩大命令权限。不为这几个小改动逐个付费，集中各自RED→GREEN、全部node scripts/check.mjs后再决定一个新的单题观察。
+
+资源204样本、最低可用8999321600B、swap0／OOM0／无429。E37请求37个响应起始，S29请求27个响应起始，全部本地模型身份Flash。Router66窗口49body可解析，47完整原需求匹配Flash／200，其余不归因。完整用量与费用unknown；模型低effort字段的内部作用、质量收益及完成率收益均未证明。新增15项关键hash，累计105项保持；behavior-status单独终结原pending快照，不重跑已冻结audit。基础链路与一次真实探索判断有证据，全部审查能力仍未验证完成。
