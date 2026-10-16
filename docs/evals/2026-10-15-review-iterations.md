@@ -297,3 +297,10 @@ S明确review_phase=implementation：早期探索phase-deferred、编辑后未�
 Router窗口115条body经只读引用恢复后全可解析，73条完整原需求匹配Flash／200，其余不归因；本地请求返回均Flash。E52请求31响应起始、S64请求42响应起始；221资源样本，最低可用10201931776B、swap最高6459392B、OOM0／无429排空。完整usage／cost unknown，观察下界见原回执。新增15关键hash，累计135保持，原pending快照由另存behavior-status终结，不重跑已冻结audit。
 
 下一轮没有声称修复产品bug，不无变化重复implementation。明确尚未回答的问题是**失败阶段的诊断／恢复方向质量**：同一实现a87caad、同一预算，仅冻结review_phase=failure，审是否区分环境／依赖错误与实现缺陷、保留反证、提出有用下一问题而非重复失败命令，及当时自然可用维度。该选项已有本批280全普通检查及失败触发／取消／绑定测试；无新产品代码就不为报告改动重复整套检查。新source/out、固定seed抽一双失败E/S，不自动full、不追求官方pass，不强求出现三连失败或重放旧模型。
+
+
+### Round010：失败阶段诊断／恢复方向观察已启动
+
+无新产品代码；source44904342f4ce3c78b85f7c39424c6a8140d90b6d为009报告提交，生产实现仍a87caad，25生产文件与009逐SHA相同。仅Sreview_phase=failure，Eauto，phaseOnlyObservation及productCodeBase绑定冻结身份，不能据阶段差异称修复009措辞问题。已有280全部普通检查涵盖失败准入／取消／身份绑定，本次不为报告重复检查。
+
+固定seed311776c46b0a15b71b8ba0a4930c6fbe从最新完整caller-scope双失败抽Protone65，仅E/S各一次900000ms并行2槽，2026-10-16T17:58:01Z实际starting，controller45821／monitor45824（最新PID文件优先）。免费dryrun2、断网nativepreflight8083ms0paid、135关键hash保持及原门禁绑定launchgate。新问题为真实失败时环境／依赖／实现区分、反证与有用恢复方向；未发生目标就无机会，不强求三连失败、不重抽、不补跑、不自动full。等待自然结束与独立行为审计。
