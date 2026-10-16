@@ -170,3 +170,10 @@ Coordinator 现在把请求与宿主allowance一起预留，并补扣已观察�
 
 
 本批最终全部 `node scripts/check.mjs` 通过：269宿主0失败和全部普通检查，日志round006-batch-final-checks.log。首次完整检查发现新测试夹具对只读工具数组调用push、lastTool填null的类型错误，修正夹具后完整重跑通过；未改宿主类型。免费同冻结Linux原生本地命令回放actual prepared上下文：旧探索触发true、新false，3条负面查询仍保留；旧实际回复在新旧parser均拒绝；新完整模板含原样review-15／checkpoint-8-review-15，按原校验可接受。networknone、0模型调用，记录round006-real-replay/receipt.json；没有重建旧临时工作区或声称供应商会遵守新提示。原90关键hash再次保持。
+
+
+## Round007：三项修复后的单题观察（在途）
+
+冻结source66dffe8410b7b8e590ad56e929e3252ff32beb63，固定seed `47262fd5849a608b6986da03ec534969` 从同一最新完整caller-scope full4一次抽中Proton e65，未重抽。existing／supervise各900秒并行，2026-10-16T14:15:53Z两槽starting，唯一controller14248／monitor14251，以最新PID文件为准。免费dryrun2、同native／Node／GNUloader断网preflight8135ms，launchgate绑定269宿主＋全部普通检查、真实输入免费回放和90旧关键hash。预算4000／公开low／无插件模型等待超时及其他安全边界保持。
+
+本轮观察实质材料触发、完整raw JSON与两个原样checkpoint标识、预算跳过准确性，并统一审所有自然出现的能力维度。只做本轮单题两组，不追加full；未宣称真实模型会遵从新模板或技术判断已达标。
