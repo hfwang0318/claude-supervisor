@@ -11,7 +11,8 @@ const journalPayload = (line, kind) => {
 }
 export const parseReviewLifecycle = line => {
   const value = journalPayload(line, 'REVIEW_LIFECYCLE')
-  return value && typeof value.active === 'boolean' && Number.isInteger(value.followUps) && value.followUps >= 0 && value.followUps <= 1 ? { active: value.active, followUps: value.followUps } : null
+  if (value?.acceptedFollowUps !== undefined && (!Number.isSafeInteger(value.acceptedFollowUps) || value.acceptedFollowUps < 0)) return null
+  return value && typeof value.active === 'boolean' && Number.isInteger(value.followUps) && value.followUps >= 0 && value.followUps <= 1 ? { active: value.active, followUps: value.followUps, ...(value.acceptedFollowUps === undefined ? {} : { acceptedFollowUps: value.acceptedFollowUps }) } : null
 }
 export const parseReviewControl = line => {
   const value = journalPayload(line, 'REVIEW_CONTROL')
@@ -42,7 +43,7 @@ export class ReviewInputGate {
     this.waiting.clear()
   }
 }
-export const reviewSessionCanClose = (results, lifecycle, expected = { inputs: 1, followUps: lifecycle?.followUps ?? 0 }) => !!lifecycle && !lifecycle.active && results >= expected.inputs + expected.followUps
+export const reviewSessionCanClose = (results, lifecycle, expected = { inputs: 1, followUps: lifecycle?.acceptedFollowUps ?? 0 }) => !!lifecycle && !lifecycle.active && results >= expected.inputs + expected.followUps
 
 // The adapter owns only this session's lifetime and input cancellation. It never
 // calls a provider, reads credentials, retries a model or implements native input.
@@ -72,7 +73,7 @@ export const runReviewSession = async (argv, input = process.stdin, output = pro
   try { journalStart = statSync(debugFile).size } catch { /* New journal. */ }
   const child = spawn(argv[0], [...argv.slice(1), '--input-format', 'stream-json'], { stdio: ['pipe', 'pipe', 'inherit'], env: { ...process.env, DEEPSEEK_SUPERVISOR_CONTROL_FILE: controlFile } })
   const gate = new ReviewInputGate()
-  let results = 0, inputCount = 0, followUpCount = 0, observedTask = -1, observedFollowUps = 0, lifecycle = null, offset = journalStart, journal = '', response = '', closed = false, inputDone = false, inputBusy = true, revision = 0
+  let results = 0, inputCount = 0, followUpCount = 0, lifecycle = null, offset = journalStart, journal = '', response = '', closed = false, inputDone = false, inputBusy = true, revision = 0
   const inspect = () => {
     try {
       const size = statSync(debugFile).size
@@ -88,11 +89,7 @@ export const runReviewSession = async (argv, input = process.stdin, output = pro
             const line = journal.slice(0, at); journal = journal.slice(at + 1)
             const value = parseReviewLifecycle(line)
             if (value) {
-              const payload = journalPayload(line, 'REVIEW_LIFECYCLE')
-              const task = payload.taskRevision
-              if (Number.isSafeInteger(task) && task > observedTask) { observedTask = task; observedFollowUps = 0 }
-              if (value.followUps > observedFollowUps) followUpCount += value.followUps - observedFollowUps
-              observedFollowUps = value.followUps
+              followUpCount = Math.max(followUpCount, value.acceptedFollowUps ?? 0)
               lifecycle = value
             }
             const control = parseReviewControl(line)
@@ -116,7 +113,7 @@ export const runReviewSession = async (argv, input = process.stdin, output = pro
   })
   child.stdin.on('error', () => {})
   const poll = setInterval(inspect, 50)
-  let inputError
+  let inputError, nativeEnded = false
   void (async () => {
     await gate.wait(0)
     let seenUser = false
@@ -127,7 +124,7 @@ export const runReviewSession = async (argv, input = process.stdin, output = pro
         if (seenUser) { announce(++revision); await gate.wait(revision) }
         if (frame.type === 'user') { seenUser = true; inputCount++ }
       }
-      if (closed) throw Error('native input already closed')
+      if (closed || nativeEnded) throw Error('native input already closed')
       child.stdin.write(line + '\n')
       inputBusy = false
     }
@@ -145,16 +142,16 @@ export const runReviewSession = async (argv, input = process.stdin, output = pro
       if (buffer.trim()) await send(buffer)
     } else await send(JSON.stringify({ type: 'user', message: { role: 'user', content: instruction } }))
     inputBusy = false; inputDone = true; inspect()
-  })().catch(error => { inputError = error; child.kill('SIGTERM') })
+  })().catch(error => { if (!nativeEnded) { inputError = error; child.kill('SIGTERM') } })
   const terminate = () => child.kill('SIGTERM')
   process.once('SIGTERM', terminate); process.once('SIGINT', terminate)
   try {
     const result = await new Promise((resolve, reject) => {
-      child.once('error', error => { gate.fail(error); reject(error) })
-      child.once('close', (code, signal) => { gate.fail(new Error('native session ended')); resolve({ code: code ?? 1, signal, results, lifecycle }) })
+      child.once('error', error => { nativeEnded = true; gate.fail(error); input.destroy?.(); reject(error) })
+      child.once('close', (code, signal) => { nativeEnded = true; closed = true; gate.fail(new Error('native session ended')); input.destroy?.(); resolve({ code: code ?? 1, signal, results, lifecycle }) })
     })
-    // A still-open input stream is external ownership, not work to await after
-    // native exit. The feeder's catch prevents an unhandled gate rejection.
+    // Native exit ends this adapter's input ownership too; destroy wakes a
+    // pending iterator and releases stdin without replacing the child's status.
     if (inputError) throw inputError
     return result
   } finally {

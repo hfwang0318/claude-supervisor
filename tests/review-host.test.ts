@@ -4,10 +4,10 @@ const options = { assistance_mode: 'supervise', execution_mode: 'off', verifier_
 const reply = () => JSON.stringify({ reviewed: ['architecture'], judgment: { dimension: 'architecture', question: 'Should the public interface be replaced?', requirementQuote: 'Preserve the API.', sourceIds: ['req', 'plan-1'], reason: 'The proposed replacement removes the existing entry point.', impact: 'Caller compatibility.', recommendation: 'adjust', uncertainty: 'The complete caller set is unknown.' }, action: { kind: 'none' } })
 const world = (on: Parameters<TestBody>[1]) => {
   mock.store(on); const clock = mock.clock(on, { now: 100000 })
-  const state = { controlPath: '', control: JSON.stringify({ version: 1, revision: 0 }), calls: 0, unanswered: false, unansweredReason: 'aborted', logLimit: Infinity, nextPromptWait: undefined as Promise<void> | undefined, cwd: '/p', submitted: [] as string[], echo: true, timeouts: [] as number[], prompts: [] as string[], logs: [] as string[], processActions: [] as string[], validateDelay: 0, wait: undefined as Promise<void> | undefined, outputs: [reply(), reply()], rows: [{ role: 'assistant', text: 'Plan: replace the public method.', toolUses: [{ tool: 'Read', input: { file_path: '/p/api.js' }, text: 'exports.old = () => 1' }] }] }
+  const state = { throwFollowUp: false, dropFollowUp: false, controlPath: '', control: JSON.stringify({ version: 1, revision: 0 }), calls: 0, unanswered: false, unansweredReason: 'aborted', logLimit: Infinity, nextPromptWait: undefined as Promise<void> | undefined, cwd: '/p', submitted: [] as string[], echo: true, timeouts: [] as number[], prompts: [] as string[], logs: [] as string[], processActions: [] as string[], validateDelay: 0, wait: undefined as Promise<void> | undefined, outputs: [reply(), reply()], rows: [{ role: 'assistant', text: 'Plan: replace the public method.', toolUses: [{ tool: 'Read', input: { file_path: '/p/api.js' }, text: 'exports.old = () => 1' }] }] }
   on('session.id', () => ({ value: 'review-session' })); on('session.model', () => ({ value: 'fixture' })); on('session.cwd', () => ({ value: state.cwd })); on('session.messages', () => ({ value: state.rows }) as never)
   on('env.get', (_$, e) => ({ value: e.name === 'DEEPSEEK_SUPERVISOR_CONTROL_FILE' ? state.controlPath : 'on' })); on('fs.read', () => ({ value: state.control })); on('ui.status', () => ({ value: undefined })); on('ui.log', (_$, e) => { state.logs.push(e.text.slice(0, state.logLimit)); return { value: undefined } })
-  on('command.register', (_$, e) => ({ value: { command: e.name } })); on('session.start', () => ({ cwd: '/p' })); on('prompt.submit', async (_$, e) => { state.submitted.push(e.text); if (e.text === 'New queued task.' && state.nextPromptWait) await state.nextPromptWait; return { text: e.text } as never })
+  on('command.register', (_$, e) => ({ value: { command: e.name } })); on('session.start', () => ({ cwd: '/p' })); on('prompt.submit', async (_$, e) => { state.submitted.push(e.text); if (state.throwFollowUp && e.text.includes('Engineering review')) throw Error('session no longer bound'); if (state.dropFollowUp && e.text.includes('Engineering review')) return { text: e.text, drop: 'unavailable' } as never; if (e.text === 'New queued task.' && state.nextPromptWait) await state.nextPromptWait; return { text: e.text } as never })
   on('classic.PostToolBatch', () => ({ additionalContext: ['host context'] }) as never); on('classic.Stop', () => ({}) as never)
   on('turn.complete', (_$, e) => ({ text: e.answer })); on('session.end', (_$, e) => ({ sessionId: e.sessionId }))
   on('model.complete', async (_$, e) => { state.calls++; state.timeouts.push(e.timeoutMs ?? 0); state.prompts.push(e.prompt); if (state.wait) await state.wait; let text = state.outputs.shift() ?? 'null'; try { const context = JSON.parse(e.prompt.split('\n\n').at(-1)!); if (state.echo && context.checkpoint) text = JSON.stringify({ ...JSON.parse(text), reviewId: context.checkpoint.reviewId, checkpointId: context.checkpoint.checkpointId }) } catch {} return { value: state.unanswered ? { isAnswered: false, reason: state.unansweredReason, ...(state.unansweredReason === 'api-error' ? { status: 429, error: 'rate_limit' } : {}), usage: { input_tokens: 0, output_tokens: 0 } } : { isAnswered: true, text, usage: { input_tokens: 10, output_tokens: 20 } } } as never })
@@ -383,4 +383,37 @@ test('an unreadable configured input channel drops old feedback without authoriz
   expect((await batch($)).additionalContext).toEqual(['host context'])
   expect(state.calls).toBe(1)
   expect(state.logs.some(line => line.includes('REVIEW_CONTROL') && line.includes('"status":"unavailable"'))).toBe(true)
+})
+
+for (const rejection of ['drop', 'throw']) test(`a late followup ${rejection} consumes its attempt but creates no expected native result`, { options }, async ($, on) => {
+  const { state, clock } = world(on); state.dropFollowUp = rejection === 'drop'; state.throwFollowUp = rejection === 'throw'
+  await start($)
+  let release = () => {}; state.wait = new Promise<void>(resolve => { release = resolve })
+  await batch($); await flushBackground(clock)
+  await $.turn.complete({ answer: 'Finished.', reason: 'answer', turnId: 't', durationMs: 1, isAborted: false } as never)
+  release(); await flushBackground(clock)
+  const terminal = state.logs.filter(line => line.includes('REVIEW_LIFECYCLE')).at(-1) ?? ''
+  expect(terminal).toContain('"acceptedFollowUps":0')
+  expect(state.submitted.filter(text => text.includes('Engineering review')).length).toBe(1)
+  await observeStop($, clock, 'Finished again.'); await flushBackground(clock)
+  expect(state.submitted.filter(text => text.includes('Engineering review')).length).toBe(1)
+})
+
+test('a main tool in progress makes old review actions historical before PostToolBatch', { options }, async ($, on) => {
+  const { state, clock } = world(on)
+  const decision = JSON.parse(reply())
+  decision.action = { kind: 'location', request: { paths: ['api.js'], terms: [] } }
+  state.outputs = [JSON.stringify(decision)]
+  let finishTool = () => {}
+  const toolRunning = new Promise<void>(resolve => { finishTool = resolve })
+  on('tool.call', async () => { await toolRunning; return { result: 'updated' } as never })
+  await start($)
+  let release = () => {}; state.wait = new Promise<void>(resolve => { release = resolve })
+  await batch($); await flushBackground(clock)
+  const editing = $.tool.call({ tool: 'Edit', input: { file_path: '/p/api.js', old_string: 'old', new_string: 'new' } } as never)
+  await flushBackground(clock)
+  release(); await flushBackground(clock)
+  expect(state.processActions.filter(action => action === 'inspect').length).toBe(0)
+  finishTool(); await editing
+  expect((await batch($)).additionalContext?.join('\n')).toContain('Historical advice only')
 })

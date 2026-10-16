@@ -12,7 +12,7 @@
 
 ## Current status
 
-The repository-owned headless adapter now announces cancellation through a private revision file before forwarding native input. Free actual-plugin new/off cancellation and late35s delivery passed;250 host tests and all ordinary checks passed. Final whole-change review and latest native repeat are pending. No Claude Code/Router/generated declarations changed; direct native clients without this adapter and interactive terminal cancellation remain unverified. No paid follow-up. See [evidence and limits](../../evals/2026-10-16-historical-review.md).
+The repository-owned headless adapter now announces cancellation through a private revision file before forwarding native input. Free actual-plugin new/off cancellation and late35s delivery passed;253 host tests and all ordinary checks passed. Final6.1sol whole-change review completed;3Important findings fixed in one RED→GREEN batch,253 host/all ordinary passed, latest native raw-entry35s repeat exit0/one accepted followup. No Claude Code/Router/generated declarations changed; direct native clients without this adapter and interactive terminal cancellation remain unverified. No paid follow-up. See [evidence and limits](../../evals/2026-10-16-historical-review.md).
 
 ## Global Constraints
 
@@ -38,7 +38,7 @@ The repository-owned headless adapter now announces cancellation through a priva
 **Interfaces:** Actual `clock.after`, `model.complete` without timeout, `session.append`, lifecycle hooks against a local synthetic delayed provider and the same frozen CLI/Node/GNU loader.
 
 - [x] Build a network-none native fixture with synthetic main tool steps and delayed side replies. Assert the main request continues before the side result and feedback appears once in a later main request.
-- [ ] Exercise headless final-answer/session-end behavior and explicit abort. Record real terminal outcomes; if unsupported, ledger the limitation and select only a proven delivery path before coding.
+- [x] Exercise headless final-answer/session-end behavior and explicit abort. Record real terminal outcomes; if unsupported, ledger the limitation and select only a proven delivery path before coding.
 - [x] Save safe metadata and synthetic fixture output; no real credentials/thinking or external requests. Expected: explicit capability receipt, zero paid requests.
 
 ## Task 2: Checkpoint protocol and separate freshness/budgets
@@ -59,20 +59,23 @@ The repository-owned headless adapter now announces cancellation through a priva
 **Interfaces:** One per-session pending review/controller, one ready result, and a monotonic observation sequence. Launch captures immutable input and returns immediately; completion checks task identity before queuing/delivery.
 
 - [x] RED: main batch returns while completion remains pending; resolve after a later tool edit and >30000ms; confirm historical note and no current-state certification.
-- [ ] RED: new prompt/off/cancel/model/project/session end drops old result, no implicit replay, no new-budget contamination; ready feedback delivered once across repeated hooks.
-- [ ] Implement only the native delivery/lifetime path proven by Task 1. Remove semantic waits from PostToolBatch/Stop and model timeout arguments; keep deterministic checks and existing-mode behavior.
+- [x] RED: new prompt/off/cancel/model/project/session end drops old result, no implicit replay, no new-budget contamination; ready feedback delivered once across repeated hooks.
+- [x] Implement only the native delivery/lifetime path proven by Task 1. Remove semantic waits from PostToolBatch/Stop and model timeout arguments; keep deterministic checks and existing-mode behavior.
 - [x] Keep tool actions bounded and current-only; add scoped diagnostics for launch, checkpoint, current/history applicability, cancellation and actual delivery status.
-- [ ] GREEN host tests and free native integration using actual production plugin; commit the complete hook behavior.
+- [x] GREEN host tests and free native integration using actual production plugin; commit the complete hook behavior.
 
 ## Task 4: Engineering verification, review and documentation
 
 **Files:** `README.md`, `README.zh-CN.md`, design/plan status, new evaluation capability report, eval metadata/scorer tests if interpretation changes.
 
 - [x] Run all `node scripts/check.mjs`, inspect exact exit/failure counts, verify immutable result hashes and no lingering fixture processes.
-- [ ] Run native delayed reply/cancellation/lifecycle checks on the actual product path; distinguish synthetic mechanism evidence from real reviewer quality.
-- [ ] One fresh-context whole-change review of this architecture range, then one TDD fix batch for Important/Critical findings; no repeated reviewers.
-- [ ] Synchronize docs with delivered behavior, explicit headless/platform limitations and remaining real-model gates. No automatic fifth paid round in this implementation task.
+- [x] Run native delayed reply/cancellation/lifecycle checks on the actual product path; distinguish synthetic mechanism evidence from real reviewer quality.
+- [x] One fresh-context whole-change review of this architecture range, then one TDD fix batch for Important/Critical findings; no repeated reviewers.
+- [x] Synchronize docs with delivered behavior, explicit headless/platform limitations and remaining real-model gates. No automatic fifth paid round in this implementation task.
 
 ## Execution record
 
 Plan authored after written-design approval. Inline execution requested by the user's “按这个方案改”; preserve the user's previous batching/cost preferences. The ledger records capability findings and any necessary deviations.
+
+
+Final status: supported repository headless adapter and plugin lifecycle implementation verified; direct native clients bypassing adapter and interactive terminal cancellation remain explicitly unverified.6.1sol review0Critical/3Important fixed/1Minor deferred(report historical wording). No paid observation, merge, push, host/generated/native/Router edits. Worktree/evidence preserved per user, superseding cleanup/menu defaults. See report/ledger for actual receipts and every ruling.

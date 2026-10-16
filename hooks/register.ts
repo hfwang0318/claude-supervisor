@@ -100,7 +100,7 @@ const isOn = async ($: EngineInterface) => {
 }
 
 type Runtime = {
-  steps: number; isBusy: boolean; promptsSinceCards: number; blocks: number
+  acceptedReviewFollowUps: number; steps: number; isBusy: boolean; promptsSinceCards: number; blocks: number
   held: Set<number>; followUps: number; turnFrom: number; isInteractive: boolean
   asked: string; told: number; last: string; coordinator: Coordinator
   jobNumber: number; modelDisabled: boolean; cfg: Config; stateUsable: boolean; journal: Promise<unknown>; recordEnd: number; workerModel: string | null; factsAttempted: boolean
@@ -114,7 +114,7 @@ const runtimeOf = async ($: EngineInterface): Promise<Runtime> => {
   let s = sessions.get(sessionId)
   if (s) return s
   const binding: Binding = { sessionId, generationId: String(await $.clock.now()), turnId: 'initial', taskRevision: 0, workspaceRevision: 'unknown', snapshotId: 'unknown' }
-  s = { steps: 0, isBusy: false, promptsSinceCards: 0, blocks: 0, held: new Set(), followUps: 0, turnFrom: 0, isInteractive: true, asked: '', told: 0, last: '', coordinator: new Coordinator(binding), jobNumber: 0, modelDisabled: false, cfg: configOf(undefined), stateUsable: true, journal: Promise.resolve(), recordEnd: 0, workerModel: null, factsAttempted: false, reviewSignatures: new Set(), reviewAttempts: 0, reviewStopSent: false, reviewRecoveryUsed: false, reviewSkipKeys: new Set(), reviewSequence: 0, mainActive: true, reviewCwd: '' }
+  s = { acceptedReviewFollowUps: 0, steps: 0, isBusy: false, promptsSinceCards: 0, blocks: 0, held: new Set(), followUps: 0, turnFrom: 0, isInteractive: true, asked: '', told: 0, last: '', coordinator: new Coordinator(binding), jobNumber: 0, modelDisabled: false, cfg: configOf(undefined), stateUsable: true, journal: Promise.resolve(), recordEnd: 0, workerModel: null, factsAttempted: false, reviewSignatures: new Set(), reviewAttempts: 0, reviewStopSent: false, reviewRecoveryUsed: false, reviewSkipKeys: new Set(), reviewSequence: 0, mainActive: true, reviewCwd: '' }
   sessions.set(sessionId, s)
   return s
 }
@@ -443,7 +443,7 @@ const finishReview = async ($: EngineInterface, prepared: PreparedReview | null)
 }
 
 const semanticMode = (s: Runtime) => ['supervise', 'probe', 'recovery'].includes(s.cfg.assistanceMode)
-const reviewLifecycle = ($: EngineInterface, s: Runtime) => say($, `REVIEW_LIFECYCLE ${JSON.stringify({ active: !!(s.reviewPending || s.reviewReady || s.reviewDraining), followUps: s.followUps, taskRevision: s.coordinator.binding.taskRevision })}`)
+const reviewLifecycle = ($: EngineInterface, s: Runtime) => say($, `REVIEW_LIFECYCLE ${JSON.stringify({ active: !!(s.reviewPending || s.reviewReady || s.reviewDraining), followUps: s.followUps, acceptedFollowUps: s.acceptedReviewFollowUps, taskRevision: s.coordinator.binding.taskRevision })}`)
 
 // The optional headless adapter announces an input before native SDK admission.
 // This channel may only revoke work: it cannot submit text, enable supervision,
@@ -524,7 +524,9 @@ const drainReview = async ($: EngineInterface, followup = false): Promise<string
       if (!await isOn($) || !sameTask(prepared.binding, s.coordinator.binding)) return 'dropped'
       if (followup) {
         const result = await $.prompt.submit({ text: ready.note })
-        return result.drop === undefined ? 'delivered' : 'dropped'
+        if (result.drop !== undefined) return 'dropped'
+        s.acceptedReviewFollowUps++
+        return 'delivered'
       }
       note = ready.note
       return 'unknown'
@@ -1069,6 +1071,15 @@ export const register: Register = (on, options) => {
     }
     return result
   }).catch(($, e, next) => next(e))
+
+  // Invalidate action freshness BEFORE a main tool can change files. Waiting
+  // until PostToolBatch misses a side reply arriving while Edit is in progress.
+  // Keep task identity/model waiting and their budget: historical advice survives.
+  on('tool.call', async ($, e, next) => {
+    const s = await runtimeOf($)
+    if (e.agentId === undefined && semanticMode(s)) s.coordinator.changedWorkspace(`tool-start-${++s.jobNumber}`, await $.clock.now())
+    return next(e)
+  })
 
   // After every batch of the main loop's tool calls, before the next request: the
   // rules on the record. What they find goes to the model with the tool results,

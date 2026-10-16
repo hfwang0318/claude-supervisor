@@ -47,10 +47,11 @@ If anything raised this turn is still open, **the turn does not end**: the model
 
 Historical semantic reviews have no plugin model-wait timeout. The repository's
 headless adapter uses a private cancel-only notification before forwarding new
-input, off or interrupt; free native tests cover cancellation and a35-second late
+input, off or interrupt; free native tests cover cancellation and a 35-second late
 reply. Claude Code remains unmodified. Direct native SDK clients that bypass this
 adapter can still delay input; interactive terminal cancellation is unverified.
-Final whole-change review is pending, and no new paid observation was started.
+The final whole-change review findings are fixed;253 host tests and all ordinary
+checks pass. No new paid observation was started.
 See [integration evidence and limits](docs/evals/2026-10-16-historical-review.md).
 
 Leave `verifier_model` empty to use the host's current worker model, including

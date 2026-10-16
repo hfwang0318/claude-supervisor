@@ -4,7 +4,9 @@ import { agentArgs, agentEnvironment, frozenDefaults, patchArgs } from './agent.
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawn } from 'node:child_process'
+import { once } from 'node:events'
+import { fileURLToPath } from 'node:url'
 const args = agentArgs('facts')
 assert.equal(args.includes('--model'), true)
 assert.equal(args[args.indexOf('--model') + 1], 'zhipu/glm-5.3-flash')
@@ -39,8 +41,8 @@ const active = { active: true, followUps: 0 }
 assert.equal(reviewSessionCanClose(1, active), false)
 assert.equal(reviewSessionCanClose(0, { active: false, followUps: 0 }), false)
 assert.equal(reviewSessionCanClose(1, { active: false, followUps: 0 }), true)
-assert.equal(reviewSessionCanClose(1, { active: false, followUps: 1 }), false)
-assert.equal(reviewSessionCanClose(2, { active: false, followUps: 1 }), true)
+assert.equal(reviewSessionCanClose(1, { active: false, followUps: 1, acceptedFollowUps: 1 }), false)
+assert.equal(reviewSessionCanClose(2, { active: false, followUps: 1, acceptedFollowUps: 1 }), true)
 assert.equal(reviewSessionCanClose(1, null), false)
 assert.deepEqual(parseReviewLifecycle('2026-10-16T00:00:00.000Z [DEBUG] [deepseek-supervisor] $.ui.log (to debug): deepseek-supervisor: REVIEW_LIFECYCLE {"active":true,"followUps":0}'), active)
 assert.equal(parseReviewLifecycle('REVIEW_LIFECYCLE {"active":false,"followUps":-1}'), null)
@@ -67,3 +69,30 @@ await assert.rejects(missing, /native exited/)
 assert.equal(reviewSessionCanClose(1, { active: false, followUps: 0 }, { inputs: 2, followUps: 0 }), false, 'the previous task result must not close a newly submitted task')
 assert.equal(reviewSessionCanClose(2, { active: false, followUps: 0 }, { inputs: 2, followUps: 1 }), false, 'earlier plugin followup results are not new user task results')
 assert.equal(reviewSessionCanClose(3, { active: false, followUps: 0 }, { inputs: 2, followUps: 1 }), true)
+
+// A native child can close while its caller still has an open streaming stdin.
+// The adapter must release that input reader rather than remain alive forever.
+const lifecycleFixture = mkdtempSync(join(tmpdir(), 'review-session-exit-'))
+try {
+  const debug = join(lifecycleFixture, 'debug.log'), fake = join(lifecycleFixture, 'native.mjs')
+  writeFileSync(fake, `import { appendFileSync } from 'node:fs'
+const debug=process.argv[process.argv.indexOf('--debug-file')+1]
+const log=x=>appendFileSync(debug,'2026-10-16T00:00:00.000Z [DEBUG] [deepseek-supervisor] $.ui.log (to debug): deepseek-supervisor: '+x+'\\n')
+log('REVIEW_CONTROL {"revision":0,"status":"ready"}')
+process.stdin.once('data',()=>{ log('REVIEW_LIFECYCLE {"active":false,"followUps":0}');process.stdout.write('{"type":"result"}\\n',()=>process.exit(0)) })
+`)
+  const helper = fileURLToPath(new URL('./review-session.mjs', import.meta.url))
+  const adapter = spawn(process.execPath, [helper, process.execPath, fake, '--debug-file', debug, '--review-stream-input'], { stdio: ['pipe', 'pipe', 'pipe'] })
+  adapter.stdin.on('error', () => {})
+  let nativeOutput = ''
+  adapter.stdout.on('data', chunk => { nativeOutput += chunk }); adapter.stderr.resume()
+  adapter.stdin.write(JSON.stringify({ type: 'user', message: { role: 'user', content: 'Synthetic task.' } }) + '\n')
+  let expired = false
+  const limit = setTimeout(() => { expired = true; adapter.kill('SIGTERM') }, 1500)
+  const [code] = await once(adapter, 'close'); clearTimeout(limit)
+  assert.match(nativeOutput, /"type":"result"/, 'fixture must actually answer before testing adapter exit')
+  assert.equal(expired, false, 'native exit must release an open external stdin')
+  assert.equal(code, 0)
+} finally { rmSync(lifecycleFixture, { recursive: true, force: true }) }
+
+assert.equal(reviewSessionCanClose(1, { active: false, followUps: 1, acceptedFollowUps: 0 }), true, 'a rejected attempt creates no expected result')
