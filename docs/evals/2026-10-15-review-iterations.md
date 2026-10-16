@@ -304,3 +304,16 @@ Router窗口115条body经只读引用恢复后全可解析，73条完整原需�
 无新产品代码；source44904342f4ce3c78b85f7c39424c6a8140d90b6d为009报告提交，生产实现仍a87caad，25生产文件与009逐SHA相同。仅Sreview_phase=failure，Eauto，phaseOnlyObservation及productCodeBase绑定冻结身份，不能据阶段差异称修复009措辞问题。已有280全部普通检查涵盖失败准入／取消／身份绑定，本次不为报告重复检查。
 
 固定seed311776c46b0a15b71b8ba0a4930c6fbe从最新完整caller-scope双失败抽Protone65，仅E/S各一次900000ms并行2槽，2026-10-16T17:58:01Z实际starting，controller45821／monitor45824（最新PID文件优先）。免费dryrun2、断网nativepreflight8083ms0paid、135关键hash保持及原门禁绑定launchgate。新问题为真实失败时环境／依赖／实现区分、反证与有用恢复方向；未发生目标就无机会，不强求三连失败、不重抽、不补跑、不自动full。等待自然结束与独立行为审计。
+
+
+## Round010结束与来源忠实／范围边界修正批次
+
+010已于2026-10-16T18:15:28Z完整2/2结束及行为审计，两组主观察timeout、空patch；官方parsed3／required3且整体失败，仅描述。S公开轨迹仅19Bash／19Read／5Grep、无Edit／Write，命令为源码／工具探索，没有符合failure准入的失败项目检查。0prepared／0sidecall／0判断／0投递，不将恢复质量记为正常，不为碰运气重复此阶段。探索命令可以有错误，未发生合格失败检查不等于整个执行从未报错。
+
+本地E27请求27响应起始、S31请求30起始均Flash；Router58body全部可解析、57完整原需求匹配Flash200，其余不归因。203资源样本最低可用9048768512B、swap最高581632B、OOM0／无429排空。完整usage／费用unknown，原观察下界保留；累计150关键hash保持，原pending控制器快照不改。
+
+按用户继续集中优化的授权，将009两项实证精度问题合为一批：提示词明确逐函数核对类型／返回值，不混同多个函数；把“提供记录未显示”与“从未／仅此一次”的全历史断言分开。反馈在判断前明确Source fidelity，说明解释未经独立核验、具体引用原文优先，并根据真实omitted标记解释早期历史缺失和有限change excerpt。原模型错误、判断、引文保持原样；不偷偷重写判断，不增加自动语义裁决，不放宽来源／Binding／执行gate。
+
+两个行为回归RED280pass2fail→GREEN282pass0fail，全部node scripts/check.mjs exit0（grounding-batch-final-checks.log）。同冻结Linux CLI／Node／GNUloader断网grounding-native-replay/receipt.json以真实009公开输入／回复对照旧／新生产helper：旧无显式fidelity边界，新有；原“Unify返回nil”错误句原样保留，原引用中Value{}也保留；history／change警示存在、在Reason前，实际上下文逐字不变、严格模板仍可解析，note16242字符未超原32768bytes限制。0模型／0候选命令。这只验证边界呈现和输入契约，不能声称真实模型已学会正确复述。
+
+下一新版本单题选implementation：明确验证有有限改动／历史遗漏时的来源复述、范围结论和所有自然出现维度，不为0call的failure重复随机。目标未出现仍无机会；不追加窗口、不自动full、不追求官方pass。后续如仍缺自然方案／恢复材料，明确覆盖限制，不用无变化付费替代证据。

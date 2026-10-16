@@ -143,3 +143,25 @@ test('probe instructions distinguish generated file objects from existing source
   expect(prompt).toContain('grep pipelines are not probes; use location')
   expect(prompt).toContain('existing-test requires the exact command in a supplied tool observation')
 })
+
+test('feedback separates reviewer paraphrases from exact source returns without silently rewriting the judgment', async () => {
+  const c=buildReviewContext(binding,asked,rows,'api.go\n+ func (v Value) Err() error { return nil }\n+ func (v Value) Unify(other Value) Value { return Value{} }','implementation')!
+  const r=reply('architecture');r.judgment.sourceIds=['req','change'];r.judgment.reason='Err and Unify always return nil.'
+  const parsed=parseReview(c,JSON.stringify(r))!,note=reviewNote(c,parsed)
+  expect(note).toContain('Err and Unify always return nil.')
+  expect(note).toContain('Unify(other Value) Value { return Value{} }')
+  expect(note.indexOf('Source fidelity:')).toBeLessThan(note.indexOf('Reason:'))
+  expect(note).toContain('not independently checked')
+  expect(parsed.judgment?.reason).toBe(r.judgment.reason)
+})
+test('omitted history creates an explicit evidence limit for both reviewer input and returned advice', async () => {
+  const c=context();c.scope.omitted.push('earlier-tools')
+  const parsed=parseReview(c,JSON.stringify(reply()))!
+  const note=reviewNote(c,parsed),prompt=reviewPrompt(c,'supervise')
+  expect(note).toContain('Earlier history is omitted')
+  expect(prompt).toContain('Earlier history is omitted')
+  expect(note).toContain('never happened or was the only check')
+  expect(note).toContain('bounded change excerpt')
+  const withoutEarlier=reviewNote(context(),parsed)
+  expect(withoutEarlier.includes('Earlier history is omitted')).toBe(false)
+})

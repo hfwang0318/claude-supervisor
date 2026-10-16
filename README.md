@@ -152,7 +152,13 @@ and verification/completion. It reads attributed requirements, explicit plans,
 bounded change excerpts, recent tools and the final answer. Missing plans and
 omitted context remain unreviewed. Architecture/direction advice can reach the
 worker without first being converted into a command; a sourced recommendation
-is not a demonstrated defect or a repair certificate.
+is not a demonstrated defect or a repair certificate. Review input asks for
+function-specific source fidelity and separates observations from hypotheses.
+Feedback marks interpretations as not independently checked: exact cited source
+wins over a paraphrase, omitted earlier history cannot establish universal
+absence, and bounded change excerpts are not a full diff. Original judgments
+and excerpts are preserved; these limits do not automatically correct or certify
+a model's factual claims.
 
 The reviewer gives at most one important judgment per review, recommends
 continue/adjust/replan/gather-evidence, and chooses at most one supplemental
