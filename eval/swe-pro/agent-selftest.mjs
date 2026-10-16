@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { reviewSessionCanClose, parseReviewLifecycle } from './review-session.mjs'
+import { reviewSessionCanClose, parseReviewLifecycle, parseReviewControl, ReviewInputGate } from './review-session.mjs'
 import { agentArgs, agentEnvironment, frozenDefaults, patchArgs } from './agent.mjs'
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -47,3 +47,23 @@ assert.equal(parseReviewLifecycle('REVIEW_LIFECYCLE {"active":false,"followUps":
 assert.equal(parseReviewLifecycle('REVIEW_LIFECYCLE invalid'), null)
 
 assert.equal(parseReviewLifecycle('tool stdout REVIEW_LIFECYCLE {"active":false,"followUps":0}'), null)
+
+assert.deepEqual(parseReviewControl('2026-10-16T00:00:00.000Z [DEBUG] [deepseek-supervisor] $.ui.log (to debug): deepseek-supervisor: REVIEW_CONTROL {"revision":1,"status":"cancelled"}'), { revision: 1, status: 'cancelled' })
+assert.equal(parseReviewControl('tool stdout REVIEW_CONTROL {"revision":1,"status":"cancelled"}'), null)
+const inputGate = new ReviewInputGate()
+let ready = false
+const initial = inputGate.wait(0).then(() => { ready = true })
+await Promise.resolve(); assert.equal(ready, false)
+inputGate.observe({ revision: 0, status: 'ready' }); await initial
+let forwarded = false
+const waiting = inputGate.wait(1).then(() => { forwarded = true })
+inputGate.observe({ revision: 0, status: 'cancelled' }); await Promise.resolve()
+assert.equal(forwarded, false, 'old acknowledgement cannot admit new input')
+inputGate.observe({ revision: 1, status: 'cancelled' }); await waiting
+assert.equal(forwarded, true)
+const missing = inputGate.wait(2)
+inputGate.fail(new Error('native exited'))
+await assert.rejects(missing, /native exited/)
+assert.equal(reviewSessionCanClose(1, { active: false, followUps: 0 }, { inputs: 2, followUps: 0 }), false, 'the previous task result must not close a newly submitted task')
+assert.equal(reviewSessionCanClose(2, { active: false, followUps: 0 }, { inputs: 2, followUps: 1 }), false, 'earlier plugin followup results are not new user task results')
+assert.equal(reviewSessionCanClose(3, { active: false, followUps: 0 }, { inputs: 2, followUps: 1 }), true)

@@ -4,9 +4,9 @@ const options = { assistance_mode: 'supervise', execution_mode: 'off', verifier_
 const reply = () => JSON.stringify({ reviewed: ['architecture'], judgment: { dimension: 'architecture', question: 'Should the public interface be replaced?', requirementQuote: 'Preserve the API.', sourceIds: ['req', 'plan-1'], reason: 'The proposed replacement removes the existing entry point.', impact: 'Caller compatibility.', recommendation: 'adjust', uncertainty: 'The complete caller set is unknown.' }, action: { kind: 'none' } })
 const world = (on: Parameters<TestBody>[1]) => {
   mock.store(on); const clock = mock.clock(on, { now: 100000 })
-  const state = { calls: 0, unanswered: false, unansweredReason: 'aborted', logLimit: Infinity, nextPromptWait: undefined as Promise<void> | undefined, cwd: '/p', submitted: [] as string[], echo: true, timeouts: [] as number[], prompts: [] as string[], logs: [] as string[], processActions: [] as string[], validateDelay: 0, wait: undefined as Promise<void> | undefined, outputs: [reply(), reply()], rows: [{ role: 'assistant', text: 'Plan: replace the public method.', toolUses: [{ tool: 'Read', input: { file_path: '/p/api.js' }, text: 'exports.old = () => 1' }] }] }
+  const state = { controlPath: '', control: JSON.stringify({ version: 1, revision: 0 }), calls: 0, unanswered: false, unansweredReason: 'aborted', logLimit: Infinity, nextPromptWait: undefined as Promise<void> | undefined, cwd: '/p', submitted: [] as string[], echo: true, timeouts: [] as number[], prompts: [] as string[], logs: [] as string[], processActions: [] as string[], validateDelay: 0, wait: undefined as Promise<void> | undefined, outputs: [reply(), reply()], rows: [{ role: 'assistant', text: 'Plan: replace the public method.', toolUses: [{ tool: 'Read', input: { file_path: '/p/api.js' }, text: 'exports.old = () => 1' }] }] }
   on('session.id', () => ({ value: 'review-session' })); on('session.model', () => ({ value: 'fixture' })); on('session.cwd', () => ({ value: state.cwd })); on('session.messages', () => ({ value: state.rows }) as never)
-  on('env.get', () => ({ value: 'on' })); on('ui.status', () => ({ value: undefined })); on('ui.log', (_$, e) => { state.logs.push(e.text.slice(0, state.logLimit)); return { value: undefined } })
+  on('env.get', (_$, e) => ({ value: e.name === 'DEEPSEEK_SUPERVISOR_CONTROL_FILE' ? state.controlPath : 'on' })); on('fs.read', () => ({ value: state.control })); on('ui.status', () => ({ value: undefined })); on('ui.log', (_$, e) => { state.logs.push(e.text.slice(0, state.logLimit)); return { value: undefined } })
   on('command.register', (_$, e) => ({ value: { command: e.name } })); on('session.start', () => ({ cwd: '/p' })); on('prompt.submit', async (_$, e) => { state.submitted.push(e.text); if (e.text === 'New queued task.' && state.nextPromptWait) await state.nextPromptWait; return { text: e.text } as never })
   on('classic.PostToolBatch', () => ({ additionalContext: ['host context'] }) as never); on('classic.Stop', () => ({}) as never)
   on('turn.complete', (_$, e) => ({ text: e.answer })); on('session.end', (_$, e) => ({ sessionId: e.sessionId }))
@@ -347,4 +347,40 @@ test('new human input cancels old work before the host finishes accepting its qu
   expect((await batch($)).additionalContext).toEqual(['host context'])
   expect(state.calls).toBe(1)
   accept(); await next
+})
+
+test('headless input notification cancels a pending review before native prompt admission', { options }, async ($, on) => {
+  const { state, clock } = world(on)
+  state.controlPath = '/private/review-control'
+  await start($)
+  let release = () => {}; state.wait = new Promise<void>(resolve => { release = resolve })
+  await batch($); await flushBackground(clock)
+  expect(state.calls).toBe(1)
+  state.control = JSON.stringify({ version: 1, revision: 1 })
+  await clock.advance(200); await flushBackground(clock)
+  expect(state.logs.some(line => line.includes('REVIEW_CONTROL') && line.includes('"revision":1') && line.includes('"status":"cancelled"'))).toBe(true)
+  release(); await flushBackground(clock)
+  expect((await batch($)).additionalContext).toEqual(['host context'])
+  await observeStop($, clock, 'Old main completed.')
+  expect(state.calls).toBe(1)
+  expect(state.submitted.filter(text => text.includes('Engineering review')).length).toBe(0)
+  // Only actual native admission of the new user prompt opens its new budget.
+  state.wait = undefined
+  await $.prompt.submit({ text: 'Preserve the API.', origin: { kind: 'sdk' } } as never)
+  await observeBatch($, clock)
+  expect(state.calls).toBe(2)
+})
+
+test('an unreadable configured input channel drops old feedback without authorizing replacement work', { options }, async ($, on) => {
+  const { state, clock } = world(on)
+  state.controlPath = '/private/review-control'
+  await start($)
+  let release = () => {}; state.wait = new Promise<void>(resolve => { release = resolve })
+  await batch($); await flushBackground(clock)
+  state.control = 'broken'
+  await clock.advance(200); await flushBackground(clock)
+  release(); await flushBackground(clock)
+  expect((await batch($)).additionalContext).toEqual(['host context'])
+  expect(state.calls).toBe(1)
+  expect(state.logs.some(line => line.includes('REVIEW_CONTROL') && line.includes('"status":"unavailable"'))).toBe(true)
 })

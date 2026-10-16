@@ -12,7 +12,7 @@
 
 ## Current status
 
-Candidate code and all ordinary checks (248 host tests) pass. Native late35s feedback succeeds, but the SDK queues new input/off until the side request finishes. The required cancellation/lifetime gate is not satisfied. Tasks3/4 and the single final fresh review remain incomplete; no paid follow-up. See [evidence and limits](../../evals/2026-10-16-historical-review.md).
+The repository-owned headless adapter now announces cancellation through a private revision file before forwarding native input. Free actual-plugin new/off cancellation and late35s delivery passed;250 host tests and all ordinary checks passed. Final whole-change review and latest native repeat are pending. No Claude Code/Router/generated declarations changed; direct native clients without this adapter and interactive terminal cancellation remain unverified. No paid follow-up. See [evidence and limits](../../evals/2026-10-16-historical-review.md).
 
 ## Global Constraints
 

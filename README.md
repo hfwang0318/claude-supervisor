@@ -45,11 +45,13 @@ If anything raised this turn is still open, **the turn does not end**: the model
 
 ### 3. Side-model checks (experimental P0 foundation)
 
-The historical semantic scheduler on this development branch is a candidate with
-an open native SDK cancellation gate. Late feedback works, but a second SDK input
-or `/off` can remain queued until its model request ends; immediate cancellation
-is not established. Do not start another paid observation from this candidate.
-See [the lifecycle evidence and remaining gate](docs/evals/2026-10-16-historical-review.md).
+Historical semantic reviews have no plugin model-wait timeout. The repository's
+headless adapter uses a private cancel-only notification before forwarding new
+input, off or interrupt; free native tests cover cancellation and a35-second late
+reply. Claude Code remains unmodified. Direct native SDK clients that bypass this
+adapter can still delay input; interactive terminal cancellation is unverified.
+Final whole-change review is pending, and no new paid observation was started.
+See [integration evidence and limits](docs/evals/2026-10-16-historical-review.md).
 
 Leave `verifier_model` empty to use the host's current worker model, including
 host aliases. Set it to use another side model. No model-ID capability ranking,

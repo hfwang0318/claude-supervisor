@@ -106,6 +106,7 @@ type Runtime = {
   jobNumber: number; modelDisabled: boolean; cfg: Config; stateUsable: boolean; journal: Promise<unknown>; recordEnd: number; workerModel: string | null; factsAttempted: boolean
   reviewSignatures: Set<string>; reviewAttempts: number; reviewStopSent: boolean; reviewRecoveryUsed: boolean; reviewSkipKeys: Set<string>
   reviewPending?: { binding: Binding; token: number }; reviewReady?: PreparedReview; reviewDraining?: { binding: Binding }; reviewInputPending?: string; reviewSequence: number; mainActive: boolean; reviewCwd: string
+  reviewControl?: { path: string; revision: number; busy: boolean; timer?: ReturnType<EngineInterface['clock']['every']> }
 }
 const sessions = new Map<string, Runtime>()
 const runtimeOf = async ($: EngineInterface): Promise<Runtime> => {
@@ -442,7 +443,40 @@ const finishReview = async ($: EngineInterface, prepared: PreparedReview | null)
 }
 
 const semanticMode = (s: Runtime) => ['supervise', 'probe', 'recovery'].includes(s.cfg.assistanceMode)
-const reviewLifecycle = ($: EngineInterface, s: Runtime) => say($, `REVIEW_LIFECYCLE ${JSON.stringify({ active: !!(s.reviewPending || s.reviewReady || s.reviewDraining), followUps: s.followUps })}`)
+const reviewLifecycle = ($: EngineInterface, s: Runtime) => say($, `REVIEW_LIFECYCLE ${JSON.stringify({ active: !!(s.reviewPending || s.reviewReady || s.reviewDraining), followUps: s.followUps, taskRevision: s.coordinator.binding.taskRevision })}`)
+
+// The optional headless adapter announces an input before native SDK admission.
+// This channel may only revoke work: it cannot submit text, enable supervision,
+// restore budget, or authorize an action. Real prompt admission still owns those.
+const readReviewControl = async ($: EngineInterface, path: string) => {
+  const text = await $.fs.read(path)
+  if (text.length > 128) throw Error('invalid review control')
+  const value = JSON.parse(text)
+  if (value?.version !== 1 || !Number.isSafeInteger(value.revision) || value.revision < 0) throw Error('invalid review control')
+  return value.revision as number
+}
+const pollReviewControl = async ($: EngineInterface, s: Runtime) => {
+  const control = s.reviewControl
+  if (!control || control.busy || sessions.get(s.coordinator.binding.sessionId) !== s) return
+  control.busy = true
+  try {
+    let revision: number | null
+    try { revision = await readReviewControl($, control.path) } catch { revision = null }
+    if (s.reviewControl !== control || sessions.get(s.coordinator.binding.sessionId) !== s) return
+    if (revision === control.revision) return
+    // A missing/replaced/malformed channel fails closed; never release the gate
+    // merely because an untrusted file supplied an older revision.
+    const valid = revision !== null && revision > control.revision
+    if (valid && revision !== null) control.revision = revision
+    else { control.timer?.cancel(); s.reviewControl = undefined }
+    const generationId = `adapter-input-${++s.jobNumber}`
+    s.reviewInputPending = generationId
+    s.coordinator.invalidate({ ...s.coordinator.binding, generationId }, { preserveBudget: true, now: await $.clock.now(), reason: 'cancelled' })
+    s.reviewPending = undefined; s.reviewReady = undefined
+    await say($, `REVIEW_CONTROL ${JSON.stringify({ revision, status: valid ? 'cancelled' : 'unavailable' })}`)
+    await reviewLifecycle($, s)
+  } finally { control.busy = false }
+}
 
 const refreshReviewProject = async ($: EngineInterface, s: Runtime) => {
   await selectionOf($)
@@ -975,6 +1009,19 @@ export const register: Register = (on, options) => {
     s.modelDisabled = false
     s.cfg = configOf(options)
     s.coordinator = new Coordinator({ ...s.coordinator.binding }, { historical: semanticMode(s) })
+    s.reviewControl?.timer?.cancel(); s.reviewControl = undefined
+    const controlPath = semanticMode(s) ? await $.env.get('DEEPSEEK_SUPERVISOR_CONTROL_FILE') : undefined
+    if (controlPath?.startsWith('/') && !controlPath.includes('\0')) {
+      try {
+        const revision = await readReviewControl($, controlPath)
+        s.reviewControl = { path: controlPath, revision, busy: false }
+        s.reviewControl.timer = $.clock.every(100, () => { void pollReviewControl($, s).catch(() => undefined) })
+        await say($, `REVIEW_CONTROL ${JSON.stringify({ revision, status: 'ready' })}`)
+      } catch {
+        s.reviewInputPending = 'adapter-unavailable'
+        await say($, 'REVIEW_CONTROL {"revision":null,"status":"unavailable"}')
+      }
+    }
     s.reviewPending = undefined; s.reviewReady = undefined; s.mainActive = true; s.reviewCwd = await $.session.cwd()
     s.factsAttempted = false
     s.reviewSignatures.clear(); s.reviewAttempts = 0; s.reviewStopSent = false; s.reviewRecoveryUsed = false; s.reviewSkipKeys.clear()
@@ -1144,6 +1191,7 @@ export const register: Register = (on, options) => {
 
   on('session.end', async ($, e, next) => {
     const s = sessions.get(e.sessionId)
+    s?.reviewControl?.timer?.cancel()
     if (s) s.coordinator.invalidate({ ...s.coordinator.binding, generationId: 'ended' })
     sessions.delete(e.sessionId)
     return next(e)
