@@ -31,6 +31,12 @@
       "title": "Experimental assistance",
       "description": "existing (default), facts (legacy location help), supervise (requirements, plan, architecture, direction and validation review), probe or recovery (single-action review). One shared model flow and budget; record rules remain active.",
       "default": "existing"
+    },
+    "review_phase": {
+      "type": "string",
+      "title": "Semantic review phase",
+      "description": "auto (default) or plan, exploration, implementation, failure, completion. Defer semantic admission until the selected evidence-based phase; never fall back to an earlier phase or add budget. Unknown values disable semantic calls. Record rules stay active.",
+      "default": "auto"
     }
   },
   "keywords": [

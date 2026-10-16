@@ -504,3 +504,77 @@ test('exhausted native reservation is diagnosed before preparing an undispatchab
   expect(state.logs.some(l => l.includes('REVIEW ') && l.includes('budget-exhausted'))).toBe(true)
   expect(state.logs.some(l => l.includes('REVIEW ') && l.includes('review-unanswered'))).toBe(false)
 })
+
+const checkedImplementation = (state: ReturnType<typeof world>['state']) => {
+  state.rows.push({ role: 'assistant', text: '', toolUses: [
+    { tool: 'Edit', input: { file_path: '/p/api.js', old_string: 'exports.old = () => 1', new_string: 'exports.old = () => 2' }, text: 'updated' },
+    { tool: 'Bash', input: { command: 'npm test' }, text: '1 passed', result: { exitCode: 0 } },
+  ] } as never)
+}
+test('implementation selection preserves the call through early plan and unchecked edits until a recorded check', { options: { ...options, review_phase: 'implementation' } }, async ($, on) => {
+  const { state, clock } = world(on); await start($)
+  await observeBatch($, clock)
+  expect(state.calls).toBe(0)
+  state.rows[0]!.text = ''
+  state.rows.push({ role: 'assistant', text: '', toolUses: [{ tool: 'Read', input: { file_path: '/p/other.js' }, text: 'exports.other = () => 1' }] })
+  await observeBatch($, clock); expect(state.calls).toBe(0)
+  state.rows.push({ role: 'assistant', text: 'Plan: preserve the public interface while changing the implementation.', toolUses: [] })
+  state.rows.push({ role: 'assistant', text: '', toolUses: [{ tool: 'Edit', input: { file_path: '/p/api.js', old_string: 'exports.old = () => 1', new_string: 'exports.old = () => 2' }, text: 'updated' }] } as never)
+  await observeBatch($, clock)
+  expect(state.calls).toBe(0)
+  expect(state.logs.some(l => l.includes('REVIEW_INPUT '))).toBe(false)
+  state.rows.push({ role: 'assistant', text: '', toolUses: [{ tool: 'Bash', input: { command: 'npm test' }, text: '1 passed', result: { exitCode: 0 } }] } as never)
+  const result = await observeBatch($, clock)
+  expect(state.calls).toBe(1)
+  expect(JSON.parse(state.prompts[0]!.split('\n\n').at(-1)!).phase).toBe('implementation')
+  expect(result.additionalContext?.join('\n')).toContain('Caller compatibility')
+  await observeBatch($, clock); expect(state.calls).toBe(1)
+})
+test('plan selection cannot turn source exploration into an invented plan', { options: { ...options, review_phase: 'plan' } }, async ($, on) => {
+  const { state, clock } = world(on); await start($)
+  state.rows[0]!.text = ''
+  state.rows.push({ role: 'assistant', text: '', toolUses: [{ tool: 'Read', input: { file_path: '/p/other.js' }, text: 'exports.other = () => 1' }] })
+  await observeBatch($, clock); expect(state.calls).toBe(0)
+  state.rows.push({ role: 'assistant', text: 'Plan: keep the old interface and adapt the internal implementation.', toolUses: [] })
+  await observeBatch($, clock); expect(state.calls).toBe(1)
+  expect(JSON.parse(state.prompts[0]!.split('\n\n').at(-1)!).phase).toBe('plan')
+})
+test('a selected phase never falls back to completion when its evidence does not occur', { options: { ...options, review_phase: 'implementation' } }, async ($, on) => {
+  const { state, clock } = world(on); await start($); await observeBatch($, clock)
+  await observeStop($, clock, 'No code was changed.')
+  expect(state.calls).toBe(0)
+  expect(state.logs.some(l => l.includes('phase-deferred'))).toBe(true)
+})
+test('failure selection preserves its opportunity until a real failed check', { options: { ...options, review_phase: 'failure' } }, async ($, on) => {
+  const { state, clock } = world(on); await start($); await observeBatch($, clock)
+  expect(state.calls).toBe(0)
+  state.rows.push({ role: 'assistant', text: '', toolUses: [{ tool: 'Bash', input: { command: 'npm test' }, text: '1 failed', result: { exitCode: 1 } }] } as never)
+  await observeBatch($, clock); expect(state.calls).toBe(1)
+  expect(JSON.parse(state.prompts[0]!.split('\n\n').at(-1)!).phase).toBe('failure')
+})
+test('completion selection reserves its call for the actual final claim', { options: { ...options, review_phase: 'completion' } }, async ($, on) => {
+  const { state, clock } = world(on); await start($); await observeBatch($, clock)
+  expect(state.calls).toBe(0)
+  await observeStop($, clock, 'Changed the public interface without caller tests.')
+  expect(state.calls).toBe(1)
+  const ctx=JSON.parse(state.prompts[0]!.split('\n\n').at(-1)!)
+  expect(ctx.phase).toBe('completion')
+  expect(ctx.sources.some((s: {kind:string})=>s.kind==='answer')).toBe(true)
+})
+test('unknown phase selection refuses semantic calls instead of silently using auto', { options: { ...options, review_phase: 'all-at-once' } }, async ($, on) => {
+  const { state, clock } = world(on); await start($); await observeBatch($, clock)
+  expect(state.calls).toBe(0)
+  expect(state.logs.some(l=>l.includes('invalid-review-phase'))).toBe(true)
+})
+test('cancellation after a selected implementation call prevents late delivery', { options: { ...options, review_phase: 'implementation' } }, async ($, on) => {
+  const { state, clock } = world(on); await start($); await observeBatch($, clock)
+  expect(state.calls).toBe(0)
+  checkedImplementation(state)
+  let release=()=>{};state.wait=new Promise<void>(r=>{release=r})
+  const pending=observeBatch($,clock)
+  for(let i=0;i<20&&!state.calls;i++)await clock.advance(10)
+  expect(state.calls).toBe(1)
+  await $.turn.complete({answer:'',durationMs:1,isAborted:true,turnId:'t',reason:'aborted'} as never)
+  release();await flushBackground(clock)
+  expect((await pending).additionalContext).toEqual(['host context'])
+})

@@ -72,6 +72,10 @@ export const hasExplorationEvidence = (context: ReviewContext): boolean => {
   return new Set(observations).size >= 2
 }
 
+// Admission timing only; the caller first establishes an eligible evidence-based
+// context. This does not restrict judgment dimensions or grant any extra budget.
+export const reviewPhaseMatches = (selection: 'auto' | ReviewContext['phase'], context: ReviewContext): boolean => selection === 'auto' || selection === context.phase
+
 export const availableDimensions = (context: ReviewContext): ReviewDimension[] => {
   const has = (kind: ReviewSource['kind']) => context.sources.some(s => s.kind === kind)
   return REVIEW_DIMENSIONS.filter(d => d === 'requirement-plan' ? has('plan') : d === 'plan-implementation' ? has('plan') && has('change') : d === 'verification' || d === 'recovery' ? has('observation') : has('plan') || has('change') || has('tool') || has('observation') || has('answer'))

@@ -251,3 +251,14 @@ supervise仅一次语义调用，16746ms、timeout=null、5703input／770output�
 另补清前面对default的解释：评测`reasoning:default`只在本地metadata，不是发送给GLM的合法档位。本轮Router记录的主请求实际有`output_config:{effort:high}`和`thinking:{type:adaptive,display:updates}`，旁路为low；这说明原生客户端/路由请求有实际字段，不能继续把主模型请求说成没有effort。当前证据到Router记录层，尚未证明最终GLM参数映射或内部思考档位。规范化记录observed-main-controls.json／router-body-recovery.json；不修改活动／冻结配置。
 
 本轮没发现需要放宽安全边界的新产品错误。明确覆盖瓶颈是一次4000wire预留在探索阶段耗尽，后续真实implementation／failure机会不可审。下一阶段保留总预算和默认auto行为，增加可选择的审查阶段，让单次调用留给指定的真实阶段（优先implementation），不伪造方案、没有目标机会则不调用、不回退探索。该批先本地TDD及免费真实轨迹回放，再完整普通检查和新冻结版本，才下一单题；不无变化重跑探索或扩预算。120项关键hash保全；全维度质量目标尚未完成。
+
+
+## 固定预算的阶段准入批次
+
+已实现可选review_phase，默认auto保持原行为；指定plan／exploration／implementation／failure／completion时，先按原证据构造真实阶段，再决定是否准入，延后不会预留输出、发模型或生成prepared输入，目标不出现就不回退。未知值明确invalid-review-phase，确定性规则继续。阶段选择仅改变时机，同次仍审所有有材料的维度，缺方案仍不能审两个一致性维度。工具执行、历史来源与取消边界、一次4000wire预留均不变。
+
+生产manifest／config、REVIEW诊断、冻结runtime identity.reviewPhase／插件默认值及experiment.reviewPhase全部绑定。冻结器拒绝无效phase或非supervise模式的非auto选择；加载器拒绝插件与identity不同，旧身份缺字段只兼容auto。不是通过改Claude Code、全局Router或增加调用预算观察后期。
+
+宿主新增7项：首次RED274pass6fail，其中取消控制原已通过；目标时机、无回退、未知值等失败修复后GREEN280pass0fail。后补的实质探索／无方案等输入变体与全部旧测试共同通过。adapter首次RED预期implementation实际undefined，修复后含identity mismatch／旧auto兼容等自测通过。最后完整node scripts/check.mjs exit0（phase-batch-final-checks.log），不是只跑host。
+
+免费同冻结Linux原生phase-native-replay/receipt.json，networknone／0模型／0项目命令：从008真实supervise session的Router记录在内存绑定，排除thinking和metadata，只重放公开工具记录并经生产redact；原实质探索在auto允许、implementation选择下延后。真实17:00:21检查点的公开轨迹由生产evidenceOf／changesOf得到16088字符改动、末次检查成功且在编辑之后，生产buildReviewContext含真实change／observation，implementation可准入而failure不匹配。没有重建旧项目工作区，实际模型判断质量仍待新版本单题观察。120旧关键hash保持。本批作者TDD及差异审查，不把历史freshreview扩大到新代码。

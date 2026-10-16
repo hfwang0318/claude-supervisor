@@ -180,3 +180,6 @@ Round008已完成免费门禁并唯一启动：source3a4c224，seed1cb72b2bae465
 下一批是已授权全维度分阶段观察的最小准入选择：可配置review_phase，默认auto维持现状；选定plan/exploration/implementation/failure/completion时，只在原证据规则判断为该阶段后准入，不提前预留／发模型、不自动fallback、不伪造方案。阶段选择不收窄判断维度，同次审查仍看全部当时可用材料；取消／绑定／独立执行／4000wire／无模型等待timeout均不变。生产插件、冻结runtime身份及实验配置要绑定同一选择，未知选择必须拒绝，避免配置声称目标阶段而实际auto。
 
 本地RED覆盖：早期实质探索延后不消费；真实目标阶段一次调用；编辑未检查不能冒充implementation；无明确方案不能满足plan；取消／off／预算边界保持；目标未发生不回退；默认auto兼容；冻结配置与identity不同拒绝。免费用008真实公开轨迹核对探索被延后而implementation可准入，0付费不重建旧工作区。批次全node scripts/check.mjs通过后才新source/out抽一双失败E/S；优先implementation的质量问题而非重复探索。此处仅后续设计，尚未实现或启动009。
+
+
+阶段准入批次已实现，默认auto、选择阶段不增预算。280宿主及完整普通检查通过；冻结phase绑定／mismatch控制和同冻结Linux断网008真实公开轨迹回放通过（16088字符真实改动＋编辑后成功check，早期延后、implementation准入），0paid／0项目命令。120原hash保持。下一轮新版本固定抽一双失败，supervise仅implementation时机；目标为改动／架构／方向／验证等实际判断质量，缺方案仍不虚构一致性，不求官方pass。

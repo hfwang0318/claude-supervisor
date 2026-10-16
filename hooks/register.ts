@@ -7,7 +7,7 @@ import { validateObservation, normalizeTrack } from '../supervisor/ledger'
 import { captureSnapshot } from '../supervisor/workspace'
 import { buildAssistPacket, buildLocalAssistPacket, parseFactRequest, assistSignal, assistNote, localFactRequest } from '../supervisor/assist'
 import { Coordinator, sameBinding, sameTask } from '../supervisor/coordinator'
-import { buildReviewContext, parseReview, reviewPrompt, reviewInputLogs, REVIEW_DIMENSIONS, hasExplorationEvidence } from '../supervisor/review'
+import { buildReviewContext, parseReview, reviewPrompt, reviewInputLogs, REVIEW_DIMENSIONS, hasExplorationEvidence, reviewPhaseMatches } from '../supervisor/review'
 import { runHistoricalReviewFlow, historicalReviewOutcome } from '../supervisor/review-flow'
 import type { ReviewOutcome } from '../supervisor/review-flow'
 import type { ReviewContext, ReviewReply } from '../supervisor/contracts'
@@ -64,8 +64,9 @@ const isHidden = atom({ plugin: 'deepseek-supervisor', key: 'isHidden' } as cons
 const EMPTY: Track = { schemaVersion: 2, nextId: 1, issues: [], seen: [], runs: 0 }
 const track = atom({ plugin: 'deepseek-supervisor', key: 'track' } as const, EMPTY)
 
-type Config = { verifierModel: string; reviewChanges: boolean; executionMode: 'off' | 'shadow' | 'enabled'; assistanceMode: 'existing' | 'facts' | 'supervise' | 'probe' | 'recovery' }
+type Config = { reviewPhase: 'auto' | ReviewContext['phase'] | null; verifierModel: string; reviewChanges: boolean; executionMode: 'off' | 'shadow' | 'enabled'; assistanceMode: 'existing' | 'facts' | 'supervise' | 'probe' | 'recovery' }
 const configOf = (options: PluginOptions | undefined): Config => ({
+  reviewPhase: options?.review_phase === undefined ? 'auto' : ['auto', 'plan', 'exploration', 'implementation', 'failure', 'completion'].includes(options.review_phase as string) ? options.review_phase as 'auto' | ReviewContext['phase'] : null,
   // Empty means follow the host's current worker; no capability ranking applies.
   verifierModel: typeof options?.verifier_model === 'string' ? options.verifier_model.trim() : '',
   assistanceMode: options?.assistance_mode === 'facts' || options?.assistance_mode === 'supervise' || options?.assistance_mode === 'probe' || options?.assistance_mode === 'recovery' ? options.assistance_mode : 'existing',
@@ -363,12 +364,13 @@ const engineeringReview = async ($: EngineInterface, list: Rows, final = false, 
     const key = `${phase}:${reason}`
     if (s.reviewSkipKeys.has(key) || s.reviewSkipKeys.size >= 32) return null
     s.reviewSkipKeys.add(key)
-    const event = { kind: 'engineering-review', binding, mode, phase, result: 'skipped', reason, reviewed: [], unreviewed: REVIEW_DIMENSIONS }
+    const event = { kind: 'engineering-review', binding, mode, phase, reviewPhase: s.cfg.reviewPhase, result: 'skipped', reason, reviewed: [], unreviewed: REVIEW_DIMENSIONS }
     await remember($, event)
     say($, `REVIEW ${JSON.stringify(event)}`)
     return null
   }
   if (!s.stateUsable || !captured.asked) return skipped('context-unavailable')
+  if (s.cfg.reviewPhase === null) return skipped('invalid-review-phase')
   if (s.reviewAttempts >= 2) return skipped('budget-exhausted')
   if (s.modelDisabled) return skipped('side-model-unavailable')
   if (!s.coordinator.modelBudgetAvailable) return skipped('budget-exhausted')
@@ -382,6 +384,7 @@ const engineeringReview = async ($: EngineInterface, list: Rows, final = false, 
     if (!hasExplorationEvidence(context)) return skipped('insufficient-exploration-evidence')
     phase = 'exploration'; context.phase = phase
   }
+  if (!reviewPhaseMatches(s.cfg.reviewPhase, context)) return skipped('phase-deferred')
   if (mode === 'recovery' && (s.reviewRecoveryUsed || !recoveryObservations(context).length)) return skipped(s.reviewRecoveryUsed ? 'recovery-already-offered' : 'insufficient-recovery-evidence')
   const material = phase === 'exploration' ? context.sources.filter(source => source.kind === 'requirement') : phase === 'plan' ? context.sources.filter(source => source.kind === 'plan' || source.kind === 'requirement') : context.sources
   const key = `${phase}:${signatureOfChange(JSON.stringify(material))}`
@@ -433,7 +436,7 @@ const engineeringReview = async ($: EngineInterface, list: Rows, final = false, 
       const second = await ask($, prompt, deadlineMs - await $.clock.now(), job.signal)
       return second?.isAnswered ? second.text : null
     } })
-    const event = { kind: 'engineering-review', id, binding, mode, phase, contextScope: context.scope, reviewed: decision.reviewed, unreviewed: REVIEW_DIMENSIONS.filter(d => !decision.reviewed.includes(d)), judgment: decision.judgment, action: decision.action.kind, actionProtocol: outcome.actionProtocol, reason: outcome.reason, independentExecution: outcome.evidence !== null, sourceIds: context.sources.map(source => source.id), supplementalFacts: outcome.view?.facts.filter(f => outcome!.sourceFactIds.includes(f.id)).map(f => ({ id: f.id, path: f.path, line: f.startLine, fileHash: f.fileHash })) ?? [], observation: outcome.evidence ? { id: outcome.evidence.id, outcome: outcome.evidence.outcome, binding: outcome.evidence.binding, truncated: outcome.evidence.truncated } : null }
+    const event = { kind: 'engineering-review', id, binding, mode, phase, reviewPhase: s.cfg.reviewPhase, contextScope: context.scope, reviewed: decision.reviewed, unreviewed: REVIEW_DIMENSIONS.filter(d => !decision.reviewed.includes(d)), judgment: decision.judgment, action: decision.action.kind, actionProtocol: outcome.actionProtocol, reason: outcome.reason, independentExecution: outcome.evidence !== null, sourceIds: context.sources.map(source => source.id), supplementalFacts: outcome.view?.facts.filter(f => outcome!.sourceFactIds.includes(f.id)).map(f => ({ id: f.id, path: f.path, line: f.startLine, fileHash: f.fileHash })) ?? [], observation: outcome.evidence ? { id: outcome.evidence.id, outcome: outcome.evidence.outcome, binding: outcome.evidence.binding, truncated: outcome.evidence.truncated } : null }
     await remember($, event)
     const metadata = event
     say($, `REVIEW ${JSON.stringify({ ...metadata, dimension: decision.judgment?.dimension ?? null, recommendation: decision.judgment?.recommendation ?? null })}`)

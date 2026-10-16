@@ -121,6 +121,9 @@ probe 的 `files` 只接受 `__supervisor_probes/` 下新脚本的 `{path, conte
 没有明示方案时，两个不同的有效 Read／Grep 结果可开启每提示一次的探索阶段审查，
 基于真实记录判断架构、方向和探索策略；缺失方案仍未知，两个方案一致性维度不能声称已审。
 失败、未完成、截断或重复读取不触发该机会；后续读取不重复启动，后续阶段继续共用原预算。
+`review_phase` 默认 `auto`；可指定 `plan`、`exploration`、`implementation`、`failure` 或 `completion`，
+把同一预算内的模型准入留到有真实证据的目标阶段。目标未出现就不调用、不自动回退，未知值拒绝语义审查。
+它只选择时机，不收窄审查维度、不增加预算或执行权限；确定性规则仍工作，冻结评测身份绑定该设置，阶段不同需分开解释。
 
 `execution_mode=off` 允许建议及明确未执行的复现候选；`shadow` 仅留诊断，不反馈主模型；
 `enabled` 仅能通过已验证隔离副本执行。当前 Linux 评测容器等无独立隔离能力的环境只给未执行建议，
@@ -299,6 +302,7 @@ claude plugin install deepseek-supervisor@deepseek-supervisor
 |---|---|---|
 | `verifier_model` | 当前主模型 | 留空时跟随主模型；填写 ID 或宿主别名可选择其他旁路模型 |
 | `execution_mode` | `off` | 保留建议；`shadow` 不反馈；`enabled` 允许已验证隔离执行 |
+| `review_phase` | `auto` | 可选真实证据审查阶段；延后调用，不增加预算或回退 |
 | `assistance_mode` | `existing` | `supervise` 覆盖各过程判断；`facts`／`probe`／`recovery` 分别限定证据行动 |
 | `review_changes` | `true` | 一轮改了代码时，验证者也审查本轮改动 |
 

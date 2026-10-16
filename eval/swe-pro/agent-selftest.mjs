@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { reviewSessionCanClose, parseReviewLifecycle, parseReviewControl, ReviewInputGate } from './review-session.mjs'
-import { agentArgs, agentEnvironment, frozenDefaults, patchArgs } from './agent.mjs'
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs'
+import { agentArgs, agentEnvironment, frozenDefaults, patchArgs, assertRuntimeModes } from './agent.mjs'
+import { mkdtempSync, writeFileSync, rmSync, mkdirSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { execFileSync, spawn } from 'node:child_process'
@@ -17,6 +17,29 @@ assert.equal(args[args.indexOf('--tools') + 1].includes('Web'), false)
 assert.equal(args.includes('/opt/eval/plugin-facts'), true)
 for (const mode of ['facts', 'existing']) assert.deepEqual(frozenDefaults(mode), { verifier_model: 'zhipu/glm-5.3-flash', execution_mode: 'off', assistance_mode: mode })
 assert.throws(() => frozenDefaults('probe'), /mode/)
+assert.equal(frozenDefaults('supervise', { reviewPhase: 'implementation' }).review_phase, 'implementation')
+assert.throws(() => frozenDefaults('supervise', { reviewPhase: 'unknown' }), /phase/)
+assert.throws(() => frozenDefaults('existing', { reviewPhase: 'implementation' }), /phase/)
+const phaseRuntime = mkdtempSync(join(tmpdir(), 'swe-pro-phase-test-'))
+try {
+  const identity = { armModes: { existing: 'existing', facts: 'supervise' }, reviewPhase: 'implementation' }
+  const writeConfig = (slot, mode, phase) => {
+    const dir = join(phaseRuntime, 'plugin-' + slot, '.claude-plugin');mkdirSync(dir, { recursive: true })
+    const defaults = frozenDefaults(mode)
+    const userConfig = Object.fromEntries(Object.entries(defaults).map(([k, v]) => [k, { default: v }]))
+    userConfig.review_phase = { default: phase }
+    writeFileSync(join(dir, 'plugin.json'), JSON.stringify({ userConfig }))
+  }
+  writeConfig('existing', 'existing', 'auto');writeConfig('facts', 'supervise', 'implementation')
+  assert.deepEqual(assertRuntimeModes(phaseRuntime, identity, 'supervise'), identity.armModes)
+  writeConfig('facts', 'supervise', 'auto')
+  assert.throws(() => assertRuntimeModes(phaseRuntime, identity, 'supervise'), /phase/)
+  writeConfig('facts', 'supervise', 'implementation')
+  assert.throws(() => assertRuntimeModes(phaseRuntime, { ...identity, reviewPhase: 'plan' }, 'supervise'), /phase/)
+  assert.throws(() => assertRuntimeModes(phaseRuntime, { ...identity, reviewPhase: 'unknown' }, 'supervise'), /phase/)
+  writeConfig('facts', 'supervise', 'auto')
+  assert.doesNotThrow(() => assertRuntimeModes(phaseRuntime, { armModes: identity.armModes }, 'supervise'))
+} finally { rmSync(phaseRuntime, { recursive: true, force: true }) }
 const env = agentEnvironment()
 for (const key of ['ANTHROPIC_DEFAULT_SONNET_MODEL', 'ANTHROPIC_DEFAULT_OPUS_MODEL', 'ANTHROPIC_DEFAULT_HAIKU_MODEL', 'CLAUDE_CODE_SUBAGENT_MODEL']) assert.equal(env[key], env.ANTHROPIC_MODEL)
 assert.equal(env.ANTHROPIC_BASE_URL, 'http://model-gateway:8080')

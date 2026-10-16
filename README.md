@@ -176,6 +176,13 @@ covering architecture, direction and exploration from the actual records. The
 missing plan remains unknown; plan-consistency dimensions are not reviewed.
 Pending, failed, truncated or repeated reads do not open this opportunity.
 Later source batches do not repeat it, and later phases share the same budget.
+`review_phase` defaults to `auto`. To observe a later stage under the same budget,
+select `plan`, `exploration`, `implementation`, `failure` or `completion`.
+Semantic admission waits for that evidence-based phase before reserving a call;
+missing target evidence produces no fallback call. Unknown values refuse semantic
+review. Phase selection changes timing, not the dimensions examined or execution
+permissions. Record rules remain active; frozen evaluation identities bind this
+setting, and changed phases are separate observations.
 
 `execution_mode=off` still permits advisory review and explicitly unexecuted
 probe suggestions. `shadow` keeps observations without worker feedback.
@@ -392,6 +399,7 @@ Options, in the `/config` menu or under `pluginConfigs` in settings:
 |---|---|---|
 | `verifier_model` | current worker | Empty follows the worker; an ID or host alias selects another side model |
 | `execution_mode` | `off` | Advisory review remains available; `shadow` suppresses feedback; `enabled` permits validated isolated execution |
+| `review_phase` | `auto` | Optional evidence-based review stage; defers calls without adding budget or fallback |
 | `assistance_mode` | `existing` | `supervise` covers all process judgments; `facts`, `probe`, `recovery` isolate evidence actions |
 | `review_changes` | `true` | At the end of a turn that changed code, the verifier also reviews the change. |
 
