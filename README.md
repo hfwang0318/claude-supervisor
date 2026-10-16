@@ -71,6 +71,10 @@ Other host/model combinations abstain from semantic calls with
 `unverified-output-cap` diagnostics and retain record rules. Existing/facts keep
 their legacy request caps, whose wire bounds are unverified. Observed excess
 closes admission; request-cap usage alone is never a provider stop reason.
+Native negative Grep results remain evidence but do not count as substantive
+source reads for the first exploration review. Response templates include the
+exact historical identities in one raw JSON object; missing identities remain
+rejected. Exhausted call budgets are diagnosed before preparing model input.
 The verified semantic profile sends public `effort: low` as a controlled
 compatibility setting; its actual provider effect and ability to produce JSON
 remain unverified. It does not disable thinking. Inputs and JSON responses are limited

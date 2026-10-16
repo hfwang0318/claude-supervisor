@@ -18,6 +18,7 @@ export class Coordinator {
   constructor(public binding: Binding, private policy: { historical?: boolean } = {}) {}
 
   get historical() { return this.policy.historical === true }
+  get modelBudgetAvailable() { return this.calls > 0 && this.tokens > 0 && this.failures < 2 }
   matches(binding: Binding) { return this.historical ? sameTask(binding, this.binding) : sameBinding(binding, this.binding) }
 
   start(id: string, now: number) {

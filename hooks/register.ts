@@ -371,6 +371,7 @@ const engineeringReview = async ($: EngineInterface, list: Rows, final = false, 
   if (!s.stateUsable || !captured.asked) return skipped('context-unavailable')
   if (s.reviewAttempts >= 2) return skipped('budget-exhausted')
   if (s.modelDisabled) return skipped('side-model-unavailable')
+  if (!s.coordinator.modelBudgetAvailable) return skipped('budget-exhausted')
   if (final && s.reviewStopSent) return skipped('completion-feedback-already-offered')
   const latestPrompt = list.findLastIndex(r => r.role === 'user' && r.text.trim() && !r.text.includes('[deepseek-supervisor]') && !/^\s*<(?:system-reminder|command-|local-command|teammate-message)|^\s*Another Claude session/.test(r.text))
   const rows = latestPrompt < 0 ? list : list.slice(latestPrompt + 1)

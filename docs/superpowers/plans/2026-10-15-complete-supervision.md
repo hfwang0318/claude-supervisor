@@ -148,3 +148,10 @@ Round004已完成2/2及行为审计：原30秒内宿主aborted、本层未收到
 分别记录 requested、wire-known、reserved、observed usage、host reason 和 providerStopReason=null。超出预留的实际消耗补扣并关闭后续派发，不把无法挽回的已消费超额说成提前阻止。usage 超过公开 requested 但未超过预留且有完整回答，仍走原 JSON/来源/Binding 验证。新版本查询的异步取消边界也须覆盖，不能让旧任务查询完成后预支新任务预算。
 
 批次本地回归先 RED 后 GREEN；统一全部普通检查、生产插件断网原生固定回复、原75关键hash保全后，才允许新冻结 source/out 的一个双失败 E/S 观察。下一轮问题是 wire4000/公开low实际交互、可解析历史判断与投递，及所有自然出现维度；不求官方通过，不自动 full。
+
+
+### 2026-10-16 Round006 后：探索时机／协议模板／预算跳过一批修复
+
+Round006已完整2/2，真实low请求4000、3999ms返回99output公开text，但围栏JSON缺少两项checkpoint标识，0判断投递。首次材料仅目录与三条Grep No matches found，却被视为两份实质来源；后续准备了未派发的实现输入，被误记review-unanswered。按用户“一次观察多问题”的要求，同批各自RED→GREEN：仅原生完整负面Grep不计探索触发但保留证据；响应模板给出一个完整可解析对象（包括原样标识）、明确无围栏，不放宽parser；预算不足先跳过，不制造prepared／provider未回答。
+
+269宿主GREEN后统一完整node scripts/check.mjs和免费实际prepared输入重放。新source/out后才下一轮一个固定seed双失败E/S，新的具体问题是触发材料充分、响应遵守原样标识与JSON、预算诊断；所有自然维度并审，仍不求官方通过。不把null judgment当错误建议，也不把无有效输出当七维正常。

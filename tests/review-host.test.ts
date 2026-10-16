@@ -494,3 +494,13 @@ test('public output-budget metadata remains numeric after the observed native to
   expect(event.wireOutput).toBe(4000)
   expect(event.reservedOutput).toBe(4000)
 })
+
+test('exhausted native reservation is diagnosed before preparing an undispatchable review input', { options }, async ($, on) => {
+  const { state, clock } = world(on); await start($); await observeBatch($, clock)
+  state.rows[0]!.text = 'Plan: keep the public interface through a compatibility adapter.'
+  await observeBatch($, clock)
+  expect(state.calls).toBe(1)
+  expect(state.logs.filter(l => l.includes('REVIEW_INPUT ')).length).toBe(1)
+  expect(state.logs.some(l => l.includes('REVIEW ') && l.includes('budget-exhausted'))).toBe(true)
+  expect(state.logs.some(l => l.includes('REVIEW ') && l.includes('review-unanswered'))).toBe(false)
+})

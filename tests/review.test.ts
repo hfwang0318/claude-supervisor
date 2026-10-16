@@ -1,5 +1,5 @@
 import { test, expect } from 'claude-code/testing'
-import { buildReviewContext, parseReview, reviewPrompt, reviewNote, REVIEW_DIMENSIONS } from '../supervisor/review'
+import { buildReviewContext, parseReview, reviewPrompt, reviewNote, REVIEW_DIMENSIONS, hasExplorationEvidence } from '../supervisor/review'
 
 const binding = { sessionId: 's', generationId: 'g', turnId: 't', taskRevision: 1, workspaceRevision: 'v1', snapshotId: 'unknown' }
 const asked = 'Keep one shared timer and preserve the public API.'
@@ -103,4 +103,34 @@ test('checkpointed judgments must echo the host review and checkpoint identity e
   expect(parseReview(tracked, JSON.stringify({ ...result, reviewId: 'other', checkpointId: 'c12' }))).toBeNull()
   expect(parseReview(tracked, JSON.stringify({ ...result, reviewId: 'r7', checkpointId: 'c12' }))).not.toBeNull()
   expect(reviewPrompt(tracked, 'supervise')).toContain('checkpointId')
+})
+
+test('negative native Grep results remain evidence but cannot spend the first exploration review', async () => {
+  const rows: Parameters<typeof buildReviewContext>[2] = [{ role: 'assistant', text: '', toolUses: [
+    { tool: 'Bash', input: { command: 'ls internal' }, text: 'storage\nconfig' },
+    { tool: 'Grep', input: { path: '/p', pattern: 'Rollout' }, text: 'No matches found' },
+    { tool: 'Grep', input: { path: '/p', pattern: 'features.yaml' }, text: 'No matches found' },
+  ] }]
+  const early = buildReviewContext(binding, asked, rows, '', 'plan')!
+  expect(early.sources.some(s => s.text.includes('No matches found'))).toBe(true)
+  expect(hasExplorationEvidence(early)).toBe(false)
+  const withRead = [{ ...rows[0]!, toolUses: [...rows[0]!.toolUses!, { tool: 'Read', input: { file_path: '/p/api.js' }, text: 'exports.validate = validate' }] }]
+  expect(hasExplorationEvidence(buildReviewContext(binding, asked, withRead, '', 'plan')!)).toBe(false)
+  const withMatch = [{ ...withRead[0]!, toolUses: [...withRead[0]!.toolUses, { tool: 'Grep', input: { path: '/p/api.js', pattern: 'validate' }, text: '12: exports.validate = validate // "No matches found" is a message, not this result' }] }]
+  expect(hasExplorationEvidence(buildReviewContext(binding, asked, withMatch, '', 'plan')!)).toBe(true)
+})
+test('historical response template is valid raw JSON with all mandatory echo identities in the same object', async () => {
+  const c = context()
+  const tracked = { ...c, checkpoint: { reviewId: 'review-15', checkpointId: 'checkpoint-8-review-15', observedAt: 100, sequence: 8, requirementSignature: 'req', materialSignature: 'material', sourceIds: c.sources.map(s => s.id), lastTool: undefined } }
+  const prompt = reviewPrompt(tracked, 'supervise')
+  expect(prompt).toContain('without Markdown or code fences')
+  const line = prompt.split('\n\n').find(s => s.startsWith('Response template: '))
+  expect(typeof line).toBe('string')
+  const example = JSON.parse(line!.slice('Response template: '.length))
+  expect(example.reviewId).toBe('review-15')
+  expect(example.checkpointId).toBe('checkpoint-8-review-15')
+  expect(parseReview(tracked, JSON.stringify(example))).not.toBeNull()
+  // The observed old reply remains rejected: never fill in missing provenance.
+  expect(parseReview(tracked, '```json\n{"reviewed":["exploration","verification"],"judgment":null,"action":{"kind":"none"}}\n```')).toBeNull()
+  expect(parseReview(tracked, '{"reviewed":["exploration","verification"],"judgment":null,"action":{"kind":"none"}}')).toBeNull()
 })
