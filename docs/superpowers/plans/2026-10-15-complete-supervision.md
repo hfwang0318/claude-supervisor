@@ -137,3 +137,14 @@ Round004已完成2/2及行为审计：原30秒内宿主aborted、本层未收到
 ### 最新循环状态（2026-10-16，覆盖上文历史停止／设计状态）
 
 异步历史接入已实现于91c8722并完成免费原生生命周期验收与一次6.1sol整组审查修复；用户明确要求继续单题循环，旧禁自动第五轮及设计待审阅状态不再适用。Round005固定抽Flipt c172两组各15分钟已2/2自然结束审计；侧调用106555ms timeout=null，actual prepared输入可核对，但只有thinking／max_tokens停止，无最终JSON和判断。原来的4000输出上限预留只计public requested2000，而同native实际wire4048，是下一批确定要修的本仓库集成问题；不能称本轮实际严格守住4000。还需修复usage阈值不能直接证明provider截断的诊断。预算不扩大、模型不更换，不改Claude Code或全局Router。两项实证问题集中TDD＋全部普通检查后，再冻结版本／out按单题规则观察，不为小改动分别付费。全维度能力质量依旧未验证。agent只用6.1sol。
+
+
+### 2026-10-16 Round005 后：公开宿主输出预算兼容批次
+
+两项实际问题一批处理：公开 maxTokens2000 在未修改的 2.1.295 原生调用中成为 wire4048，Coordinator 只预留2000；usage>=请求上限又被误当供应商 stop reason。已完成同冻结 Linux/Node/GNUloader 断网五组复现，不修改宿主或 Router。
+
+采用最窄公开 API 方案：语义模式仅接受 session.version 精确2.1.295 且显式 Flash 的已验证组合；requested1952+host allowance2048 预留4000，保守不退款，因此一次调用即耗尽共享输出预留（仍符合最多两次上界）。未知组合保留规则并明确 abstain，不猜测 wire cap；existing/facts 旧路径保留但不宣称已验证 wire 上限。公开 effortlow 作为下一轮受控兼容性问题：只证明 output_config 已发出，不保证供应商理解、减少 thinking 或返回 JSON。拒绝额外 side-only gateway clamp：缺少透明且已验证的旁路边界，不引入第二传输语义。
+
+分别记录 requested、wire-known、reserved、observed usage、host reason 和 providerStopReason=null。超出预留的实际消耗补扣并关闭后续派发，不把无法挽回的已消费超额说成提前阻止。usage 超过公开 requested 但未超过预留且有完整回答，仍走原 JSON/来源/Binding 验证。新版本查询的异步取消边界也须覆盖，不能让旧任务查询完成后预支新任务预算。
+
+批次本地回归先 RED 后 GREEN；统一全部普通检查、生产插件断网原生固定回复、原75关键hash保全后，才允许新冻结 source/out 的一个双失败 E/S 观察。下一轮问题是 wire4000/公开low实际交互、可解析历史判断与投递，及所有自然出现维度；不求官方通过，不自动 full。

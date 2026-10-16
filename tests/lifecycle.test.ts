@@ -35,9 +35,9 @@ test('unknown delivery is not retried and session delivery identities are isolat
 
 test('prompt budgets cap all calls including protocol retries and stop after two failures', async () => {
   const c = new Coordinator(binding)
-  expect(c.reserveCall(0, 2500)).toEqual({ maxTokens: 2500, timeoutMs: 30000 })
-  c.recordUsage(1000)
-  expect(c.reserveCall(10000, 4000)).toEqual({ maxTokens: 1500, timeoutMs: 20000 })
+  expect(c.reserveCall(0, 2500)).toEqual({ maxTokens: 2500, reservedTokens: 2500, timeoutMs: 30000 })
+  c.recordUsage(1000, 2500)
+  expect(c.reserveCall(10000, 4000)).toEqual({ maxTokens: 1500, reservedTokens: 1500, timeoutMs: 20000 })
   expect(c.reserveCall(10001, 1)).toBeNull()
   c.invalidate({ ...binding, turnId: 'new' })
   c.recordFailure()
@@ -51,7 +51,7 @@ test('a model switch cancels old work without replenishing the prompt budget', a
   c.reserveCall(0, 2000)
   c.invalidate({ ...binding, generationId: 'changed-model' }, { preserveBudget: true, now: 10000 })
   expect(job?.signal.aborted).toBe(true)
-  expect(c.reserveCall(10000, 2000)).toEqual({ maxTokens: 2000, timeoutMs: 20000 })
+  expect(c.reserveCall(10000, 2000)).toEqual({ maxTokens: 2000, reservedTokens: 2000, timeoutMs: 20000 })
   expect(c.reserveCall(10000, 1)).toBeNull()
 })
 
@@ -70,14 +70,14 @@ test('historical review keeps a pending job and exactly-once advice when executi
 test('model waiting does not spend the historical tool budget or add a model timeout', async () => {
   const c = new Coordinator(binding, { historical: true })
   c.start('review', 0)
-  expect(c.reserveCall(10, 2000)).toEqual({ maxTokens: 2000 })
+  expect(c.reserveCall(10, 2000)).toEqual({ maxTokens: 2000, reservedTokens: 2000 })
   c.pauseModel(binding, 10)
   c.resumeModel(binding, 90010)
   expect(c.remainingTime(90010)).toBe(29990)
   c.finish('review', binding, 'succeeded', 100010)
   expect(c.remainingTime(100010)).toBe(19990)
   c.start('review-two', 100010)
-  expect(c.reserveCall(100010, 2000)).toEqual({ maxTokens: 2000 })
+  expect(c.reserveCall(100010, 2000)).toEqual({ maxTokens: 2000, reservedTokens: 2000 })
   expect(c.reserveCall(100011, 1)).toBeNull()
 })
 test('an old historical request cannot resume accounting or deliver into a new prompt', async () => {
@@ -100,4 +100,25 @@ test('an in-flight delivery invalidated by a new prompt never commits its comple
   c.invalidate({ ...binding, turnId: 'new', taskRevision: 2 })
   release()
   expect(await delivery).toBe('dropped')
+})
+
+
+test('native thinking allowance is reserved inside the shared output budget', async () => {
+  const c = new Coordinator(binding, { historical: true })
+  const reservation = c.reserveCall(0, 1952, 2048)
+  expect(reservation?.maxTokens).toBe(1952)
+  expect(reservation?.reservedTokens).toBe(4000)
+  c.recordUsage(3000, reservation!.reservedTokens)
+  expect(c.reserveCall(100000, 1, 2048)).toBeNull()
+})
+test('reported output exceeding its reservation closes further admission without replenishment', async () => {
+  const c = new Coordinator(binding, { historical: true })
+  const reservation = c.reserveCall(0, 1000)
+  expect(c.recordUsage(1200, reservation!.reservedTokens)).toBe(false)
+  expect(c.reserveCall(0, 1)).toBeNull()
+})
+for (const bad of [NaN, Infinity, -1]) test(`invalid reservation ${bad} never opens a model call`, async () => {
+  const c = new Coordinator(binding, { historical: true })
+  expect(c.reserveCall(0, bad)).toBeNull()
+  expect(c.reserveCall(0, 1, bad)).toBeNull()
 })

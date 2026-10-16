@@ -127,3 +127,19 @@ supervise触发一次exploration审查，prepared输入1份、无缺段／格式
 两组实际请求E49／S35，Flash响应起始E31／S20；本窗口84条Router body均可解析，其中51条完整原需求匹配、均Flash／200，其余不归因。全部本地身份事件均Flash。资源177样本、最低可用10614722560B、swap0／OOM0／无429排空。两组完整usage缺失，观察量E77406input／23115output／962880cache，S285997input／18326output／431680cache仅为下界；费用unknown。七个判断维度仍全部未观察，不能把等待／输入链路正常当审查能力达标。
 
 本轮15项关键hash另存completed-receipts-sha256.json；连同前四轮共75项，旧回执保持。控制器与所有评测容器均退出。预算诊断的6.1sol是只读咨询，不冒充新整组代码审查。具体资料在round005目录及`.superpowers/sdd/2026-10-15-review-iterations/round005-budget-diagnosis/`。
+
+
+## Round005 后预算与诊断批次（仓库内兼容修复）
+
+已按 systematic-debugging／test-driven-development 流程把两项真实问题集中修复。语义审查通过公开 session.version 识别精确 2.1.295＋显式 Flash 组合，requested1952、宿主allowance2048，预留真实 wire 上限4000；一次调用用完预留，不退还未消费部分、不增加总预算。其他组合记录 unverified-output-cap，不发语义模型调用，继续确定性规则。existing/facts 保留旧请求策略，其 wire cap 不冒充已经验证。该兼容性收缩不是模型强弱判断；未来版本必须补公开 API 证据后再支持。
+
+Coordinator 现在把请求与宿主allowance一起预留，并补扣已观察实际超额、阻止后续派发。超额已经发生时不能回收消费，不将事后拒绝说成事前避免。本批将 usage>=requested 的推断删掉：有效 text 即使高于1952，只要未超预留仍经过原 JSON／来源／Binding／checkpoint gate。记录 requestedOutput、wireOutput（未知为null）、reservedOutput、实际output、宿主typed reason、providerStopReason=null；宿主不提供该stop字段，不凭usage补造。公开effortlow仅是本轮新兼容性条件；下一真实单题需观察其实际结果，不能称关闭thinking、解决质量或保证JSON。
+
+原始新增回归 RED 为9项行为失败；修复后另发现版本查询异步取消可预支新任务额度，增加失败回归并修复。首次生产插件断网fixture在0.25CPU／65秒外层限制下未等到35秒固定回复，保留timeout回执；随后1CPU／120秒fixture取得wire4000、35秒后有效text、下一主请求可见，但原生宿主会把含token的诊断键值遮蔽成裸[REDACTED]，导致诊断JSON不可解析。这是新增留证问题，不是实际请求被改写。
+
+对这个真实问题单独RED（265通过1失败）后，采用与既有input/output一致的公开数值字段名，保留宿主敏感值脱敏，不编码／混淆sessionId或凭据。266宿主测试及全部 node scripts/check.mjs 最终exit0，日志budget-batch-final-checks.log。本批为作者TDD；此前6.1sol历史接入审查不覆盖本次预算代码，不重复派审查。原五轮75项关键hash保持，原audit不重跑。生产断网复验回执补在同一批次记录后，才允许新source/out。
+
+本预算策略的能力限制必须保留：一提示最多一次语义模型调用，后续计划／实现／完成阶段可能没有剩余预算；一次审查应覆盖当时实际出现的多个维度，不能将尚未出现的维度记为正常。普通测试／固定回复只证明机制，不证明真实审查建议质量、供应商effort含义或官方收益。
+
+
+最终生产复验：budget-batch-native-verified/receipt.json，未修改的同冻结Linux CLI／Node／GNUloader、networknone、0付费。真实插件公开请求1952／effortlow成为wire4000；35035ms后合成最终text，报告output3000高于requested仍正常接收，timeout=null；一条可解析SIDE_CALL保留1952／4000／4000，providerStopReason未知。历史建议恰一次submitted，后续main6请求实际可见，2个result／exit0；这是固定回复机制证据，非真实模型能力。生产源文件SHA与当前仓库逐一一致。没有活动fixture／评测容器，旧75hash再次核对一致。

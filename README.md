@@ -63,7 +63,17 @@ the worker invalidates old results; refusal uses rules without selecting a fallb
 Each user prompt shares at most 2 side calls (including protocol retries), 4,000
 output tokens. Existing/facts modes retain the 30-second activity limit; semantic
 review modes exclude model waiting and retain 30 seconds for tools, validation
-and cleanup. Inputs and JSON responses are limited
+and cleanup. Semantic modes currently admit a model call only for the verified
+public-host combination 2.1.295 and explicit `zhipu/glm-5.3-flash`. Its public
+request of 1,952 tokens becomes a wire cap of 4,000 (2,048 host allowance), so
+one call reserves the entire prompt budget; unused reservation is not refunded.
+Other host/model combinations abstain from semantic calls with
+`unverified-output-cap` diagnostics and retain record rules. Existing/facts keep
+their legacy request caps, whose wire bounds are unverified. Observed excess
+closes admission; request-cap usage alone is never a provider stop reason.
+The verified semantic profile sends public `effort: low` as a controlled
+compatibility setting; its actual provider effect and ability to produce JSON
+remain unverified. It does not disable thinking. Inputs and JSON responses are limited
 to 64KiB, candidates to three commands of 4KiB each. Oversized protocols are rejected.
 
 `execution_mode=off` is the default. `shadow` records independent checks without

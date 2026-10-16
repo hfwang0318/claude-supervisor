@@ -5,6 +5,13 @@ export const selectSideModel = (configured: string, workerId: string): ModelSele
   return { modelId, reason: modelId === null ? 'worker model unavailable; choose a side model explicitly' : '' }
 }
 
+// Verified with the unmodified 2.1.295 public API on macOS and frozen Linux.
+// This is a transport-cap compatibility profile, never a capability ranking.
+export const reviewCompletionProfile = (version: string, modelId: string) =>
+  version === '2.1.295' && modelId === 'zhipu/glm-5.3-flash'
+    ? { id: 'native-2.1.295-flash', maxTokens: 1952, outputAllowance: 2048, effort: 'low' as const }
+    : null
+
 import type { Binding, ExecutionEvidence, Snapshot, FactView, FactInspectionFailure } from '../supervisor/contracts'
 import type { Host } from '../supervisor/ports'
 import { classifyOutput } from '../supervisor/runner'

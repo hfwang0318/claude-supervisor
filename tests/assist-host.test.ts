@@ -177,8 +177,8 @@ test('side usage telemetry remains numeric after host token-name redaction', { o
   expect(events[0].usage).toBeUndefined()
 })
 
-test('a response reaching its output cap stays unknown and stops without inspection or retry', { options }, async ($, on) => {
-  const { state } = world(on); await start($); state.outputTokens = 2000
+test('a response exceeding its reservation stays unknown and stops without inspection or retry', { options }, async ($, on) => {
+  const { state } = world(on); await start($); state.outputTokens = 2001
   expect((await batch($)).additionalContext).toEqual(['host context'])
   await batch($)
   expect(state.calls).toBe(1); expect(state.reads).toBe(0)
@@ -235,13 +235,14 @@ for (const [reported, expected] of [['traversal-limit', 'traversal-limit'], ['se
   expect(event).not.toContain('password-value')
   expect(state.calls).toBe(1)
 })
-test('a side response at the output cap records a bounded cause without retaining its text', { options }, async ($, on) => {
-  const { state } = world(on); await start($); state.outputTokens = 2000
+test('a side response exceeding its reservation records a bounded cause without retaining its text', { options }, async ($, on) => {
+  const { state } = world(on); await start($); state.outputTokens = 2001
   state.outputs = ['do-not-retain-selector-reply']
   expect((await batch($)).additionalContext).toEqual(['host context'])
   const event = state.logs.find(l => l.includes('SIDE_CALL')) ?? ''
   const data = JSON.parse(event.slice(event.indexOf('SIDE_CALL') + 10))
-  expect(data.reason).toBe('output-limit')
+  expect(data.reason).toBe('output-budget-exceeded')
+  expect(data.providerStopReason).toBe(null)
   expect(data.elapsedMs).toBe(0)
   expect(event).not.toContain('do-not-retain-selector-reply')
 })

@@ -56,6 +56,12 @@ Claude Code 自带一个旁路代理 "You should know"，看着 Claude 干活，
 
 每个用户提示共享最多 2 次旁路调用（含协议重试）、4,000 输出 tokens。existing／facts 保留
 30 秒活动时限；语义审查不把模型等待计入预算，工具、验证和清理仍共享 30 秒。
+语义模式当前只对已验证的公开宿主 2.1.295 与显式 `zhipu/glm-5.3-flash` 组合发起模型调用。
+公开请求 1952 tokens 加宿主 2048 allowance，实际 wire 上限 4000，因此一次调用预留整提示预算，
+未用额度不返还。其他宿主／模型组合记录 `unverified-output-cap` 并保留确定性规则。
+existing／facts 保留旧请求上限，其 wire 上限仍未验证。实际超额会停止后续派发；
+仅凭 usage 达到公开请求上限不判定供应商截断。已验证语义配置显式发送公开 `effort: low`，
+其供应商实际含义和能否产生有效 JSON 仍待受控观察，不能称关闭 thinking。
 模型输出和输入包各限 64KiB；最多三条候选命令，单条 4KiB；超过协议上限拒绝而不裁剪。
 
 `execution_mode=off` 为默认值；`shadow` 只记录独立检查，不发送模型反馈；`enabled`

@@ -12,7 +12,7 @@ import { runHistoricalReviewFlow, historicalReviewOutcome } from '../supervisor/
 import type { ReviewOutcome } from '../supervisor/review-flow'
 import type { ReviewContext, ReviewReply } from '../supervisor/contracts'
 import { recoveryObservations } from '../supervisor/recovery'
-import { selectSideModel, createHost } from './host'
+import { selectSideModel, createHost, reviewCompletionProfile } from './host'
 import { registerBand } from './band'
 import { HISTORY as READINGS_KEPT, readingOf } from './weather'
 import type { Finding, Kind } from './evidence'
@@ -225,31 +225,43 @@ const ask = async ($: EngineInterface, prompt: string, timeoutMs = 30000, jobSig
   const s = await runtimeOf($)
   const selection = await selectionOf($)
   if (selection.modelId === null || s.modelDisabled || jobSignal?.aborted || bytesOf(prompt) > 65536) return undefined
-  const budget = s.coordinator.reserveCall(await $.clock.now(), 2000)
-  if (!budget) return undefined
   const callBinding = { ...s.coordinator.binding }
+  const historical = s.coordinator.historical
+  const hostVersion = historical ? await $.session.version().then(v => v.version).catch(() => '') : ''
+  const profile = historical ? reviewCompletionProfile(hostVersion, selection.modelId) : null
+  if (jobSignal?.aborted || !s.coordinator.matches(callBinding) || sessions.get(callBinding.sessionId) !== s) return undefined
+  if (historical && !profile) {
+    say($, `SIDE_BUDGET ${JSON.stringify({ reason: 'unverified-output-cap', hostVersion, modelId: selection.modelId })}`)
+    return undefined
+  }
+  const admissionAt = await $.clock.now()
+  if (jobSignal?.aborted || !s.coordinator.matches(callBinding)) return undefined
+  const budget = s.coordinator.reserveCall(admissionAt, profile?.maxTokens ?? 2000, profile?.outputAllowance ?? 0)
+  if (!budget) return undefined
   const startedAt = await $.clock.now()
   const modelTimeout = budget.timeoutMs === undefined ? undefined : Math.min(timeoutMs, budget.timeoutMs)
   s.coordinator.pauseModel(callBinding, startedAt)
-  const reply = await $.model.complete({ model: selection.modelId, prompt: redact(prompt), maxTokens: budget.maxTokens, ...(modelTimeout === undefined ? {} : { timeoutMs: modelTimeout }) }, jobSignal ? { signal: jobSignal } : undefined).catch((err: unknown) => {
+  const reply = await $.model.complete({ model: selection.modelId, prompt: redact(prompt), maxTokens: budget.maxTokens, ...(profile ? { effort: profile.effort } : {}), ...(modelTimeout === undefined ? {} : { timeoutMs: modelTimeout }) }, jobSignal ? { signal: jobSignal } : undefined).catch((err: unknown) => {
     say($, `configured side model unavailable: ${String(err)}`)
     return undefined
   })
   if (sessions.get(callBinding.sessionId) !== s) return undefined
   s.coordinator.resumeModel(callBinding, await $.clock.now())
   const elapsedMs = Math.max(0, await $.clock.now() - startedAt)
-  const outputCapped = !!reply && reply.usage.output_tokens >= budget.maxTokens
+  // Usage above the public request is possible on this host and is not a stop reason.
+  const accountingCurrent = s.coordinator.matches(callBinding)
+  const usageWithinReservation = !reply || !accountingCurrent || s.coordinator.recordUsage(reply.usage.output_tokens, budget.reservedTokens)
+  const budgetDiagnostic = { requestedOutput: budget.maxTokens, wireOutput: profile ? budget.reservedTokens : null, reservedOutput: budget.reservedTokens, capProfile: profile?.id ?? null, effort: profile?.effort ?? null, hostVersion: hostVersion || null, providerStopReason: null, usageWithinReservation: reply && accountingCurrent ? usageWithinReservation : null }
   const hostFailure = reply && !reply.isAnswered ? reply : null
   const hostDiagnostic = { hostReason: hostFailure?.reason ?? null, hostStatus: hostFailure?.reason === 'api-error' ? hostFailure.status : null, hostError: hostFailure?.reason === 'api-error' ? hostFailure.error : null }
-  const reason = outputCapped ? 'output-limit' : !reply ? 'provider-error' : !reply.isAnswered ? 'provider-unanswered' : null
-  const callEvent = { schemaVersion: 1, kind: 'side-call', callId: `${callBinding.sessionId}/${callBinding.generationId}/${callBinding.turnId}/${++s.jobNumber}`, modelId: selection.modelId, binding: callBinding, usage: reply?.usage ?? null, elapsedMs, timeoutMs: modelTimeout ?? null, reason, ...hostDiagnostic, result: reply?.isAnswered && !outputCapped ? 'answered' : 'unknown' }
+  const reason = !usageWithinReservation ? 'output-budget-exceeded' : !reply ? 'provider-error' : !reply.isAnswered ? 'provider-unanswered' : null
+  const callEvent = { schemaVersion: 1, kind: 'side-call', callId: `${callBinding.sessionId}/${callBinding.generationId}/${callBinding.turnId}/${++s.jobNumber}`, modelId: selection.modelId, binding: callBinding, usage: reply?.usage ?? null, elapsedMs, timeoutMs: modelTimeout ?? null, reason, ...hostDiagnostic, ...budgetDiagnostic, result: reply?.isAnswered && usageWithinReservation ? 'answered' : 'unknown' }
   await remember($, callEvent)
-  say($, `SIDE_CALL ${JSON.stringify({ callId: callEvent.callId, modelId: callEvent.modelId, result: callEvent.result, reason, ...hostDiagnostic, elapsedMs, timeoutMs: callEvent.timeoutMs, input: reply?.usage.input_tokens ?? null, output: reply?.usage.output_tokens ?? null, cached: reply?.usage.cache_read_input_tokens ?? null, created: reply?.usage.cache_creation_input_tokens ?? null })}`)
+  say($, `SIDE_CALL ${JSON.stringify({ callId: callEvent.callId, modelId: callEvent.modelId, result: callEvent.result, reason, ...hostDiagnostic, ...budgetDiagnostic, elapsedMs, timeoutMs: callEvent.timeoutMs, input: reply?.usage.input_tokens ?? null, output: reply?.usage.output_tokens ?? null, cached: reply?.usage.cache_read_input_tokens ?? null, created: reply?.usage.cache_creation_input_tokens ?? null })}`)
   await selectionOf($)
   if (!s.coordinator.matches(callBinding)) return undefined
-  if (!reply || !reply.isAnswered || outputCapped) { s.coordinator.recordFailure(); s.modelDisabled = true }
-  if (reply) s.coordinator.recordUsage(reply.usage.output_tokens)
-  return outputCapped ? undefined : reply
+  if (!reply || !reply.isAnswered || !usageWithinReservation) { s.coordinator.recordFailure(); s.modelDisabled = true }
+  return usageWithinReservation ? reply : undefined
 }
 const currentSignals = new WeakMap<Runtime, AbortSignal>()
 

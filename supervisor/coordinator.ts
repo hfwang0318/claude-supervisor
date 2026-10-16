@@ -82,15 +82,16 @@ export class Coordinator {
     this.binding = { ...this.binding, workspaceRevision: revision }
   }
 
-  reserveCall(now: number, tokens: number) {
+  reserveCall(now: number, tokens: number, outputAllowance = 0) {
     const elapsed = this.startedAt === null ? 0 : Math.max(0, now - this.startedAt)
     const left = Math.max(0, this.activeMs - elapsed)
-    if (this.calls <= 0 || this.tokens <= 0 || !this.historical && left <= 0 || this.failures >= 2 || tokens < 1) return null
+    if (!Number.isSafeInteger(tokens) || tokens < 1 || !Number.isSafeInteger(outputAllowance) || outputAllowance < 0 || this.calls <= 0 || this.tokens <= outputAllowance || !this.historical && left <= 0 || this.failures >= 2) return null
     this.startedAt ??= now
-    const maxTokens = Math.min(Math.floor(tokens), this.tokens)
+    const maxTokens = Math.min(tokens, this.tokens - outputAllowance)
+    const reservedTokens = maxTokens + outputAllowance
     this.calls--
-    this.tokens -= maxTokens // reserve the provider's upper bound, including retries
-    return this.historical ? { maxTokens } : { maxTokens, timeoutMs: left }
+    this.tokens -= reservedTokens // never refund an unconsumed reservation
+    return this.historical ? { maxTokens, reservedTokens } : { maxTokens, reservedTokens, timeoutMs: left }
   }
 
   pauseModel(binding: Binding, now: number) {
@@ -107,6 +108,12 @@ export class Coordinator {
     if (sameTask(binding, this.binding) && Number.isFinite(elapsedMs) && elapsedMs >= 0) this.activeMs = Math.max(0, this.activeMs - elapsedMs)
   }
 
-  recordUsage(tokens: number) { if (!Number.isFinite(tokens) || tokens < 0 || tokens > 4000) this.failures = 2 }
+  recordUsage(tokens: number, reservedTokens: number) {
+    if (!Number.isSafeInteger(tokens) || tokens < 0 || !Number.isSafeInteger(reservedTokens) || reservedTokens < 1) { this.failures = 2; return false }
+    const excess = Math.max(0, tokens - reservedTokens)
+    this.tokens = Math.max(0, this.tokens - excess)
+    if (excess > 0) { this.failures = 2; return false }
+    return true
+  }
   recordFailure() { this.failures++ }
 }

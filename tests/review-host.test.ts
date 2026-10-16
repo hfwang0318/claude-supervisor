@@ -1,16 +1,17 @@
 import { test, expect, mock } from 'claude-code/testing'
 import type { TestBody } from 'claude-code/testing'
-const options = { assistance_mode: 'supervise', execution_mode: 'off', verifier_model: 'fixture' }
+const options = { assistance_mode: 'supervise', execution_mode: 'off', verifier_model: 'zhipu/glm-5.3-flash' }
 const reply = () => JSON.stringify({ reviewed: ['architecture'], judgment: { dimension: 'architecture', question: 'Should the public interface be replaced?', requirementQuote: 'Preserve the API.', sourceIds: ['req', 'plan-1'], reason: 'The proposed replacement removes the existing entry point.', impact: 'Caller compatibility.', recommendation: 'adjust', uncertainty: 'The complete caller set is unknown.' }, action: { kind: 'none' } })
 const world = (on: Parameters<TestBody>[1]) => {
   mock.store(on); const clock = mock.clock(on, { now: 100000 })
-  const state = { throwFollowUp: false, dropFollowUp: false, controlPath: '', control: JSON.stringify({ version: 1, revision: 0 }), calls: 0, unanswered: false, unansweredReason: 'aborted', logLimit: Infinity, nextPromptWait: undefined as Promise<void> | undefined, cwd: '/p', submitted: [] as string[], echo: true, timeouts: [] as number[], prompts: [] as string[], logs: [] as string[], processActions: [] as string[], validateDelay: 0, wait: undefined as Promise<void> | undefined, outputs: [reply(), reply()], rows: [{ role: 'assistant', text: 'Plan: replace the public method.', toolUses: [{ tool: 'Read', input: { file_path: '/p/api.js' }, text: 'exports.old = () => 1' }] }] }
+  const state = { hostVersion: '2.1.295', versionWait: undefined as Promise<void> | undefined, outputTokens: 20, modelRequests: [] as { maxTokens?: number; effort?: string }[], throwFollowUp: false, dropFollowUp: false, controlPath: '', control: JSON.stringify({ version: 1, revision: 0 }), calls: 0, unanswered: false, unansweredReason: 'aborted', logLimit: Infinity, nextPromptWait: undefined as Promise<void> | undefined, cwd: '/p', submitted: [] as string[], echo: true, timeouts: [] as number[], prompts: [] as string[], logs: [] as string[], processActions: [] as string[], validateDelay: 0, wait: undefined as Promise<void> | undefined, outputs: [reply(), reply()], rows: [{ role: 'assistant', text: 'Plan: replace the public method.', toolUses: [{ tool: 'Read', input: { file_path: '/p/api.js' }, text: 'exports.old = () => 1' }] }] }
+  on('session.version', async () => { if (state.versionWait) await state.versionWait; return { value: { version: state.hostVersion } } })
   on('session.id', () => ({ value: 'review-session' })); on('session.model', () => ({ value: 'fixture' })); on('session.cwd', () => ({ value: state.cwd })); on('session.messages', () => ({ value: state.rows }) as never)
   on('env.get', (_$, e) => ({ value: e.name === 'DEEPSEEK_SUPERVISOR_CONTROL_FILE' ? state.controlPath : 'on' })); on('fs.read', () => ({ value: state.control })); on('ui.status', () => ({ value: undefined })); on('ui.log', (_$, e) => { state.logs.push(e.text.slice(0, state.logLimit)); return { value: undefined } })
   on('command.register', (_$, e) => ({ value: { command: e.name } })); on('session.start', () => ({ cwd: '/p' })); on('prompt.submit', async (_$, e) => { state.submitted.push(e.text); if (state.throwFollowUp && e.text.includes('Engineering review')) throw Error('session no longer bound'); if (state.dropFollowUp && e.text.includes('Engineering review')) return { text: e.text, drop: 'unavailable' } as never; if (e.text === 'New queued task.' && state.nextPromptWait) await state.nextPromptWait; return { text: e.text } as never })
   on('classic.PostToolBatch', () => ({ additionalContext: ['host context'] }) as never); on('classic.Stop', () => ({}) as never)
   on('turn.complete', (_$, e) => ({ text: e.answer })); on('session.end', (_$, e) => ({ sessionId: e.sessionId }))
-  on('model.complete', async (_$, e) => { state.calls++; state.timeouts.push(e.timeoutMs ?? 0); state.prompts.push(e.prompt); if (state.wait) await state.wait; let text = state.outputs.shift() ?? 'null'; try { const context = JSON.parse(e.prompt.split('\n\n').at(-1)!); if (state.echo && context.checkpoint) text = JSON.stringify({ ...JSON.parse(text), reviewId: context.checkpoint.reviewId, checkpointId: context.checkpoint.checkpointId }) } catch {} return { value: state.unanswered ? { isAnswered: false, reason: state.unansweredReason, ...(state.unansweredReason === 'api-error' ? { status: 429, error: 'rate_limit' } : {}), usage: { input_tokens: 0, output_tokens: 0 } } : { isAnswered: true, text, usage: { input_tokens: 10, output_tokens: 20 } } } as never })
+  on('model.complete', async (_$, e) => { state.calls++; state.modelRequests.push({ maxTokens: e.maxTokens, effort: e.effort }); state.timeouts.push(e.timeoutMs ?? 0); state.prompts.push(e.prompt); if (state.wait) await state.wait; let text = state.outputs.shift() ?? 'null'; try { const context = JSON.parse(e.prompt.split('\n\n').at(-1)!); if (state.echo && context.checkpoint) text = JSON.stringify({ ...JSON.parse(text), reviewId: context.checkpoint.reviewId, checkpointId: context.checkpoint.checkpointId }) } catch {} return { value: state.unanswered ? { isAnswered: false, reason: state.unansweredReason, ...(state.unansweredReason === 'api-error' ? { status: 429, error: 'rate_limit' } : {}), usage: { input_tokens: 0, output_tokens: state.outputTokens } } : { isAnswered: true, text, usage: { input_tokens: 10, output_tokens: state.outputTokens } } } as never })
   on('process.run', async (_$, e) => {
     const request = JSON.parse(e.init?.stdin ?? '{}'); state.processActions.push(request.action)
     if (request.action === 'validate-facts' && state.validateDelay) await clock.advance(state.validateDelay)
@@ -77,13 +78,13 @@ test('probe mode carries an unexecuted requirement counterexample through the ho
   expect((await observeBatch($, clock)).additionalContext?.join('\n')).toContain('not executed')
   expect(state.calls).toBe(1)
 })
-test('plan and later implementation review share two calls and cannot add a third completion call', { options }, async ($, on) => {
+test('the native wire allowance leaves no second plan or implementation call', { options }, async ($, on) => {
   const { state, clock } = world(on); await start($); await observeBatch($, clock)
   state.rows.push({ role: 'assistant', text: '', toolUses: [{ tool: 'Edit', input: { file_path: '/p/api.js', old_string: 'exports.old = () => 1', new_string: 'exports.new = () => 1' }, text: 'updated' }, { tool: 'Bash', input: { command: 'npm test' }, text: '1 passed' }] } as never)
   const d = JSON.parse(reply()); d.reviewed = ['plan-implementation']; d.judgment.dimension = 'plan-implementation'; d.judgment.sourceIds = ['req', 'plan-1', 'change']; state.outputs = [JSON.stringify(d)]
-  expect((await observeBatch($, clock)).additionalContext?.join('\n')).toContain('plan-implementation')
+  expect((await observeBatch($, clock)).additionalContext).toEqual(['host context'])
   await observeStop($, clock, 'Finished.')
-  expect(state.calls).toBe(2)
+  expect(state.calls).toBe(1)
 })
 test('a completion review receives the actual final claim as attributed evidence', { options }, async ($, on) => {
   const { state, clock } = world(on); await start($)
@@ -125,8 +126,8 @@ test('off and on cannot replenish the shared active review budget', { options },
   await $.command.run({ command: 'deepseek-supervisor', args: 'on' } as never)
   state.rows[0]!.text = 'Plan: preserve the public method with an adapter.'
   await observeBatch($, clock)
-  expect(state.calls).toBe(2)
-  expect(state.timeouts[1]! <= 20000).toBe(true)
+  expect(state.calls).toBe(1)
+  expect(state.timeouts).toEqual([0])
 })
 for (const dimension of ['requirement-plan', 'direction', 'verification']) test(`${dimension} judgment has a real hook feedback path`, { options }, async ($, on) => {
   const { state, clock } = world(on); await start($)
@@ -150,8 +151,8 @@ test('source validation time is charged before another review can start', { opti
   expect((await observeBatch($, clock)).additionalContext?.join('\n')).toContain('Supplemental verified')
   state.rows[0]!.text = 'Plan: preserve the public method through an adapter.'
   await observeBatch($, clock)
-  expect(state.calls).toBe(2)
-  expect(state.timeouts).toEqual([0, 0])
+  expect(state.calls).toBe(1)
+  expect(state.timeouts).toEqual([0])
 })
 test('budget and invalid protocol skips have bounded phase-specific unreviewed diagnostics', { options }, async ($, on) => {
   const { state, clock } = world(on); await start($)
@@ -165,7 +166,7 @@ test('budget and invalid protocol skips have bounded phase-specific unreviewed d
   expect(skips.length).toBe(1)
   await observeStop($, clock, 'Finished.')
   expect(state.logs.filter(l => l.includes('budget-exhausted') && l.includes('completion')).length).toBe(1)
-  expect(state.calls).toBe(2)
+  expect(state.calls).toBe(1)
 })
 
 for (const dimension of ['architecture', 'direction', 'exploration']) test(`${dimension} reaches the worker without an explicit plan after distinct source evidence`, { options }, async ($, on) => {
@@ -185,9 +186,9 @@ for (const dimension of ['architecture', 'direction', 'exploration']) test(`${di
   await observeBatch($, clock)
   expect(state.calls).toBe(1)
   await observeStop($, clock, 'The interface should remain compatible.')
-  expect(state.calls).toBe(2)
+  expect(state.calls).toBe(1)
   await observeStop($, clock, 'The interface should remain compatible.')
-  expect(state.calls).toBe(2)
+  expect(state.calls).toBe(1)
 })
 for (const unusable of ['failed', 'pending', 'running', 'truncated', 'duplicate']) test(`exploration waits when the second source is ${unusable}`, { options }, async ($, on) => {
   const { state, clock } = world(on); await start($)
@@ -209,7 +210,7 @@ test('bounded review materials remain auditable with declared session omission e
   delete actual.binding.sessionId
   expect(inputs[0].context).toEqual(actual)
   expect(inputs[0].omittedBindingFields).toEqual(['sessionId'])
-  expect(inputs[0].modelId).toBe('fixture')
+  expect(inputs[0].modelId).toBe('zhipu/glm-5.3-flash')
   expect(state.calls).toBe(1)
 })
 
@@ -416,4 +417,80 @@ test('a main tool in progress makes old review actions historical before PostToo
   expect(state.processActions.filter(action => action === 'inspect').length).toBe(0)
   finishTool(); await editing
   expect((await batch($)).additionalContext?.join('\n')).toContain('Historical advice only')
+})
+
+
+test('verified native Flash cap reserves wire output and accepts valid text above the requested cap', { options: { ...options, verifier_model: 'zhipu/glm-5.3-flash' } }, async ($, on) => {
+  const { state, clock } = world(on)
+  state.outputTokens = 3000
+  await start($)
+  expect((await observeBatch($, clock)).additionalContext?.join('\n')).toContain('Caller compatibility')
+  const line = state.logs.find(l => l.includes('SIDE_CALL '))!
+  const event = JSON.parse(line.slice(line.indexOf('SIDE_CALL ') + 10))
+  expect(state.modelRequests).toEqual([{ maxTokens: 1952, effort: 'low' }])
+  expect(event.requestedOutput).toBe(1952)
+  expect(event.wireOutput).toBe(4000)
+  expect(event.reservedOutput).toBe(4000)
+  expect(event.providerStopReason).toBe(null)
+  expect(event.result).toBe('answered')
+  state.rows[0]!.text = 'Plan: preserve the public method with an adapter.'
+  await observeBatch($, clock)
+  expect(state.calls).toBe(1)
+})
+for (const version of ['2.1.296', '2.1.295-dev-unknown']) test(`unverified native cap on ${version} abstains rather than claiming a wire bound`, { options: { ...options, verifier_model: 'zhipu/glm-5.3-flash' } }, async ($, on) => {
+  const { state, clock } = world(on)
+  state.hostVersion = version
+  await start($); await observeBatch($, clock)
+  expect(state.calls).toBe(0)
+  expect(state.logs.some(l => l.includes('unverified-output-cap'))).toBe(true)
+})
+test('host empty reply with usage above the request is not a known provider stop reason', { options: { ...options, verifier_model: 'zhipu/glm-5.3-flash' } }, async ($, on) => {
+  const { state, clock } = world(on)
+  state.unanswered = true; state.unansweredReason = 'empty-reply'; state.outputTokens = 4000
+  await start($); await observeBatch($, clock)
+  const line = state.logs.find(l => l.includes('SIDE_CALL '))!
+  const event = JSON.parse(line.slice(line.indexOf('SIDE_CALL ') + 10))
+  expect(event.reason).toBe('provider-unanswered')
+  expect(event.hostReason).toBe('empty-reply')
+  expect(event.providerStopReason).toBe(null)
+  expect(event.output).toBe(4000)
+})
+
+test('an unverified side model cannot inherit the Flash native cap profile', { options: { ...options, verifier_model: 'another-model' } }, async ($, on) => {
+  const { state, clock } = world(on); await start($); await observeBatch($, clock)
+  expect(state.calls).toBe(0)
+  expect(state.logs.some(l => l.includes('unverified-output-cap'))).toBe(true)
+})
+
+test('cancelled version lookup cannot reserve or start a model call in the next task', { options }, async ($, on) => {
+  const { state, clock } = world(on); await start($)
+  let release = () => {}; state.versionWait = new Promise<void>(resolve => { release = resolve })
+  await batch($); await flushBackground(clock)
+  await $.prompt.submit({ text: 'A new task.', origin: { kind: 'sdk' } } as never)
+  release(); state.versionWait = undefined; await flushBackground(clock)
+  expect(state.calls).toBe(0)
+  await observeBatch($, clock)
+  expect(state.calls).toBe(1)
+})
+
+test('native output beyond the reserved wire allowance rejects feedback and prevents further calls', { options }, async ($, on) => {
+  const { state, clock } = world(on); await start($); state.outputTokens = 4001
+  expect((await observeBatch($, clock)).additionalContext).toEqual(['host context'])
+  const line = state.logs.find(l => l.includes('SIDE_CALL '))!
+  const event = JSON.parse(line.slice(line.indexOf('SIDE_CALL ') + 10))
+  expect(event.reason).toBe('output-budget-exceeded')
+  expect(event.usageWithinReservation).toBe(false)
+  state.rows[0]!.text = 'Plan: preserve the public method with an adapter.'
+  await observeBatch($, clock); expect(state.calls).toBe(1)
+})
+
+test('public output-budget metadata remains numeric after the observed native token-key scrub', { options }, async ($, on) => {
+  const { state, clock } = world(on); await start($); await observeBatch($, clock)
+  const line = state.logs.find(l => l.includes('SIDE_CALL '))!
+  // Actual native fixture replaced token-named numeric values with bare [REDACTED].
+  const native = line.slice(line.indexOf('SIDE_CALL ') + 10).replace(/("[^"]*tokens"\s*:)\s*\d+/gi, '$1[REDACTED]')
+  const event = JSON.parse(native)
+  expect(event.requestedOutput).toBe(1952)
+  expect(event.wireOutput).toBe(4000)
+  expect(event.reservedOutput).toBe(4000)
 })
