@@ -212,3 +212,6 @@ Round011已于2026-10-16T18:39:17Z完成全部审计：S23Bash/19Read/4Grep/2Glo
 本批先RED四项宿主行为（282pass4fail）与自然完成默认RED3000000≠null，GREEN287宿主及全部node scripts/check.mjs。测试含多问题原文投递、无分类／回显、可选动作身份错误／危险路径拒绝且正文保留、历史／取消／零执行、默认none／显式数值／null不成为1ms timer。旧一条测试将not json视为无效的断言已按用户新语义改为真实敏感输出拒绝；没有放宽隐私。作者TDD+diffreview，旧freshreview不覆盖本批，不再反复派reviewer。
 
 完整检查后进行同冻结Linux CLI／Node／GNUloader断网35秒晚到双问题正文回放，再冻结新source/out单题E/S自然结束。实际是否报告多个有依据的问题、是否进入后续主请求、自然完成及所有自然维度仍需实测。无人工阶段／失败伪造，不增输出预算，不追求官方pass。后续报告将自然结束轮与旧限时轮明确分开。
+
+
+Round012唯一新条件实测已启动：source8ed8920bb37751fbf3858b9d688a85223d06848d、seedba1ac1c271d69796fd210ed745021b32固定抽Fliptc172，Eexisting/Ssupervise并行2槽、Simplementation；主任务none/null等待自然结束，不再按旧15／50分钟取消。controller55904/monitor55907，02:40Z环境免费校准中。287完整普通检查/35秒晚到双问题自然正文回放/nativepreflight2823ms0paid/165旧hash门禁完整。下一步等自然结束统一审计实际多问题内容、历史范围、反馈可见及所有自然维度；不把合成机制或启动当质量成功，不自动full/重试。automation已用新语义恢复。

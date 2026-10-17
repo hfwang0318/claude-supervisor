@@ -360,3 +360,10 @@ TDD：原282pass4fail复现正文解析／可选动作／单问题提示／历�
 同冻结Linux CLI2.1.295／Node／GNUloader，networknone的natural-report-native-verified/receipt.json：合成审查等待35036ms、wire4000／low／宿主timeoutnull；无JSON无分类无ID正文含两个问题，在主模型第6请求同时可见，1次submitted、2个result、自然退出0，0paid／0真实候选执行。此为机制证据，非真实模型质量。初次夹具保留existing默认而驱动等待supervise通知，120s外层夹具截止、0模型请求，日志／setup-diagnosis保留；随后独立新目录明确supervise／Flash通过，未改生产代码来迁就夹具。原165关键hash逐项保持。
 
 下一轮新source/out：仍从最新完整caller-scope双失败一次固定seed抽一题，Eexisting／Ssupervise并行两槽；Simplementation时机保持，明确观察自然到达实施阶段、多个有根据问题的报告、实际反馈／后续主模型动作，不追求官方pass，不自动full。主任务自然结束，不延长／重跑任何旧任务。不以合成回放代替真实质量结论。
+
+
+### Round012：自然结束与多问题报告的新条件实测已启动
+
+冻结source8ed8920bb37751fbf3858b9d688a85223d06848d，seedba1ac1c271d69796fd210ed745021b32从最新完整caller-scope双失败固定一次抽Fliptc172，未重抽。Eexisting／Ssupervise两槽，Simplementation／Eauto；主任务task-timeout-ms none、timeoutMs:null，两组等待自然结束，与旧15分钟轮明确分开。controller55904／monitor55907（最新PID文件优先），2026-10-17T02:40Z已启动本轮，当前环境校准中，尚不把派发进程等同于两组模型已经返回。新adapter的grader身份变化使旧readiness需要重新免费校准，正确保留原结果不冒充新校准。
+
+免费dryrun2确认null截止和一个任务两组，断网nativepreflight2823ms0paid、287全普通检查／35秒晚到双问题原生回放／165原criticalhash绑定launchgate。nativeCLI／Node／GNUloader字节未改。明确观察问题为自然执行是否到达真实实施材料、一次多问题报告的依据与范围是否成立、实际下一主请求是否含报告及后续动作；不预设JSON、分类、多个问题或官方通过一定发生。无第二runner／重启／重抽／自动full。自然结束后先基础audit，再统一行为审计；缺完整usage／费用仍unknown。跟进automation已按最新自然结束语义重新建立，健康在途静默。
