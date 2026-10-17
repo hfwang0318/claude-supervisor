@@ -484,3 +484,6 @@ Advisory change material keeps independently privacy-safe recorded excerpts even
 when another change must be withheld. Privacy and byte-budget omissions are
 explicit in both the model input and feedback. Excerpts remain bounded historical
 records, not a complete diff or a certificate of the current implementation.
+
+
+An exact Go modfile-filename rejection for a single check is retained as a failed command attempt, not evidence that project code failed. Genuine, mixed or ambiguous failures keep their existing check status; this does not certify a different scope as passed.

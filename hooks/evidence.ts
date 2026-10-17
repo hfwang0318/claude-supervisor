@@ -44,6 +44,17 @@ const INLINE_CODE = /^\s*(?:cd\s+[^\n;&|]+&&\s*)?(?:python3?(?:\.\d+)?|node)(?:\
 const DENIED = /\brequires? approval\b|contains multiple operations|permission to use .{0,80} (?:was|has been) denied|was denied by|blocked by (?:a |the )?hook|<tool_use_error>/i
 // A runner that is not there ran no checks: "No module named pytest" says nothing of the code.
 const MISSING = /No module named ['"]?(?:pytest|nose2|tox|nox|mypy|pyright|ruff|flake8|pylint|coverage|unittest)\b|\b(?:pytest|jest|vitest|mocha|tsc|eslint|ruff|mypy|tox|cargo|go|npm|pnpm|yarn|make|bun|deno)\b[^\n]{0,20}(?:command )?not found|command not found/i
+// Go rejects this argument before checking project code. Only an exact diagnostic
+// for one known runner qualifies; mixed output/other checks remain unresolved.
+const rejectedGoModfile = (command: string, output: string) => {
+  const checks = pieces(command).filter(p => CHECK.test(p))
+  if (checks.length !== 1 || !/^go (?:build|test|vet)\b/.test(checks[0]!)) return false
+  const modfile = /\s-modfile=([^\s"';&|]+)(?:\s|$)/.exec(checks[0]!)?.[1]
+  if (!modfile || modfile.endsWith('.mod')) return false
+  const diagnostic = `go: -modfile=${modfile}: file does not have .mod extension`
+  const lines = output.split('\n').map(line => line.trim()).filter(Boolean)
+  return lines.includes(diagnostic) && lines.every(line => line === diagnostic || /^Exit code [1-9]\d*$/.test(line))
+}
 // A command that may be the project's own way to run its checks, by the name of what it
 // runs: `./scripts/check-all`, `bash ci.sh`, `python3 manage.py test`. Not a file a utility
 // reads (`ls tests/`, `cat ci.yml`), a folder (live, round 6: `find /tmp/x-bent-test-…`), or a
@@ -235,11 +246,12 @@ export const evidenceOf = (rows: readonly Row[]): Evidence => {
         ev.refused.push({ at, command: clip(squash(str(input, 'command')), 120) })
       if (u.tool === 'Bash' && !(failed && DENIED.test(u.text ?? ''))) {
         const command = str(input, 'command')
+        const invocationRejected = rejectedGoModfile(command, out)
         const mine = (name: string) => ev.edits.some(e => base(e.path) === base(name))
         // The project's own check (`./bin/ccds-check`, `bash ci.sh`) is a run too: its pass
         // settles a failure before it (2026-10-09), and its failure is one.
         const ownCheck = !INLINE_CODE.test(command) && runnerNames(command).some(n => n !== '' && MENTIONS_CHECK.test(n) && !mine(n))
-        if (ownCheck) ev.mentioned = true
+        if (ownCheck && !invocationRejected) ev.mentioned = true
         if (pieces(command).some(p => RUNS_CODE.test(p))) ev.coded.push(at)
         for (const t of command.matchAll(/(?:>|\btee\s+(?:-a\s+)?)\s*["']?([^\s"'<>|;&]+)/g)) if (t[1] !== undefined && !/^&?\d$|^\/dev\//.test(t[1])) ev.created.add(base(t[1]))
         const result = u.result && typeof u.result === 'object' ? u.result as Record<string, unknown> : {}
@@ -248,7 +260,7 @@ export const evidenceOf = (rows: readonly Row[]): Evidence => {
         const ok = !failed && !FAILED.test(out) && !truncated && (typeof exit !== 'number' || exit === 0)
         ev.bash.push({ at, key: keyOf(command), ok, sig: ok ? '' : signatureOf(out), text: clip(out, 4000) })
         // The line a note shows is the one that says what failed, not "Exit code 1".
-        if ((runsTests(command) || ownCheck) && !MISSING.test(out)) {
+        if ((runsTests(command) || ownCheck) && !MISSING.test(out) && !invocationRejected) {
           // Scope identity and executable rechecks need the original command,
           // not a display prefix that can collide or remove the actual runner.
           const clean = redact(command), commandComplete = bytesOf(command) <= 4096 && clean === command

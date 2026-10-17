@@ -532,3 +532,35 @@ test('an unresolved scope is not described as the latest run or as no later chec
   expect(end.what).toContain('scope')
   expect(end.what.includes('The last check this turn failed')).toBe(false)
 })
+
+test('a Go modfile filename rejected before execution is a failed attempt, not a project check result', async () => {
+  const command = 'cp go.mod go.mod.check && GOWORK=off go build -modfile=go.mod.check ./internal/cue/'
+  const rows = [ask, say('', bash(command, 'Exit code 1\ngo: -modfile=go.mod.check: file does not have .mod extension'))]
+  const ev = evidenceOf(rows)
+  expect(ev.bash.length).toBe(1)
+  expect(ev.bash[0]?.ok).toBe(false)
+  expect(ev.runs.length).toBe(0)
+  expect(judge(rows, 'The build passes.')[0]?.kind).toBe('no-check')
+})
+
+test('a rejected Go invocation does not override a later matching real build result', async () => {
+  const bad = bash('go build -modfile=go.mod.check ./internal/cue/', 'Exit code 1\ngo: -modfile=go.mod.check: file does not have .mod extension')
+  const run = 'go build -modfile=go.check.mod ./internal/cue/'
+  const rows = [ask, say('', bad), say('', bash(run, 'Exit code 1\ninternal/cue/cue.go:7:2: no required module provides package cuelang.org/go/encoding/yaml')), say('', bash(run, 'BUILD_OK'))]
+  expect(judge(rows, 'The build passes.')).toEqual([])
+  expect(supports(evidenceOf(rows), 'The build passes.')).toBe(true)
+  expect(evidenceOf(rows).runs.length).toBe(2)
+})
+
+test('ambiguous or mixed Go failures and mismatched diagnostics remain failed checks', async () => {
+  for (const [command, output] of [
+    ['go build -modfile=go.mod.check .', 'go: -modfile=other.check: file does not have .mod extension'],
+    ['go build -modfile=go.mod.check .', 'go: -modfile=go.mod.check: file does not have .mod extension\nFAIL package'],
+    ['go build -modfile=go.mod.check .; go test ./...', 'go: -modfile=go.mod.check: file does not have .mod extension'],
+    ['go build -modfile=go.check.mod .', 'Exit code 1\ncompile error'],
+  ]) {
+    const rows = [ask, say('', bash(command!, `Exit code 1\n${output!}`))]
+    expect(evidenceOf(rows).runs.length).toBe(1)
+    expect(judge(rows, 'The build passes.')[0]?.kind).toBe('failed-check')
+  }
+})
