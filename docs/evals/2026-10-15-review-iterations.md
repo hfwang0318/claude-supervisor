@@ -367,3 +367,29 @@ TDD：原282pass4fail复现正文解析／可选动作／单问题提示／历�
 冻结source8ed8920bb37751fbf3858b9d688a85223d06848d，seedba1ac1c271d69796fd210ed745021b32从最新完整caller-scope双失败固定一次抽Fliptc172，未重抽。Eexisting／Ssupervise两槽，Simplementation／Eauto；主任务task-timeout-ms none、timeoutMs:null，两组等待自然结束，与旧15分钟轮明确分开。controller55904／monitor55907（最新PID文件优先），2026-10-17T02:40Z已启动本轮，当前环境校准中，尚不把派发进程等同于两组模型已经返回。新adapter的grader身份变化使旧readiness需要重新免费校准，正确保留原结果不冒充新校准。
 
 免费dryrun2确认null截止和一个任务两组，断网nativepreflight2823ms0paid、287全普通检查／35秒晚到双问题原生回放／165原criticalhash绑定launchgate。nativeCLI／Node／GNUloader字节未改。明确观察问题为自然执行是否到达真实实施材料、一次多问题报告的依据与范围是否成立、实际下一主请求是否含报告及后续动作；不预设JSON、分类、多个问题或官方通过一定发生。无第二runner／重启／重抽／自动full。自然结束后先基础audit，再统一行为审计；缺完整usage／费用仍unknown。跟进automation已按最新自然结束语义重新建立，健康在途静默。
+
+
+### Round012自然结束与完整行为审计：多问题正文可见，质量与旧规则噪声仍待优化
+
+2026-10-17T03:18:16Z两组自然完成及基础／完整行为审计，controller55904／monitor55907和评测容器均退出，不再轮询或重跑。产品source8ed8920未变。E代理completed1054156ms（约17分34秒）、7374Bpatch；S代理completed1520665ms（约25分21秒）、5809Bpatch，均exit0、轨迹未截断。官方两组commandfailed、0parsed／2required，仅描述；不是两项逐条解析失败，更不是自然完成即官方通过。评分另耗E296275ms／S377881ms。
+
+S在真实改动后触发implementation：一个完整prepared输入与Router实际context在仅省略sessionId后逐字一致；包含需求、5594字符boundedchange、最近六个工具，无明示技术方案，earlier-tools省略。最后工具是gofmt／go vet管道，正文实际为CUE v0.6.0依赖DNS失败、退出状态在该context未知；阶段标签仅表示审查机会，不认证检查通过。语义调用37288ms、timeoutnull、9140input／1266output、wire4000／low、Router200／end_turn，正文4765字符，与实际公开回复完全一致，非JSON无类别／echo要求。一次报告有4个编号项，没有独立动作或新事实。
+
+| 报告项 | 人工核对结论 |
+| --- | --- |
+| 1. 尚无真实CUE编译／精确错误验证 | tool-6的DNS错误、tool-5新增依赖均有实证，要求真实依赖测试和精确错误核对有用；CUE不同版本／索引格式为待验证假设。标题never／only verification attempt仍超出有限历史措辞，正文随后才收窄范围 |
+| 2. version字符串可能过严 | schema及两个quoted fixture确实可见，但没有需求或失败样例证明必须接受数字version；诉诸可能的hidden tests不是缺陷证据，低优先级推测 |
+| 3. schema开放性 | 观察属实，但需求未要求闭合且模型说no action needed，是设计选择，不应当作新增待修问题计数 |
+| 4. MalformedYAML历史占位及断言强度 | 正确识别tool-2占位已由tool-3修好；已解决历史宜作反证。当前require.Error不能专门验证直接返回parse error，属有限测试覆盖建议，没有实际缺陷复现 |
+
+03:01:11.720 queued，03:01:33.892 context-returned，03:01:33.967的真实主模型请求已包含完整报告及真实checkpoint。共14个后续request含同一报告，是一次反馈持续存在，不是14次投递。03:01:49主模型明确说“The supervisor review confirms my priorities.”，随后继续scratch／stub验证；但03:01:18已计划该方向、03:01:26已发出第一个scratch检查，所以确认已见／明确回应，不证明审查改变决策或提高质量。
+
+全维度限界：本轮观察到验证、方向和有限恢复建议；架构只有低置信度schema选择讨论；无明示方案，需求—方案／方案—实现不可认证；探索时机有意延后；无独立probe执行／需求反例验收。自然正文没有分类不等于未审过所有内容，也不能自动算全维通过。第一条实质建议保留价值，其他编号项有噪声，不能把4项都算已证实问题。后续failure／completion仍因一次预算预留耗尽跳过。
+
+另一个独立实证问题来自旧确定性CHECK，而非语义报告：03:08:12／03:10:55／03:11:57三次failed-check使用“none has passed since”，但有后来的build／vet／Valid范围成功；主模型因此重复检查并多次refuted。未消除的失败范围可能确实仍在，不能用局部成功认证整套测试；需要免费真实轨迹回放判断scope、长命令200字符截断和提示措辞各自影响，不能直接放宽失败gate或盲清状态。
+
+本地E61请求59实际模型事件／39响应起始、S73请求73实际模型事件／45起始均Flash。Router窗口132body均可解析；85完整需求匹配（语义输入按解析context需求匹配，不能对JSON转义正文做裸substring），另外27条仅通过内存session绑定S，合计112归因记录全Flash／200，其余20不归因。Router数据库is_stream曾为0而实际body.stream为true，反馈核对采用实际body字段；没有修改Router或历史回执。445资源样本最低可用9888845824B、swap0／OOM0／无429。完整usage／费用unknown；existing两次旧验证器取消的SDK0不等于零消费。
+
+新增15关键hash累计180逐SHA保持；基础audit已冻结不再重跑，原pending控制器快照不改，另存behavior-status终结。归档actual-review-reply／prepared-review-inputs／feedback-and-actions-audit／router-behavior-audit／behavior-audit及审计脚本audit-round012-router.py、audit-round012.py，只有规范化公开内容和bodySHA，private session仅内存绑定，未复制thinking／凭据。
+
+下一批先做免费实际轨迹的确定性scope诊断，再按实证集中处理报告分流（未解决重要问题、已解决反证、无证据hidden-test猜测）与规则范围表达；每项RED→GREEN，批次全部node scripts/check.mjs后才新source/out及单题自然结束实测。当前没有启动013，不靠放宽安全、扩大预算或无变化付费来解决。

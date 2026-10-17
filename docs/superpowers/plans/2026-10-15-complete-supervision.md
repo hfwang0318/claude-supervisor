@@ -215,3 +215,6 @@ Round011已于2026-10-16T18:39:17Z完成全部审计：S23Bash/19Read/4Grep/2Glo
 
 
 Round012唯一新条件实测已启动：source8ed8920bb37751fbf3858b9d688a85223d06848d、seedba1ac1c271d69796fd210ed745021b32固定抽Fliptc172，Eexisting/Ssupervise并行2槽、Simplementation；主任务none/null等待自然结束，不再按旧15／50分钟取消。controller55904/monitor55907，02:40Z环境免费校准中。287完整普通检查/35秒晚到双问题自然正文回放/nativepreflight2823ms0paid/165旧hash门禁完整。下一步等自然结束统一审计实际多问题内容、历史范围、反馈可见及所有自然维度；不把合成机制或启动当质量成功，不自动full/重试。automation已用新语义恢复。
+
+
+Round012已03:18:16Z两组自然完成与完整审计，E约17分34秒／S25分21秒，官方0parsed/2required命令失败仅描述。真实37288ms/9140in1266out的4765字符自然报告有4个编号项、一次投递、14真实后续请求可见，主模型明确回应；scratch方向已在反馈前决定，采纳改变／质量效益unknown。有效依赖验证警告与已解决历史／hidden-test猜测／无行动选择噪声分开；无明示方案，不认证全维。旧CHECK三次none has passed since引发主模型重复／反驳，需按真实scope免费复现，不放宽失败gate。180关键hash保持，rawpending不改，controller／容器全退出，不重跑012/audit。下一批先免费实际scope／长命令诊断及报告triage证据，再TDD集中最小修正+全普通检查，暂无013。
