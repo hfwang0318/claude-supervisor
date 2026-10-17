@@ -260,3 +260,10 @@ Router301window/301bodyparsed，244原需求匹配＋40仅内存S绑定＝284归
 免费material-batch-native-replay同冻结Linux/Node/GNUloader/networknone、0model/0项目命令，对真实013改动重放：旧聚合23958bytes因隐私整份拒绝；新恢复24315bytes且redact逐字不变，包含pendingActions/retryStale原文，隐私与预算遗漏均标明。只是材料机制恢复，不证明真实模型会识别同步dispatch/直接retry等精确时序问题。195旧criticalhash保持。
 
 下一单题沿Scompletion，明确问题为安全源码/改动片段恢复后能否给有依据的实现与严格时序判断、反证及可用建议；全部自然维度一起审计，无方案仍不伪造。新source/out门禁完整后才启动，不以报告修正当实现修复或官方pass。
+
+
+### Round014：恢复安全改动材料后的完成阶段实测启动
+
+冻结sourceefa25970f32d0a683252adff84d269bbb369e5eb（真实产品修改），seedeb41dbae58437aeb76a44793feca04d8从最新完整caller-scope full4固定一次抽Fliptc172，父summarySHAa2c437f9785105429f1e4c3ba4de9e9e8a533c0c3e58e5af70be6006ae09d676。Eexistingauto/Ssupervisecompletion并行2槽，主任务none/null自然完成。唯一controller63525/monitor63528，2026-10-17T04:45:28Z开始免费环境校准，尚不声称两模型已运行或质量成功；最新PID文件优先。
+
+296宿主+全部node scripts/check.mjs、实际013材料断网新旧回放（恢复24315byte原文，隐私与预算遗漏明确）、195旧hash、dryrun2/nulltimeout、同冻结原生preflight2855ms0paid均绑定launchgate。原生CLI/Node/GNUloader字节不改，主旁Flash、预算/effort/自然语言多问题/历史来源和执行gate不改。问题为实际材料恢复后是否能核对实现与严格时序、避免只审主答自述；所有自然维度并审，缺方案不伪造，不以官方pass为目标。本轮抽题不同于013，不能把分数差直接归因修改。旧001..013均结束，不重跑audit/原回执，不自动full/重抽/接受失败重试。自然结束后基础audit再完整行为审计。
