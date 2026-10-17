@@ -249,3 +249,14 @@ S首次完成阶段实际调用38335ms／无插件timeout／4609in1744out／wire
 新可复现材料问题：真实36条改动中2条触发既有脱敏规则，聚合23958byte小于24576上限，却导致34条其余安全改动一起change-unavailable。同冻结Linux／networknone／0model／0项目执行的round013-material-diagnosis与privacy-details复现；20KB控制仍拒绝，非此次大小上限原因。未降低隐私或复制敏感值。下一批只保留独立通过原隐私检查的有界改动原文，明确遗漏隐私／预算部分；不更改实际任务代码，不把部分材料认证成完整当前diff，不增加预算。
 
 Router301window/301bodyparsed，244原需求匹配＋40仅内存S绑定＝284归因Flash200，17不归因；本地E128requests109starts／S175requests134starts，全部实际身份Flash。673资源样本min6788026368B/swap0/OOM0/no429，完整usage/costunknown。新增15criticalhash累计195保持；原pending快照不改，behavior-status另存终结。基础audit不重跑，原输入／报告／patch不修改。下轮只在实证批次RED→GREEN＋全部普通检查与免费实际材料回放后冻结新版本，不立即无变化付费。
+
+
+### Round013后：安全改动材料独立保留批次
+
+按实证只修材料准备：legacy changesOf继续用于原验证／阶段判定，独立reviewChangesOf逐条保留通过原redact相等检查的有界原文片段，隐私不安全条目省略；以UTF-8 bytes控制24576总预算，超预算记录明确省略。context.scope与input/feedback前置说明privacy-affected-changes／change-record-budget，不把部分历史片段认证为完整当前diff，不读真实工作区文件、不改来源／动作gate／调用预算。
+
+三项生产宿主RED293pass3fail（混合安全/敏感、全敏感拒绝、多字节预算）→GREEN296pass0fail。首次实现material局部变量重名导致模块不解析，改为changeMaterial后全部宿主通过；非宿主/模型故障。完整node scripts/check.mjs material-batch-final-checks.log exit0：296宿主、类型、manifest、真实隔离和全部scorer/runner普通检查，不缩减。作者TDD+diffreview，旧freshreview不覆盖此批，不反复派reviewer。
+
+免费material-batch-native-replay同冻结Linux/Node/GNUloader/networknone、0model/0项目命令，对真实013改动重放：旧聚合23958bytes因隐私整份拒绝；新恢复24315bytes且redact逐字不变，包含pendingActions/retryStale原文，隐私与预算遗漏均标明。只是材料机制恢复，不证明真实模型会识别同步dispatch/直接retry等精确时序问题。195旧criticalhash保持。
+
+下一单题沿Scompletion，明确问题为安全源码/改动片段恢复后能否给有依据的实现与严格时序判断、反证及可用建议；全部自然维度一起审计，无方案仍不伪造。新source/out门禁完整后才启动，不以报告修正当实现修复或官方pass。

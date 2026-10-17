@@ -16,7 +16,7 @@ import { selectSideModel, createHost, reviewCompletionProfile } from './host'
 import { registerBand } from './band'
 import { HISTORY as READINGS_KEPT, readingOf } from './weather'
 import type { Finding, Kind } from './evidence'
-import { changesOf, contradictions, evidenceOf, isCheckClaim, isCheckCommand, isCheckKind, isClaim, keyOf, recordFindings, settledBy, skipped, supports, unreported } from './evidence'
+import { changesOf, contradictions, evidenceOf, isCheckClaim, isCheckCommand, isCheckKind, isClaim, keyOf, recordFindings, reviewChangesOf, settledBy, skipped, supports, unreported } from './evidence'
 import type { Facts, Mode, VerifyInput, VerifyResult } from './prompt'
 import { assistPacketPrompt, localPacketPrompt, factRequestPrompt, base, bytesOf, claimsOf, clip,  factsOf, isSameItem, noteText, parseTurn, probeRefusal, redact, refusal, ROUNDS, shown, squash, verifyPrompt } from './prompt'
 
@@ -377,7 +377,8 @@ const engineeringReview = async ($: EngineInterface, list: Rows, final = false, 
   if (final && s.reviewStopSent) return skipped('completion-feedback-already-offered')
   const latestPrompt = list.findLastIndex(r => r.role === 'user' && r.text.trim() && !r.text.includes('[deepseek-supervisor]') && !/^\s*<(?:system-reminder|command-|local-command|teammate-message)|^\s*Another Claude session/.test(r.text))
   const rows = latestPrompt < 0 ? list : list.slice(latestPrompt + 1)
-  const context = buildReviewContext(binding, captured.asked, answer ? [...rows, { role: 'assistant', text: answer, toolUses: [] }] : rows, changes, phase)
+  const changeMaterial = reviewChangesOf(record)
+  const context = buildReviewContext(binding, captured.asked, answer ? [...rows, { role: 'assistant', text: answer, toolUses: [] }] : rows, changeMaterial.text, phase, changeMaterial.omitted)
   if (!context) return skipped('context-rejected')
   if (!final && phase === 'plan' && changes !== '') return skipped('awaiting-post-edit-check')
   if (!final && phase === 'plan' && !context.sources.some(source => source.kind === 'plan')) {

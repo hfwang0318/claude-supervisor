@@ -478,3 +478,9 @@ notice names the unresolved scope and does not claim no other checks passed.
 Reviewer problem lists focus on unresolved material concerns; visible fixes are
 counterevidence, and imagined hidden-grader expectations do not create requirements.
 Grounded architecture trade-offs remain valid advice without a failing test.
+
+
+Advisory change material keeps independently privacy-safe recorded excerpts even
+when another change must be withheld. Privacy and byte-budget omissions are
+explicit in both the model input and feedback. Excerpts remain bounded historical
+records, not a complete diff or a certificate of the current implementation.

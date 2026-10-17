@@ -591,3 +591,47 @@ test('natural multi-concern report is delivered without category labels or model
   expect(state.processActions.length).toBe(0)
   expect(state.calls).toBe(1)
 })
+
+test('completion review retains safe recorded changes when another change requires privacy omission', { options: { ...options, review_phase: 'completion' } }, async ($, on) => {
+  const { state, clock } = world(on)
+  state.rows = [{ role: 'assistant', text: '', toolUses: [
+    { tool: 'Edit', input: { file_path: '/p/timer.ts', old_string: 'retry(2000)', new_string: 'retry(1000)' }, text: 'ok' },
+    { tool: 'Edit', input: { file_path: '/p/private.ts', old_string: 'password=private-before-123', new_string: 'password=private-after-456' }, text: 'ok' },
+    { tool: 'Edit', input: { file_path: '/p/selector.ts', old_string: 'return true', new_string: 'return pending === 0' }, text: 'ok' },
+  ] }] as never
+  await start($); await observeStop($, clock, 'Changed the timer and selector; validation remains limited.')
+  const ctx = JSON.parse(state.prompts[0]!.split('\n\n').at(-1)!)
+  const change = ctx.sources.find((s: {kind:string}) => s.kind === 'change')
+  expect(change?.text).toContain('+ retry(1000)')
+  expect(change?.text).toContain('+ return pending === 0')
+  expect(state.prompts[0]).not.toContain('private-before-123')
+  expect(state.prompts[0]).not.toContain('private-after-456')
+  expect(ctx.scope.omitted).toContain('privacy-affected-changes')
+  expect(state.prompts[0]).toContain('Some recorded changes were withheld for privacy')
+  expect(state.processActions.length).toBe(0)
+})
+
+test('all-private recorded changes remain unavailable and explicitly privacy limited', { options: { ...options, review_phase: 'completion' } }, async ($, on) => {
+  const { state, clock } = world(on)
+  state.rows = [{ role: 'assistant', text: '', toolUses: [{ tool: 'Edit', input: { file_path: '/p/private.ts', old_string: 'token=private-before-123', new_string: 'token=private-after-456' }, text: 'ok' }] }] as never
+  await start($); await observeStop($, clock, 'Changed a private setting; no behavior is verified.')
+  const ctx = JSON.parse(state.prompts[0]!.split('\n\n').at(-1)!)
+  expect(ctx.sources.some((s: {kind:string}) => s.kind === 'change')).toBe(false)
+  expect(ctx.scope.omitted).toContain('privacy-affected-changes')
+  expect(state.prompts[0]).not.toContain('private-before-123')
+  expect(state.calls).toBe(1)
+  expect(state.processActions.length).toBe(0)
+})
+
+test('multibyte change excerpts keep safe records within the review byte budget and declare omitted records', { options: { ...options, review_phase: 'completion' } }, async ($, on) => {
+  const { state, clock } = world(on)
+  state.rows = [{ role: 'assistant', text: '', toolUses: Array.from({ length: 8 }, (_, i) => ({ tool: 'Edit', input: { file_path: `/p/module${i}.ts`, old_string: '旧'.repeat(1100), new_string: '新'.repeat(1700) }, text: 'ok' })) }] as never
+  await start($); await observeStop($, clock, 'Changed modules; this is a partial review.')
+  const ctx = JSON.parse(state.prompts[0]!.split('\n\n').at(-1)!)
+  const change = ctx.sources.find((s: {kind:string}) => s.kind === 'change')
+  expect(typeof change?.text).toBe('string')
+  expect(new TextEncoder().encode(change?.text ?? '').length <= 24576).toBe(true)
+  expect(ctx.scope.omitted).toContain('change-record-budget')
+  expect(ctx.scope.omitted).toContain('changes-are-bounded-record-excerpts')
+  expect(state.calls).toBe(1)
+})

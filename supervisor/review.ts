@@ -33,9 +33,9 @@ const explicitPlan = (text: string) => {
   })
 }
 
-export const buildReviewContext = (binding: Binding, asked: string, rows: readonly ReviewRow[], changes: string, phase: ReviewContext['phase']): ReviewContext | null => {
+export const buildReviewContext = (binding: Binding, asked: string, rows: readonly ReviewRow[], changes: string, phase: ReviewContext['phase'], changeOmissions: readonly string[] = []): ReviewContext | null => {
   if (!safeText(asked, 16384)) return null
-  const context: ReviewContext = { binding: { ...binding }, phase, sources: [{ id: 'req', kind: 'requirement', text: asked }], scope: { omitted: [], repositoryComplete: false } }
+  const context: ReviewContext = { binding: { ...binding }, phase, sources: [{ id: 'req', kind: 'requirement', text: asked }], scope: { omitted: [...changeOmissions], repositoryComplete: false } }
   const add = (source: ReviewSource, max: number) => {
     if (!safeText(source.text, max) || bytesOf(JSON.stringify(context)) + bytesOf(JSON.stringify(source)) > 49152) { context.scope.omitted.push(`${source.kind}-unavailable`); return }
     context.sources.push(source)
@@ -131,6 +131,8 @@ const reviewLimits = (context: ReviewContext): string[] => [
   'Source fidelity: reviewer interpretations are not independently checked. Exact cited source excerpts take precedence over paraphrases, including each function’s distinct return value and behavior.',
   ...(context.scope.omitted.some(kind => kind === 'earlier-tools' || kind === 'earlier-plans') ? ['Earlier history is omitted. The supplied records cannot establish that an event never happened or was the only check across the omitted history; absence claims apply only to the provided evidence.'] : []),
   ...(context.scope.omitted.includes('changes-are-bounded-record-excerpts') ? ['The change material is a bounded change excerpt, not an exhaustive project diff; unseen branches or schema definitions remain unknown.'] : []),
+  ...(context.scope.omitted.includes('privacy-affected-changes') ? ['Some recorded changes were withheld for privacy. Retained excerpts do not establish the contents or behavior of the omitted changes.'] : []),
+  ...(context.scope.omitted.includes('change-record-budget') ? ['Some recorded changes were omitted to keep the change material within its byte budget. Do not treat the retained excerpts as the complete implementation.'] : []),
 ]
 
 export const reviewPrompt = (context: ReviewContext, mode: 'supervise' | 'probe' | 'recovery') => {

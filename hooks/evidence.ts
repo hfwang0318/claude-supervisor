@@ -566,11 +566,13 @@ export const settledBy = (ev: Evidence, item: { rule?: Kind; quote: string; prob
  * What the assistant changed since the person's last prompt, as hunks a reviewer
  * reads: code only, oldest first, each clipped, the whole bounded.
  */
+const changeHunk = (c: Evidence['changes'][number]) => [`--- ${c.path}`, ...clip(c.old, 1200).split('\n').filter(l => l !== '').map(l => `- ${l}`), ...clip(c.new, 1800).split('\n').map(l => `+ ${l}`)].join('\n')
+
 export const changesOf = (ev: Evidence, limit = 9000) => {
   const since = ev.prompts.at(-1)?.at ?? 0
   const hunks = ev.changes
     .filter(c => c.at >= since && isCode(c.path))
-    .map(c => [`--- ${c.path}`, ...clip(c.old, 1200).split('\n').filter(l => l !== '').map(l => `- ${l}`), ...clip(c.new, 1800).split('\n').map(l => `+ ${l}`)].join('\n'))
+    .map(changeHunk)
   let text = ''
   let kept = 0
   for (const h of hunks) {
@@ -582,4 +584,20 @@ export const changesOf = (ev: Evidence, limit = 9000) => {
     kept += 1
   }
   return text
+}
+
+// A private record must not remove unrelated safe material from an advisory
+// review. Keep original bounded excerpts, never a rewritten/redacted code claim.
+export const reviewChangesOf = (ev: Evidence, limit = 24576) => {
+  const since = ev.prompts.at(-1)?.at ?? 0
+  const omitted = new Set<string>()
+  let text = ''
+  for (const change of ev.changes.filter(c => c.at >= since && isCode(c.path))) {
+    const hunk = changeHunk(change)
+    if (redact(hunk) !== hunk) { omitted.add('privacy-affected-changes'); continue }
+    const next = text ? `${text}\n${hunk}` : hunk
+    if (bytesOf(next) > limit) { omitted.add('change-record-budget'); continue }
+    text = next
+  }
+  return { text, omitted: [...omitted] }
 }
