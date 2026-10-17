@@ -1,4 +1,4 @@
-import { base, claimsOf, clip, leaves, squash } from './prompt'
+import { base, bytesOf, claimsOf, clip, leaves, redact, squash } from './prompt'
 
 // Rules, not a model. The session's own tool calls say what was run, in what order,
 // and how it ended; the model's words say what it believes. Where the two disagree,
@@ -125,7 +125,7 @@ const allows = (text: string, target: string) => {
   ).test(text)
 }
 
-export type CheckRun = { at: number; command: string; ok: boolean; line: string; text: string }
+export type CheckRun = { at: number; command: string; commandComplete?: boolean; ok: boolean; line: string; text: string }
 export type BashRun = { at: number; key: string; ok: boolean; sig: string; text: string }
 export type Change = { at: number; path: string; old: string; new: string }
 
@@ -248,7 +248,12 @@ export const evidenceOf = (rows: readonly Row[]): Evidence => {
         const ok = !failed && !FAILED.test(out) && !truncated && (typeof exit !== 'number' || exit === 0)
         ev.bash.push({ at, key: keyOf(command), ok, sig: ok ? '' : signatureOf(out), text: clip(out, 4000) })
         // The line a note shows is the one that says what failed, not "Exit code 1".
-        if ((runsTests(command) || ownCheck) && !MISSING.test(out)) ev.runs.push({ at, command: clip(squash(command), 200), ok, line: ok ? '' : clip(signatureOf(out), 160), text: ok ? '' : clip(out, 4000) })
+        if ((runsTests(command) || ownCheck) && !MISSING.test(out)) {
+          // Scope identity and executable rechecks need the original command,
+          // not a display prefix that can collide or remove the actual runner.
+          const clean = redact(command), commandComplete = bytesOf(command) <= 4096 && clean === command
+          ev.runs.push({ at, command: commandComplete ? command : clip(squash(clean), 200), commandComplete, ok, line: ok ? '' : clip(signatureOf(out), 160), text: ok ? '' : clip(out, 4000) })
+        }
         // A test file removed from the shell.
         for (const p of pieces(command)) {
           const m = /^(?:git\s+)?rm\s+(.+)$/.exec(p)
@@ -303,8 +308,12 @@ const relevantRuns = (runs: CheckRun[], claim: string) => {
   if ([lint, build, type, tests].filter(Boolean).length !== 1 || tests) return runs
   return runs.filter(r => lint ? /\b(?:ruff|eslint|flake8|pylint|lint)\b/.test(r.command) : type ? /\b(?:tsc|mypy|pyright|typecheck)\b/.test(r.command) : /\b(?:build|tsc|make|compile)\b/.test(r.command))
 }
-const latestChecks = (runs: CheckRun[]) => [...new Map(runs.map(r => [scopeOf(r.command), r])).values()]
+const latestChecks = (runs: CheckRun[]) => [...new Map(runs.map(r => [r.commandComplete === false ? r.at : scopeOf(r.command), r] as const)).values()]
 const lastRelevant = (runs: CheckRun[]) => latestChecks(runs).find(r => !r.ok) ?? runs.at(-1)
+
+const checkDisplay = (run: CheckRun) => clip(squash(scopeOf(run.command)), 200)
+const checkRecheck = (run: CheckRun) => run.commandComplete === false ? '' : run.command
+const checkProbe = (run: CheckRun) => run.commandComplete === false ? 'Review the original full command and rerun that check scope; the stored text is only an excerpt.' : `Run ${run.command}`
 
 /** Rules whose item says whether the checks pass: one such item is open at a time. */
 export const isCheckKind = (k: Kind | undefined) => k === 'failed-check' || k === 'stale-check' || k === 'no-check' || k === 'unreported-failure' || k === 'skipped-check'
@@ -337,11 +346,11 @@ export const contradictions = (ev: Evidence, claims: readonly string[]): Finding
         continue
       }
       if (!last.ok) {
-        found.push({ kind: 'failed-check', what: `The last check run failed (\`${last.command}\`: ${last.line || 'it reported a failure'}), and none has passed since.`, quote, probe: `Run ${last.command}`, recheck: last.command })
+        found.push({ kind: 'failed-check', what: `In the supplied record, this check scope has an unresolved failure (\`${checkDisplay(last)}\`: ${last.line || 'it reported a failure'}). Passing checks in other scopes do not settle it.`, quote, probe: checkProbe(last), recheck: checkRecheck(last) })
         continue
       }
       if (lastEdit !== undefined && lastEdit.at > last.at) {
-        found.push({ kind: 'stale-check', what: `${base(lastEdit.path)} was edited after the last passing check (\`${last.command}\`), so the pass is about code that has changed since.`, quote, probe: `Run ${last.command}`, recheck: last.command })
+        found.push({ kind: 'stale-check', what: `${base(lastEdit.path)} was edited after the last passing check (\`${checkDisplay(last)}\`), so the pass is about code that has changed since.`, quote, probe: checkProbe(last), recheck: checkRecheck(last) })
         continue
       }
     }
@@ -372,7 +381,7 @@ export const supports = (ev: Evidence, claim: string) => {
   if (ev.blind.some(b => b < at)) return false
   const last = lastRelevant(relevantRuns(ev.runs.filter(r => r.at < at), claim))
   const lastEdit = ev.edits.filter(e => e.at < at && isCode(e.path)).at(-1)
-  return last !== undefined && last.ok && (lastEdit === undefined || lastEdit.at < last.at)
+  return last !== undefined && last.commandComplete !== false && last.ok && (lastEdit === undefined || lastEdit.at < last.at)
 }
 
 const count = (s: string, re: RegExp) => [...s.matchAll(re)].length
@@ -505,7 +514,7 @@ export const unreported = (ev: Evidence, answer: string): Finding[] => {
   const since = ev.prompts.at(-1)?.at ?? 0
   const last = lastRelevant(ev.runs.filter(r => r.at >= since))
   if (last === undefined || last.ok || OWNS_UP.test(answer) || ev.blind.some(b => b > last.at)) return []
-  return [{ kind: 'unreported-failure', what: `The last check this turn failed (\`${last.command}\`: ${last.line || 'it reported a failure'}), and the answer does not say so.`, quote: clip(squash(answer) || '(an empty answer)', 200), probe: `Fix it and run ${last.command} again, or tell the person it fails and why`, recheck: last.command }]
+  return [{ kind: 'unreported-failure', what: `A recorded check scope this turn still has an unresolved failure (\`${checkDisplay(last)}\`: ${last.line || 'it reported a failure'}), and the answer does not disclose that scope. Other passing scopes do not settle it.`, quote: clip(squash(answer) || '(an empty answer)', 200), probe: last.commandComplete === false ? checkProbe(last) : `Fix or rerun this check scope, or disclose its failure: ${last.command}`, recheck: checkRecheck(last) }]
 }
 
 /**
@@ -540,10 +549,11 @@ export const settledBy = (ev: Evidence, item: { rule?: Kind; quote: string; prob
     case 'stale-check':
     case 'unreported-failure': {
       const command = item.rule === 'no-check' ? undefined : item.recheck || /^Run (.+)$/.exec(item.probe)?.[1]
-      const relevant = command ? ev.runs.filter(r => scopeOf(r.command) === scopeOf(command)) : ev.runs
+      if (item.rule !== 'no-check' && !command) return undefined
+      const relevant = command ? ev.runs.filter(r => r.commandComplete !== false && scopeOf(r.command) === scopeOf(command)) : ev.runs
       const last = command ? relevant.at(-1) : lastRelevant(relevant)
       const lastEdit = ev.edits.filter(e => isCode(e.path)).at(-1)
-      if (last === undefined || !last.ok) return undefined
+      if (last === undefined || last.commandComplete === false || !last.ok) return undefined
       if (lastEdit !== undefined && lastEdit.at > last.at) return undefined
       return `\`${last.command}\` passed after the last edit`
     }

@@ -469,3 +469,12 @@ closing input. Explicit numeric task deadlines remain available for compatibilit
 scoring, setup and isolated tool limits are unchanged. User cancellation and process
 errors remain terminal, and natural completion does not imply official acceptance.
 Old frozen time-limited cohorts are not relabeled or rerun.
+
+
+Check-scope matching retains the original redaction-safe command up to 4KiB;
+only its display is shortened. Oversized or redacted command excerpts cannot be
+used as executable rechecks or proof of a matching successful scope. A failure
+notice names the unresolved scope and does not claim no other checks passed.
+Reviewer problem lists focus on unresolved material concerns; visible fixes are
+counterevidence, and imagined hidden-grader expectations do not create requirements.
+Grounded architecture trade-offs remain valid advice without a failing test.

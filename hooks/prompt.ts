@@ -396,7 +396,7 @@ export const isSameItem = (a: { quote: string }, b: { quote: string }) => {
 
 // One item as the model reads it: its own words, the command, what it printed,
 // and how the item closes.
-const CLOSES_BY_RECORD = '   closes: when a check command passes after your last edit to code (read from the session; saying so does not close it)'
+const CLOSES_BY_RECORD = '   closes: when a matching check scope passes after your last edit to code (read from the session; saying so does not close it)'
 const CLOSES_BY_TELLING = (id: number) => `   closes: when you tell the person, writing \`[ysk#${id} told]\` in that reply`
 
 export const itemText = (raw: Issue) => {

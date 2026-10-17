@@ -408,12 +408,12 @@ test('another session\'s message starts a new prompt: the turn may be kept going
   w.state.noSandbox = true
   await start($)
   await prompt($, 'fix total()')
-  expect((await stop($, 'Fixed. All tests pass.')).block).toContain('The last check run failed')
+  expect((await stop($, 'Fixed. All tests pass.')).block).toContain('In the supplied record, this check scope has an unresolved failure')
   expect((await stop($, 'All tests pass, really.', true)).block).toBeUndefined()
   // A lead session hands over the next order (ccds): a new prompt, as if typed.
   await $.prompt.submit({ text: '@ds order: /p/handoff/cc-spec-20261009-200000.md', origin: { kind: 'peer' } } as never)
   w.state.rows = [...w.state.rows, { role: 'user', text: 'next order', toolUses: [] }, failingRun('b', 'AssertionError: 1 != 2')]
-  expect((await stop($, 'Done. All tests pass.')).block).toContain('The last check run failed')
+  expect((await stop($, 'Done. All tests pass.')).block).toContain('In the supplied record, this check scope has an unresolved failure')
 })
 
 test('on Anthropic\'s own endpoint it stays idle unless switched on', async ($, on) => {
@@ -457,7 +457,7 @@ test('with no sandbox, a pass claimed about code edited since is raised from the
   // No model was asked: the record settled it.
   expect(w.asked.length).toBe(0)
   expect(r.additionalContext?.[0]).toContain('shop.py was edited after the last passing check')
-  expect(r.additionalContext?.[0]).toContain('closes: when a check command passes after your last edit')
+  expect(r.additionalContext?.[0]).toContain('closes: when a matching check scope passes after your last edit')
   expect(await issues($)).toContain('[open]')
   // The checks during the work leave the rules to the batches: no second copy as a note.
   await steps($, 3)
@@ -494,7 +494,7 @@ test('a turn that ends saying the tests pass after they failed comes back as a p
   // "Fixed it." goes to the verifier; the claim the record already contradicts does not.
   expect(w.asked.every(a => !a.includes('All tests pass'))).toBe(true)
   expect(w.submitted.length).toBe(1)
-  expect(w.submitted[0]).toContain('The last check run failed')
+  expect(w.submitted[0]).toContain('In the supplied record, this check scope has an unresolved failure')
   expect(w.submitted[0]).toContain('1 failed, 2 passed')
 })
 
@@ -569,14 +569,14 @@ test('before the turn ends, an answer the record contradicts keeps the turn goin
   await start($)
   await prompt($, 'fix total()')
   const first = await stop($, 'Fixed. All tests pass.')
-  expect(first.block).toContain('The last check run failed')
+  expect(first.block).toContain('In the supplied record, this check scope has an unresolved failure')
   expect(first.block).toContain('47.25 != 59.75')
   // The model went on but still says so: the turn is not kept going a second time.
   expect((await stop($, 'All tests pass, really.', true)).block).toBeUndefined()
   // A new prompt from the person, a new turn, a new chance.
   await prompt($, 'and the docs?')
   w.state.rows = [...w.state.rows, { role: 'user', text: 'and the docs?', toolUses: [] }, failingRun('b', 'AssertionError: 1 != 2')]
-  expect((await stop($, 'Docs updated.')).block).toContain('does not say so')
+  expect((await stop($, 'Docs updated.')).block).toContain('does not disclose that scope')
 })
 
 test('an answer that owns up to the failure, or a turn of circles alone, ends as it is', async ($, on) => {
@@ -763,10 +763,10 @@ test('live: a second hold in one prompt says only what is new, and never the sam
   await start($)
   await prompt($, 'fix total()')
   const first = await stop($, 'Fixed. All tests pass.')
-  expect(first.block).toContain('#1 The last check run failed')
+  expect(first.block).toContain('#1 In the supplied record, this check scope has an unresolved failure')
   // The model goes on and still leaves the failure out: that is new, and it alone is said.
   const second = await stop($, 'I rewrote the notes.', true)
-  expect(second.block).toContain('#2 The last check this turn failed')
+  expect(second.block).toContain('#2 A recorded check scope this turn still has an unresolved failure')
   expect(second.block).not.toContain('#1 ')
   // Two holds a prompt at most.
   expect((await stop($, 'Also updated setup.cfg.', true)).block).toBeUndefined()
@@ -799,14 +799,14 @@ test('live: the same claim said again after its item closed is raised again; the
   const w = world(on, [{ role: 'user', text: 'fix total()', toolUses: [] }, failingRun('a'), claimRow('n1', 'All tests pass.')])
   w.state.noSandbox = true
   await start($)
-  expect((await batch($)).additionalContext?.[0]).toContain('#1 The last check run failed')
+  expect((await batch($)).additionalContext?.[0]).toContain('#1 In the supplied record, this check scope has an unresolved failure')
   // The model tells the person; #1 closes. The old saying is not raised again.
   w.state.rows = [...w.state.rows, claimRow('n2', 'test_total still fails. [ysk#1 told]')]
   expect((await batch($)).additionalContext ?? []).toEqual([])
   expect(await issues($)).toContain('#1 [told]')
   // Later it fails again and says the same words again: that is a new claim.
   w.state.rows = [...w.state.rows, failingRun('b', 'AssertionError: 1 != 2'), claimRow('n3', 'All tests pass.')]
-  expect((await batch($)).additionalContext?.[0]).toContain('#2 The last check run failed')
+  expect((await batch($)).additionalContext?.[0]).toContain('#2 In the supplied record, this check scope has an unresolved failure')
 })
 
 // Round 4 of the live eval: the answer held for "no check ran" landed in the record at
@@ -823,7 +823,7 @@ test('live: an answer held for "no check ran" is not raised again once the run i
   expect(await issues($)).toContain('#1 [fixed] (no-check)')
   // Said again after that run, it is a new claim, held to the run that failed.
   w.state.rows = [...w.state.rows, { role: 'assistant', text: answer, toolUses: [] }]
-  expect((await stop($, answer, true)).block).toContain('#2 The last check run failed')
+  expect((await stop($, answer, true)).block).toContain('#2 In the supplied record, this check scope has an unresolved failure')
 })
 
 // Round 4 of the live eval: a held turn's second and third answers sent the same change

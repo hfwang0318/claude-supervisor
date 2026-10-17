@@ -486,3 +486,49 @@ test('a truthful lint result remains scoped while an earlier test failure stays 
   expect(supports(ev, 'Lint passes.')).toBe(true)
   expect(contradictions(ev, ['All tests pass.']).some(f => f.kind === 'failed-check')).toBe(true)
 })
+
+
+test('long commands with one shared display prefix cannot merge different check scopes', async () => {
+  const prefix = 'mkdir -p /tmp/' + 'shared'.repeat(42) + ' && '
+  const ev = evidenceOf([say('', bash(prefix + 'pytest -q', '1 failed', true)), say('', bash(prefix + 'ruff check src', 'All checks passed!'))])
+  expect(contradictions(ev, ['All tests pass.']).some(f => f.kind === 'failed-check')).toBe(true)
+  expect(supports(ev, 'All tests pass.')).toBe(false)
+})
+test('a matching check after different long setup can settle the same recorded failure', async () => {
+  const command = 'mkdir -p /tmp/' + 'before'.repeat(42) + ' && pytest -q'
+  const after = 'mkdir -p /tmp/' + 'after'.repeat(46) + ' && pytest -q'
+  const first = evidenceOf([say('', bash(command, '1 failed', true))])
+  const finding = contradictions(first, ['All tests pass.'])[0]!
+  const ev = evidenceOf([say('', bash(command, '1 failed', true)), say('', bash(after, '2 passed'))])
+  expect(contradictions(ev, ['All tests pass.'])).toEqual([])
+  expect(settledBy(ev, { rule: finding.kind, quote: finding.quote, probe: finding.probe, recheck: finding.recheck })).toContain('passed after the last edit')
+})
+test('a bounded long check keeps its complete original command for scope and recheck', async () => {
+  const command = 'mkdir -p /tmp/' + 'setup'.repeat(50) + ' &&\npytest -q 2>&1 | tail -10'
+  const ev = evidenceOf([say('', bash(command, '1 failed', true))])
+  expect(ev.runs[0]?.command).toBe(command)
+  expect(contradictions(ev, ['All tests pass.'])[0]?.recheck).toBe(command)
+})
+test('oversized or redacted commands cannot authorize a clipped recheck or accept an unrelated pass', async () => {
+  for (const command of ['echo ' + 'x'.repeat(5000) + ' && pytest -q', 'echo password=private-value-123 && pytest -q']) {
+    const ev = evidenceOf([say('', bash(command, '1 failed', true))])
+    expect(ev.runs[0]?.commandComplete).toBe(false)
+    expect(ev.runs[0]?.command.includes('private-value-123')).toBe(false)
+    const f = contradictions(ev, ['All tests pass.'])[0]!
+    expect(f.recheck).toBe('')
+    expect(f.probe).toContain('original full command')
+    const later = evidenceOf([say('', bash('ruff check src', 'All checks passed!'))])
+    expect(settledBy(later, { rule: f.kind, quote: f.quote, probe: f.probe, recheck: f.recheck })).toBeUndefined()
+    expect(supports(evidenceOf([say('', bash(command, '2 passed'))]), 'All tests pass.')).toBe(false)
+  }
+})
+test('an unresolved scope is not described as the latest run or as no later checks passing', async () => {
+  const ev = evidenceOf([ask, say('', bash('pytest -q', '1 failed', true)), say('', bash('ruff check src', 'All checks passed!'))])
+  const f = contradictions(ev, ['All tests pass.'])[0]!
+  expect(f.what).toContain('scope')
+  expect(f.what.includes('none has passed since')).toBe(false)
+  expect(f.what.includes('The last check run failed')).toBe(false)
+  const end = unreported(ev, 'Work complete.')[0]!
+  expect(end.what).toContain('scope')
+  expect(end.what.includes('The last check this turn failed')).toBe(false)
+})

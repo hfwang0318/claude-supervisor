@@ -218,3 +218,18 @@ Round012唯一新条件实测已启动：source8ed8920bb37751fbf3858b9d688a85223
 
 
 Round012已03:18:16Z两组自然完成与完整审计，E约17分34秒／S25分21秒，官方0parsed/2required命令失败仅描述。真实37288ms/9140in1266out的4765字符自然报告有4个编号项、一次投递、14真实后续请求可见，主模型明确回应；scratch方向已在反馈前决定，采纳改变／质量效益unknown。有效依赖验证警告与已解决历史／hidden-test猜测／无行动选择噪声分开；无明示方案，不认证全维。旧CHECK三次none has passed since引发主模型重复／反驳，需按真实scope免费复现，不放宽失败gate。180关键hash保持，rawpending不改，controller／容器全退出，不重跑012/audit。下一批先免费实际scope／长命令诊断及报告triage证据，再TDD集中最小修正+全普通检查，暂无013。
+
+
+### 2026-10-17：检查范围完整性与报告取舍批次
+
+免费round012-scope-diagnosis在同冻结Linux／networknone下，仅把实际公开检查／编辑记录作为数据送入生产evidenceOf／contradictions，0模型／0项目执行。确认原617字符失败命令和497字符后续命令有相同200字符显示前缀；7条实际检查只保留6个不同命令，真实runner尾部丢失。另一个235字符成功命令的scope也被截坏。与此同时，即使对比完整命令，完整stub suite的失败仍未解决，所以不把全部重复提示归咎截断、不把Valid局部成功说成整套通过。
+
+本批将安全且不超过4096bytes的原始检查命令完整保留用于scope身份和recheck，只有呈现文字截短；超长或脱敏会改变的命令明确commandComplete:false，不作为可执行recheck／自动成功证据，也不能因显示前缀相同合并或用其他scope成功关闭。保持严格scope比较，不猜复合命令之间的包含关系。failed-check／unreported-failure和关闭说明改成“记录中的某检查范围仍失败／需要匹配范围”，不再说最后一次检查失败或此后没有任何成功。
+
+报告提示要求问题列表聚焦未解决且有实质影响的关注，把已修历史作为反证，不为无行动选择或假想hidden grader制造要求。仍允许没有失败测试但有观察到的设计权衡／具体后果的架构和方向建议；自然语言和所有重要问题保持，不加数量或类别限制，不重写模型原报告。
+
+六项行为回归RED287pass6fail；新完整性／privacy控制GREEN后，旧宿主8项文字断言按准确新措辞更新（非行为gate退化），关闭说明另有RED291pass2fail，最终293宿主及全部node scripts/check.mjs exit0，日志scope-triage-final-checks.log。作者TDD+diffreview，旧freshreview不覆盖。本次没有放宽执行、隐私、绑定或预算。
+
+scope-triage-native-replay/receipt.json按实际012记录对照冻结旧／新helper，0paid／0项目命令：原6个不同记录变为7个，所有实际有界命令原样保留；完整stub测试失败保留且措辞限定scope。实际012正文和输入context原样保留，triage提示新增。仅机制证据，不证明真实模型会减少噪声或改正所有范围断言。
+
+下一轮新问题是完成阶段：012早期审查用尽预算，后续最终答复仍对未实际运行的CUE行为作确定性描述。选择Sreview_phase=completion，保持每次审全部可用维度、不增加预算，观察最终验证声明、报告取舍和晚到反馈排空。先用断网原生夹具证明仅在main最终答复后首次发审查、等待晚到双问题报告并有限follow-up自然退出，再新source/out随机一双失败E/S。新轮与012implementation条件分开，不声称默认auto效果。主任务始终none/null自然完成，工具／评分原时限不改，不自动full，不重抽或接受失败重试。

@@ -203,3 +203,14 @@ test('advisory mode keeps privacy and size rejection and does not require one-ju
   expect(prompt.includes('Give at most one important grounded judgment')).toBe(false)
   expect(prompt.includes('Return exactly one raw JSON object')).toBe(false)
 })
+
+
+test('multi-concern report triage keeps resolved history and hidden-grader guesses out of current issues', async () => {
+  const prompt = reviewPrompt(context(), 'supervise')
+  expect(prompt).toContain('Only unresolved, material concerns belong in the problem list')
+  expect(prompt).toContain('Resolved issues are counterevidence')
+  expect(prompt).toContain('Do not invent hidden-test or hidden-grader expectations')
+  expect(prompt).toContain('observed design trade-offs')
+  expect(prompt).toContain('all important, distinct concerns')
+  expect(prompt.includes('Give at most one important grounded judgment')).toBe(false)
+})
