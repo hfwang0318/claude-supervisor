@@ -408,3 +408,10 @@ S在真实改动后触发implementation：一个完整prepared输入与Router实
 scope-triage-native-replay/receipt.json按实际012记录对照冻结旧／新helper，0paid／0项目命令：原6个不同记录变为7个，所有实际有界命令原样保留；完整stub测试失败保留且措辞限定scope。实际012正文和输入context原样保留，triage提示新增。仅机制证据，不证明真实模型会减少噪声或改正所有范围断言。
 
 下一轮新问题是完成阶段：012早期审查用尽预算，后续最终答复仍对未实际运行的CUE行为作确定性描述。选择Sreview_phase=completion，保持每次审全部可用维度、不增加预算，观察最终验证声明、报告取舍和晚到反馈排空。先用断网原生夹具证明仅在main最终答复后首次发审查、等待晚到双问题报告并有限follow-up自然退出，再新source/out随机一双失败E/S。新轮与012implementation条件分开，不声称默认auto效果。主任务始终none/null自然完成，工具／评分原时限不改，不自动full，不重抽或接受失败重试。
+
+
+### Round013：完成阶段的范围与报告取舍实测已启动
+
+冻结sourcead666bf0afccae972de35b829b742aeea7b1ff69（本批真实代码修改），seedf17880c6961d578ffa693e9fe6c41f7a从最新完整caller-scope双失败固定一次抽Protone65；Eexisting／Ssupervise并行2槽，Eauto／Sreview_phase=completion，身份／实验／审计绑定。主任务none/null等待自然完成及有限审查后续回合，不与012implementation或默认auto效果混同。controller59220／monitor59223，2026-10-17T03:36:54Z本轮环境校准开始；最新PID文件优先，尚不声称模型质量结果。
+
+293宿主及完整普通检查、实际012scope与triage断网新旧回放、完成阶段35秒晚到双问题原生夹具（main5最终后才首次审查／实际REVIEWcompletion／main6可见／2results／自然exit0）、180旧criticalhash、dryrun2／nativepreflight8117ms0paid绑定launchgate。原生CLI／Node／GNUloader及模型身份不变。明确新问题是最终验证声明是否与真实证据一致、已解决／猜测噪声是否减少、完成阶段报告和后续修正是否正常。没有官方pass目标，不预设模型遵从新提示，不自动full／重抽／重试接受失败unknown。自然结束先基础audit再真实行为审计，缺完整usage／cost仍unknown。
