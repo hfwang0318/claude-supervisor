@@ -15,9 +15,15 @@ export class Coordinator {
   private startedAt: number | null = null
   private failures = 0
 
-  constructor(public binding: Binding, private policy: { historical?: boolean } = {}) {}
+  constructor(public binding: Binding, private policy: { historical?: boolean; maxCalls?: number; outputTokens?: number } = {}) {
+    const calls = policy.maxCalls ?? 2, tokens = policy.outputTokens ?? 4000
+    if (!Number.isSafeInteger(calls) || calls < 1 || calls > 100 || !Number.isSafeInteger(tokens) || tokens < 1 || tokens > 1000000) throw Error('invalid review budget')
+    this.calls = calls; this.tokens = tokens
+  }
 
   get historical() { return this.policy.historical === true }
+  get remainingOutputTokens() { return this.tokens }
+  get remainingModelCalls() { return this.calls }
   get modelBudgetAvailable() { return this.calls > 0 && this.tokens > 0 && this.failures < 2 }
   matches(binding: Binding) { return this.historical ? sameTask(binding, this.binding) : sameBinding(binding, this.binding) }
 
@@ -50,8 +56,8 @@ export class Coordinator {
     this.deliveries.clear()
     this.binding = { ...binding }
     if (!options.preserveBudget) {
-      this.calls = 2
-      this.tokens = 4000
+      this.calls = this.policy.maxCalls ?? 2
+      this.tokens = this.policy.outputTokens ?? 4000
       this.activeMs = 30000
       this.failures = 0
     }

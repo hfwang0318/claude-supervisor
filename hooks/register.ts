@@ -6,8 +6,10 @@ import type { Binding, ExecutionEvidence, AssistInput, AssistPacket, FactView } 
 import { validateObservation, normalizeTrack } from '../supervisor/ledger'
 import { captureSnapshot } from '../supervisor/workspace'
 import { buildAssistPacket, buildLocalAssistPacket, parseFactRequest, assistSignal, assistNote, localFactRequest } from '../supervisor/assist'
+import { IncrementalReview, observeStream } from '../supervisor/incremental'
+import type { ReviewOpportunity } from '../supervisor/incremental'
 import { Coordinator, sameBinding, sameTask } from '../supervisor/coordinator'
-import { buildReviewContext, parseReview, reviewPrompt, reviewInputLogs, REVIEW_DIMENSIONS, hasExplorationEvidence, reviewPhaseMatches } from '../supervisor/review'
+import { buildReviewContext, buildIncrementalContext, parseReview, reviewPrompt, reviewInputLogs, REVIEW_DIMENSIONS, hasExplorationEvidence, reviewPhaseMatches } from '../supervisor/review'
 import { runHistoricalReviewFlow, historicalReviewOutcome } from '../supervisor/review-flow'
 import type { ReviewOutcome } from '../supervisor/review-flow'
 import type { ReviewContext, ReviewReply } from '../supervisor/contracts'
@@ -38,7 +40,7 @@ import { assistPacketPrompt, localPacketPrompt, factRequestPrompt, base, bytesOf
 //   change for a defect it can show with a command (see prompt.ts).
 
 // Cheap record rules continue at every batch; semantic checks are opt-in and
-// share a per-prompt 2-call, 4k output-token, 30s activity budget.
+// share finite per-prompt reservations; incremental defaults are configurable.
 const MIN_GAP = 3
 const CLAIMS_PER_RUN = 12
 const SEEN_KEPT = 200
@@ -64,8 +66,20 @@ const isHidden = atom({ plugin: 'deepseek-supervisor', key: 'isHidden' } as cons
 const EMPTY: Track = { schemaVersion: 2, nextId: 1, issues: [], seen: [], runs: 0 }
 const track = atom({ plugin: 'deepseek-supervisor', key: 'track' } as const, EMPTY)
 
-type Config = { reviewPhase: 'auto' | ReviewContext['phase'] | null; verifierModel: string; reviewChanges: boolean; executionMode: 'off' | 'shadow' | 'enabled'; assistanceMode: 'existing' | 'facts' | 'supervise' | 'probe' | 'recovery' }
+type Config = { reviewSchedule: 'incremental' | 'legacy' | null; reviewInterval: number; reviewMaxCalls: number; reviewOutputBudget: number; reviewPolicyValid: boolean; reviewPhase: 'auto' | ReviewContext['phase'] | null; verifierModel: string; reviewChanges: boolean; executionMode: 'off' | 'shadow' | 'enabled'; assistanceMode: 'existing' | 'facts' | 'supervise' | 'probe' | 'recovery' }
+const reviewOption = (options: PluginOptions | undefined, key: string) => (options as Record<string, unknown> | undefined)?.[key]
+const integerOption = (options: PluginOptions | undefined, key: string, fallback: number, max: number) => {
+  const value = reviewOption(options, key)
+  if (value === undefined) return fallback
+  const number = typeof value === 'string' && /^[1-9][0-9]*$/.test(value) ? Number(value) : NaN
+  return Number.isSafeInteger(number) && number <= max ? number : 0
+}
 const configOf = (options: PluginOptions | undefined): Config => ({
+  reviewSchedule: reviewOption(options, 'review_schedule') === undefined || reviewOption(options, 'review_schedule') === 'incremental' ? 'incremental' : reviewOption(options, 'review_schedule') === 'legacy' ? 'legacy' : null,
+  reviewInterval: integerOption(options, 'review_interval', 5, 100) || 5,
+  reviewMaxCalls: integerOption(options, 'review_max_calls', 3, 100) || 3,
+  reviewOutputBudget: integerOption(options, 'review_output_budget', 12000, 1000000) || 12000,
+  reviewPolicyValid: integerOption(options, 'review_interval', 5, 100) > 0 && integerOption(options, 'review_max_calls', 3, 100) > 0 && integerOption(options, 'review_output_budget', 12000, 1000000) > 0,
   reviewPhase: options?.review_phase === undefined ? 'auto' : ['auto', 'plan', 'exploration', 'implementation', 'failure', 'completion'].includes(options.review_phase as string) ? options.review_phase as 'auto' | ReviewContext['phase'] : null,
   // Empty means follow the host's current worker; no capability ranking applies.
   verifierModel: typeof options?.verifier_model === 'string' ? options.verifier_model.trim() : '',
@@ -107,6 +121,7 @@ type Runtime = {
   jobNumber: number; modelDisabled: boolean; cfg: Config; stateUsable: boolean; journal: Promise<unknown>; recordEnd: number; workerModel: string | null; factsAttempted: boolean
   reviewSignatures: Set<string>; reviewAttempts: number; reviewStopSent: boolean; reviewRecoveryUsed: boolean; reviewSkipKeys: Set<string>
   reviewPending?: { binding: Binding; token: number }; reviewReady?: PreparedReview; reviewDraining?: { binding: Binding }; reviewInputPending?: string; reviewSequence: number; mainActive: boolean; reviewCwd: string
+  incremental: IncrementalReview<ReviewFrame>; firstWrite: boolean; publicStep?: { key: string; text: string; binding: Binding; truncated?: boolean; capturedText?: string };
   reviewControl?: { path: string; revision: number; busy: boolean; timer?: ReturnType<EngineInterface['clock']['every']> }
 }
 const sessions = new Map<string, Runtime>()
@@ -115,7 +130,7 @@ const runtimeOf = async ($: EngineInterface): Promise<Runtime> => {
   let s = sessions.get(sessionId)
   if (s) return s
   const binding: Binding = { sessionId, generationId: String(await $.clock.now()), turnId: 'initial', taskRevision: 0, workspaceRevision: 'unknown', snapshotId: 'unknown' }
-  s = { acceptedReviewFollowUps: 0, steps: 0, isBusy: false, promptsSinceCards: 0, blocks: 0, held: new Set(), followUps: 0, turnFrom: 0, isInteractive: true, asked: '', told: 0, last: '', coordinator: new Coordinator(binding), jobNumber: 0, modelDisabled: false, cfg: configOf(undefined), stateUsable: true, journal: Promise.resolve(), recordEnd: 0, workerModel: null, factsAttempted: false, reviewSignatures: new Set(), reviewAttempts: 0, reviewStopSent: false, reviewRecoveryUsed: false, reviewSkipKeys: new Set(), reviewSequence: 0, mainActive: true, reviewCwd: '' }
+  s = { incremental: new IncrementalReview(), firstWrite: false, acceptedReviewFollowUps: 0, steps: 0, isBusy: false, promptsSinceCards: 0, blocks: 0, held: new Set(), followUps: 0, turnFrom: 0, isInteractive: true, asked: '', told: 0, last: '', coordinator: new Coordinator(binding), jobNumber: 0, modelDisabled: false, cfg: configOf(undefined), stateUsable: true, journal: Promise.resolve(), recordEnd: 0, workerModel: null, factsAttempted: false, reviewSignatures: new Set(), reviewAttempts: 0, reviewStopSent: false, reviewRecoveryUsed: false, reviewSkipKeys: new Set(), reviewSequence: 0, mainActive: true, reviewCwd: '' }
   sessions.set(sessionId, s)
   return s
 }
@@ -350,15 +365,40 @@ const signatureOfChange = (s: string) => {
   return `${s.length}:${(h >>> 0).toString(16)}`
 }
 
+const semanticCapacity = async ($: EngineInterface, s: Runtime) => {
+  const selection = await selectionOf($)
+  const version = await $.session.version().then(value => value.version).catch(() => '')
+  const profile = selection.modelId ? reviewCompletionProfile(version, selection.modelId) : null
+  // Unknown profiles still reach ask's explicit unverified-output-cap refusal;
+  // never invent a transport cap or select another model here.
+  return profile ? Math.min(s.coordinator.remainingModelCalls, Math.floor(s.coordinator.remainingOutputTokens / (profile.maxTokens + profile.outputAllowance))) : s.coordinator.remainingModelCalls
+}
+
 type PreparedReview = { id: string; binding: Binding; context: ReviewContext; decision: ReviewReply; outcome: ReviewOutcome; deadlineMs: number }
-type ReviewCapture = { binding: Binding; asked: string; sequence: number; capturedAt: number; cwd: string }
+type ReviewCapture = { binding: Binding; asked: string; sequence: number; capturedAt: number; cwd: string; opportunity?: ReviewOpportunity<ReviewFrame>; material?: { changes: { text: string; omitted: string[] }; phase: ReviewContext['phase'] } }
+type ReviewFrame = { capture: ReviewCapture; list: Rows; final: boolean; answer: string }
+const reviewFrame = async ($: EngineInterface, list: Rows, final = false, answer = '', excludeToolId?: string): Promise<ReviewFrame> => {
+  const s = await runtimeOf($)
+  const capture: ReviewCapture = { binding: { ...s.coordinator.binding }, asked: s.asked, sequence: s.reviewSequence, capturedAt: await $.clock.now(), cwd: s.reviewCwd }
+  if (s.cfg.reviewSchedule === 'incremental') {
+    const completedRows = list.map(row => ({ ...row, toolUses: row.toolUses?.filter(use => (excludeToolId === undefined || use.tool_use_id !== excludeToolId) && (use.result !== undefined || use.text !== undefined || use.isError === true)) }))
+    const record = evidenceOf(completedRows), since = record.prompts.at(-1)?.at ?? 0
+    const run = record.runs.filter(run => run.at >= since).at(-1)
+    const edit = record.edits.filter(edit => edit.at >= since).at(-1)
+    capture.material = { changes: reviewChangesOf(record), phase: final ? 'completion' : run && !run.ok ? 'failure' : edit && run && run.at >= edit.at ? 'implementation' : 'exploration' }
+    // Capture bounded material now. Retaining whole transcripts in each pending
+    // milestone would multiply memory and accidentally pair later code with it.
+    return { capture, list: [], final, answer: '' }
+  }
+  return { capture, list: JSON.parse(JSON.stringify(list)), final, answer }
+}
 const engineeringReview = async ($: EngineInterface, list: Rows, final = false, answer = '', captured?: ReviewCapture): Promise<PreparedReview | null> => {
   const s = await runtimeOf($), mode = s.cfg.assistanceMode
   if (!['supervise', 'probe', 'recovery'].includes(mode) || !captured || !sameTask(captured.binding, s.coordinator.binding)) return null
   const record = evidenceOf(list), since = record.prompts.at(-1)?.at ?? 0
   const changes = changesOf(record, 24576), lastRun = record.runs.filter(r => r.at >= since).at(-1)
   const lastEdit = record.edits.filter(e => e.at >= since).at(-1)?.at ?? -1
-  let phase: ReviewContext['phase'] = final ? 'completion' : lastRun && !lastRun.ok ? 'failure' : changes && lastRun && lastRun.at >= lastEdit ? 'implementation' : 'plan'
+  let phase: ReviewContext['phase'] = captured.material?.phase ?? (final ? 'completion' : lastRun && !lastRun.ok ? 'failure' : changes && lastRun && lastRun.at >= lastEdit ? 'implementation' : 'plan')
   const binding = { ...captured.binding }
   const skipped = async (reason: string) => {
     const key = `${phase}:${reason}`
@@ -370,24 +410,32 @@ const engineeringReview = async ($: EngineInterface, list: Rows, final = false, 
     return null
   }
   if (!s.stateUsable || !captured.asked) return skipped('context-unavailable')
-  if (s.cfg.reviewPhase === null) return skipped('invalid-review-phase')
-  if (s.reviewAttempts >= 2) return skipped('budget-exhausted')
+  const incremental = s.cfg.reviewSchedule === 'incremental'
+  if (s.cfg.reviewSchedule === null || incremental && !s.cfg.reviewPolicyValid) return skipped('invalid-review-policy')
+  if (!incremental && s.cfg.reviewPhase === null) return skipped('invalid-review-phase')
+  if (!incremental && s.reviewAttempts >= 2) return skipped('budget-exhausted')
+  if (incremental && !final) {
+    const firstWrite = captured.opportunity?.reasons.includes('first-write')
+    const ordinary = captured.opportunity?.reasons.every(reason => reason === 'interval')
+    const reserved = 1 + (ordinary && !s.firstWrite && !firstWrite ? 1 : 0)
+    if (await semanticCapacity($, s) <= reserved) return skipped('milestone-budget-reserved')
+  }
   if (s.modelDisabled) return skipped('side-model-unavailable')
   if (!s.coordinator.modelBudgetAvailable) return skipped('budget-exhausted')
-  if (final && s.reviewStopSent) return skipped('completion-feedback-already-offered')
+  if (!incremental && final && s.reviewStopSent) return skipped('completion-feedback-already-offered')
   const latestPrompt = list.findLastIndex(r => r.role === 'user' && r.text.trim() && !r.text.includes('[deepseek-supervisor]') && !/^\s*<(?:system-reminder|command-|local-command|teammate-message)|^\s*Another Claude session/.test(r.text))
   const rows = latestPrompt < 0 ? list : list.slice(latestPrompt + 1)
-  const changeMaterial = reviewChangesOf(record)
-  const context = buildReviewContext(binding, captured.asked, answer ? [...rows, { role: 'assistant', text: answer, toolUses: [] }] : rows, changeMaterial.text, phase, changeMaterial.omitted)
+  const changeMaterial = captured.material?.changes ?? reviewChangesOf(record)
+  const context = incremental && captured.opportunity ? buildIncrementalContext(binding, captured.asked, captured.opportunity, changeMaterial.text, phase, changeMaterial.omitted) : buildReviewContext(binding, captured.asked, answer ? [...rows, { role: 'assistant', text: answer, toolUses: [] }] : rows, changeMaterial.text, phase, changeMaterial.omitted)
   if (!context) return skipped('context-rejected')
-  if (!final && phase === 'plan' && changes !== '') return skipped('awaiting-post-edit-check')
-  if (!final && phase === 'plan' && !context.sources.some(source => source.kind === 'plan')) {
+  if (!incremental && !final && phase === 'plan' && changes !== '') return skipped('awaiting-post-edit-check')
+  if (!incremental && !final && phase === 'plan' && !context.sources.some(source => source.kind === 'plan')) {
     if (!hasExplorationEvidence(context)) return skipped('insufficient-exploration-evidence')
     phase = 'exploration'; context.phase = phase
   }
-  if (!reviewPhaseMatches(s.cfg.reviewPhase, context)) return skipped('phase-deferred')
+  if (!incremental && !reviewPhaseMatches(s.cfg.reviewPhase!, context)) return skipped('phase-deferred')
   if (mode === 'recovery' && (s.reviewRecoveryUsed || !recoveryObservations(context).length)) return skipped(s.reviewRecoveryUsed ? 'recovery-already-offered' : 'insufficient-recovery-evidence')
-  const material = phase === 'exploration' ? context.sources.filter(source => source.kind === 'requirement') : phase === 'plan' ? context.sources.filter(source => source.kind === 'plan' || source.kind === 'requirement') : context.sources
+  const material = incremental ? context.sources : phase === 'exploration' ? context.sources.filter(source => source.kind === 'requirement') : phase === 'plan' ? context.sources.filter(source => source.kind === 'plan' || source.kind === 'requirement') : context.sources
   const key = `${phase}:${signatureOfChange(JSON.stringify(material))}`
   if (s.reviewSignatures.has(key)) return skipped('already-considered-context')
   const launchAt = await $.clock.now()
@@ -434,10 +482,11 @@ const engineeringReview = async ($: EngineInterface, list: Rows, final = false, 
       s.reviewRecoveryUsed = true
     }
     outcome = await runHistoricalReviewFlow(context, decision, { host: hostOf($, job.signal), executionMode: s.cfg.executionMode, deadlineMs, excludeModelWait: true, current, taskCurrent: current, sourceCurrent: async () => s.coordinator.remainingTime(await $.clock.now()) > 0 && sameBinding(binding, s.coordinator.binding), ask: async prompt => {
+      if (incremental && !final && await semanticCapacity($, s) <= 1) return null
       const second = await ask($, prompt, deadlineMs - await $.clock.now(), job.signal)
       return second?.isAnswered ? second.text : null
     } })
-    const event = { kind: 'engineering-review', id, binding, mode, phase, reviewPhase: s.cfg.reviewPhase, contextScope: context.scope, reviewed: decision.reviewed, unreviewed: REVIEW_DIMENSIONS.filter(d => !decision.reviewed.includes(d)), judgment: decision.judgment, report: decision.report ?? null, responseFormat: decision.report ? 'advisory-report' : 'structured-judgment', action: decision.action.kind, actionProtocol: outcome.actionProtocol, reason: outcome.reason, independentExecution: outcome.evidence !== null, sourceIds: context.sources.map(source => source.id), supplementalFacts: outcome.view?.facts.filter(f => outcome!.sourceFactIds.includes(f.id)).map(f => ({ id: f.id, path: f.path, line: f.startLine, fileHash: f.fileHash })) ?? [], observation: outcome.evidence ? { id: outcome.evidence.id, outcome: outcome.evidence.outcome, binding: outcome.evidence.binding, truncated: outcome.evidence.truncated } : null }
+    const event = { kind: 'engineering-review', id, binding, mode, phase, reviewSchedule: s.cfg.reviewSchedule, opportunity: context.opportunity, reviewPhase: s.cfg.reviewPhase, contextScope: context.scope, reviewed: decision.reviewed, unreviewed: REVIEW_DIMENSIONS.filter(d => !decision.reviewed.includes(d)), judgment: decision.judgment, report: decision.report ?? null, responseFormat: decision.report ? 'advisory-report' : 'structured-judgment', action: decision.action.kind, actionProtocol: outcome.actionProtocol, reason: outcome.reason, independentExecution: outcome.evidence !== null, sourceIds: context.sources.map(source => source.id), supplementalFacts: outcome.view?.facts.filter(f => outcome!.sourceFactIds.includes(f.id)).map(f => ({ id: f.id, path: f.path, line: f.startLine, fileHash: f.fileHash })) ?? [], observation: outcome.evidence ? { id: outcome.evidence.id, outcome: outcome.evidence.outcome, binding: outcome.evidence.binding, truncated: outcome.evidence.truncated } : null }
     await remember($, event)
     const metadata = event
     say($, `REVIEW ${JSON.stringify({ ...metadata, dimension: decision.judgment?.dimension ?? null, recommendation: decision.judgment?.recommendation ?? null })}`)
@@ -460,7 +509,7 @@ const finishReview = async ($: EngineInterface, prepared: PreparedReview | null)
 }
 
 const semanticMode = (s: Runtime) => ['supervise', 'probe', 'recovery'].includes(s.cfg.assistanceMode)
-const reviewLifecycle = ($: EngineInterface, s: Runtime) => say($, `REVIEW_LIFECYCLE ${JSON.stringify({ active: !!(s.reviewPending || s.reviewReady || s.reviewDraining), followUps: s.followUps, acceptedFollowUps: s.acceptedReviewFollowUps, taskRevision: s.coordinator.binding.taskRevision })}`)
+const reviewLifecycle = ($: EngineInterface, s: Runtime) => say($, `REVIEW_LIFECYCLE ${JSON.stringify({ active: !!(s.reviewPending || s.reviewReady || s.reviewDraining || s.cfg.reviewSchedule === 'incremental' && s.incremental.pending && s.coordinator.modelBudgetAvailable), followUps: s.followUps, acceptedFollowUps: s.acceptedReviewFollowUps, taskRevision: s.coordinator.binding.taskRevision })}`)
 
 // The optional headless adapter announces an input before native SDK admission.
 // This channel may only revoke work: it cannot submit text, enable supervision,
@@ -550,16 +599,61 @@ const drainReview = async ($: EngineInterface, followup = false): Promise<string
     })
     say($, `REVIEW_DELIVERY ${JSON.stringify({ id: prepared.id, checkpoint: prepared.context.checkpoint, binding: prepared.binding, delivery: status === 'dropped' ? 'dropped' : followup ? status === 'delivered' ? 'submitted' : 'unknown' : note ? 'context-returned' : 'unknown', consumption: 'unknown', sourceFactCount: ready.facts.length, sourceFactIds: ready.facts })}`)
     return status === 'dropped' || !sameTask(prepared.binding, s.coordinator.binding) ? null : note
-  } finally { if (s.reviewDraining === draining) s.reviewDraining = undefined; await reviewLifecycle($, s) }
+  } finally { if (s.reviewDraining === draining) s.reviewDraining = undefined; await reviewLifecycle($, s); if (s.cfg.reviewSchedule === 'incremental' && s.incremental.pending) await scheduleReview($, []) }
+}
+
+const proposedWriteInput = (event: { tool: string }) => {
+  const raw = event as unknown as Record<string, unknown>
+  const fields = event.tool === 'Write' ? ['file_path', 'content'] : event.tool === 'Edit' ? ['file_path', 'old_string', 'new_string', 'replace_all'] : event.tool === 'NotebookEdit' ? ['notebook_path', 'cell_id', 'new_source', 'cell_type', 'edit_mode'] : ['file_path', 'edits']
+  return Object.fromEntries(fields.filter(key => raw[key] !== undefined).map(key => [key, raw[key]]))
+}
+
+const incrementalBatch = async ($: EngineInterface, list: Rows) => {
+  const s = await runtimeOf($)
+  const record = evidenceOf(list), since = record.prompts.at(-1)?.at ?? 0
+  const rows = list.slice(Math.max(0, list.findLastIndex(r => r.role === 'user' && r.text.trim() && !r.text.includes('[deepseek-supervisor]') && !/^\s*<(?:system-reminder|command-|local-command|teammate-message)|^\s*Another Claude session/.test(r.text)) + 1))
+  // Reuse only record formatting/privacy checks, never legacy plan admission.
+  const tools = buildReviewContext(s.coordinator.binding, s.asked, rows.map(row => ({ ...row, text: '' })), '', 'implementation')
+  for (const omission of tools?.scope.omitted ?? []) s.incremental.omit(omission)
+  const uses = rows.filter(row => row.role === 'assistant').flatMap(row => row.toolUses ?? []).slice(-6)
+  for (const source of tools?.sources ?? []) if (source.kind === 'tool' || source.kind === 'observation') {
+    const use = uses[Number(source.id.slice(5)) - 1]
+    // Distinct actual tool IDs preserve repeated-check evidence; replaying one
+    // snapshot cannot manufacture three observations from one invocation.
+    const text = use?.tool_use_id ? JSON.stringify({ ...JSON.parse(source.text), toolUseId: use.tool_use_id }) : source.text
+    s.incremental.add(`tool-${use?.tool_use_id ?? signatureOfChange(source.text)}`, source.kind, text)
+  }
+  const changes = reviewChangesOf(record)
+  for (const omission of changes.omitted) s.incremental.omit(omission)
+  if (changes.text) s.incremental.add(`change-${signatureOfChange(changes.text)}`, 'change', changes.text)
+  const run = record.runs.filter(run => run.at >= since).at(-1)
+  if (run) {
+    const frame = await reviewFrame($, list)
+    s.incremental.request(run.ok ? 'verification' : 'failure', String(run.at), frame)
+  }
 }
 
 const scheduleReview = async ($: EngineInterface, list: Rows, final = false, answer = '') => {
   const s = await runtimeOf($)
   if (!semanticMode(s)) return
   await refreshReviewProject($, s)
+  const incremental = s.cfg.reviewSchedule === 'incremental'
+  if (incremental && final && s.followUps >= FOLLOW_UPS_PER_PROMPT) { s.incremental.clearPending(); return }
+  if (incremental && final) {
+    s.incremental.add(`answer-${signatureOfChange(answer)}`, 'answer', answer)
+    s.incremental.request('completion', `answer-${signatureOfChange(answer)}`, await reviewFrame($, list, true, answer))
+  }
   if (s.reviewInputPending || s.reviewPending || s.reviewReady || s.reviewDraining || !await isOn($)) return
-  const captured: ReviewCapture = { binding: { ...s.coordinator.binding }, asked: s.asked, sequence: s.reviewSequence, capturedAt: await $.clock.now(), cwd: s.reviewCwd }
-  const frozen: Rows = JSON.parse(JSON.stringify(list))
+  let frame: ReviewFrame
+  let opportunity: ReviewOpportunity<ReviewFrame> | null = null
+  if (incremental) {
+    if (!s.coordinator.modelBudgetAvailable) { s.incremental.clearPending(); return }
+    opportunity = s.incremental.take()
+    if (!opportunity?.frame) return
+    frame = opportunity.frame
+  } else frame = await reviewFrame($, list, final, answer)
+  const captured = { ...frame.capture, ...(opportunity ? { opportunity } : {}) }
+  if (!sameTask(captured.binding, s.coordinator.binding)) { s.incremental.clearPending(); return }
   const pending = { binding: captured.binding, token: ++s.jobNumber }
   s.reviewPending = pending
   await reviewLifecycle($, s)
@@ -567,7 +661,7 @@ const scheduleReview = async ($: EngineInterface, list: Rows, final = false, ans
     let prepared: PreparedReview | null = null
     try {
       if (!sameTask(captured.binding, s.coordinator.binding) || !await isOn($)) return
-      prepared = await engineeringReview($, frozen, final, answer, captured)
+      prepared = await engineeringReview($, frame.list, frame.final, frame.answer, captured)
       await finishReview($, prepared)
       if (s.reviewPending !== pending || !sameTask(captured.binding, s.coordinator.binding)) return
       if (prepared) {
@@ -576,7 +670,13 @@ const scheduleReview = async ($: EngineInterface, list: Rows, final = false, ans
       }
       if (!s.mainActive) await drainReview($, true)
     } catch (error) { say($, `background review failed: ${redact(String(error))}`) }
-    finally { if (s.reviewPending === pending) { s.reviewPending = undefined; await reviewLifecycle($, s) } }
+    finally {
+      if (s.reviewPending === pending) {
+        s.reviewPending = undefined
+        await reviewLifecycle($, s)
+        if (incremental && !s.reviewReady && s.incremental.pending) await scheduleReview($, [])
+      }
+    }
   })() })
 }
 
@@ -1027,7 +1127,8 @@ export const register: Register = (on, options) => {
     else await $.store.set('unknown-state-original', await read($, track)).catch(() => undefined)
     s.modelDisabled = false
     s.cfg = configOf(options)
-    s.coordinator = new Coordinator({ ...s.coordinator.binding }, { historical: semanticMode(s) })
+    s.coordinator = new Coordinator({ ...s.coordinator.binding }, { historical: semanticMode(s), ...(s.cfg.reviewSchedule === 'incremental' && semanticMode(s) ? { maxCalls: s.cfg.reviewMaxCalls, outputTokens: s.cfg.reviewOutputBudget } : {}) })
+    s.incremental = new IncrementalReview(s.cfg.reviewInterval); s.firstWrite = false; s.publicStep = undefined
     s.reviewControl?.timer?.cancel(); s.reviewControl = undefined
     const controlPath = semanticMode(s) ? await $.env.get('DEEPSEEK_SUPERVISOR_CONTROL_FILE') : undefined
     if (controlPath?.startsWith('/') && !controlPath.includes('\0')) {
@@ -1074,6 +1175,7 @@ export const register: Register = (on, options) => {
     if (result.drop === undefined && human && (!inputGeneration || s.coordinator.binding.generationId === inputGeneration)) {
       s.coordinator.invalidate({ ...s.coordinator.binding, taskRevision: s.coordinator.binding.taskRevision + 1, turnId: `prompt-${s.coordinator.binding.taskRevision + 1}` })
       s.modelDisabled = false
+      s.incremental.reset(); s.firstWrite = false; s.publicStep = undefined
       s.asked = e.text
       s.reviewPending = undefined; s.reviewReady = undefined; s.mainActive = true
       s.factsAttempted = false
@@ -1094,7 +1196,17 @@ export const register: Register = (on, options) => {
   // Keep task identity/model waiting and their budget: historical advice survives.
   on('tool.call', async ($, e, next) => {
     const s = await runtimeOf($)
-    if (e.agentId === undefined && semanticMode(s)) s.coordinator.changedWorkspace(`tool-start-${++s.jobNumber}`, await $.clock.now())
+    if (e.agentId === undefined && semanticMode(s)) {
+      if (s.cfg.reviewSchedule === 'incremental' && !s.firstWrite && ['Edit', 'Write', 'MultiEdit', 'NotebookEdit'].includes(e.tool) && await isOn($)) {
+        s.firstWrite = true
+        if (s.publicStep && sameTask(s.publicStep.binding, s.coordinator.binding)) { s.incremental.add(`stream-${s.publicStep.key}`, 'narrative', s.publicStep.text); s.publicStep.capturedText = s.publicStep.text }
+        s.incremental.add(`proposal-${e.tool_use_id}`, 'proposed-change', JSON.stringify({ tool: e.tool, input: proposedWriteInput(e), status: 'proposed-before-execution' }))
+        const frame = await reviewFrame($, await messages($), false, '', e.tool_use_id)
+        s.incremental.request('first-write', 'first-write', frame)
+        await scheduleReview($, [])
+      }
+      s.coordinator.changedWorkspace(`tool-start-${++s.jobNumber}`, await $.clock.now())
+    }
     return next(e)
   })
 
@@ -1118,6 +1230,7 @@ export const register: Register = (on, options) => {
     const assistance = s.cfg.assistanceMode === 'facts' ? await locationFacts($, list) : null
     if (semanticMode(s)) s.mainActive = true
     const engineeringNote = semanticMode(s) ? await drainReview($) : null
+    if (s.cfg.reviewSchedule === 'incremental' && semanticMode(s)) await incrementalBatch($, list)
     await scheduleReview($, list)
     if (found.length === 0 && assistance === null && engineeringNote === null) return result
     if (found.length > 0) await showCards($, found)
@@ -1175,8 +1288,23 @@ export const register: Register = (on, options) => {
   // The main loop's finished steps; a subagent's are its own.
   on('turn.step', async function* ($, e, next) {
     const s = await runtimeOf($)
-    const result = yield* next(e)
+    const binding = { ...s.coordinator.binding }
+    const captureText = e.agentId === undefined && semanticMode(s) && s.cfg.reviewSchedule === 'incremental'
+    const publicStep: Runtime['publicStep'] = captureText ? { key: `${e.turnId}:${e.index}`, text: '', binding } : undefined
+    if (publicStep) s.publicStep = publicStep
+    const result = captureText ? yield* observeStream(next(e), chunk => {
+      if (publicStep && chunk.kind === 'text' && sameTask(binding, s.coordinator.binding)) {
+        if (!publicStep.truncated && bytesOf(publicStep.text) + bytesOf(chunk.text) <= 16384) publicStep.text += chunk.text
+        else { publicStep.truncated = true; publicStep.text = ''; s.incremental.omit('public-stream-budget') }
+      }
+    }) : yield* next(e)
     if (e.agentId !== undefined || result.stopReason === null) return result
+    if (captureText && sameTask(binding, s.coordinator.binding) && await isOn($)) {
+      const list = await messages($)
+      const frame = await reviewFrame($, list)
+      s.incremental.step(`${e.turnId}:${e.index}`, result.answer === publicStep?.capturedText ? '' : result.answer, frame, result.stopReason !== 'end_turn')
+      await scheduleReview($, list)
+    }
     s.reviewSequence++
     await selectionOf($)
     s.steps += 1
@@ -1203,7 +1331,7 @@ export const register: Register = (on, options) => {
     if (e.agentId === undefined && semanticMode(s)) {
       s.mainActive = false
       if (e.reason === 'answer') $.clock.after(0, () => { void drainReview($, true).catch(error => say($, `review followup unavailable: ${redact(String(error))}`)) })
-      else { s.reviewReady = undefined; s.reviewPending = undefined }
+      else { s.reviewReady = undefined; s.reviewPending = undefined; s.incremental.reset(); s.publicStep = undefined }
     }
     if (e.agentId === undefined) await takeReading($) // main-loop turns only
     // Only a turn the model finished on its own: one the person interrupted says nothing.
@@ -1253,6 +1381,7 @@ export const register: Register = (on, options) => {
       else await $.store.set('mode', arg)
       if (!(await isOn($))) {
         s.coordinator.invalidate({ ...s.coordinator.binding, generationId: `off-${await $.clock.now()}-${++s.jobNumber}` }, { reason: 'disabled', preserveBudget: true, now: await $.clock.now() })
+        s.incremental.reset(); s.publicStep = undefined
         await update($, cards, () => null)
       }
       await show($)

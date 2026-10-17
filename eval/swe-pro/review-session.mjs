@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { spawn } from 'node:child_process'
 import { openSync, readSync, closeSync, statSync, mkdtempSync, writeFileSync, renameSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -50,6 +51,33 @@ export const reviewSessionCanClose = (results, lifecycle, expected = { inputs: 1
 // --review-stream-input accepts native JSONL frames; the default remains one raw
 // task instruction for SWE Pro. New input is forwarded only after old review work
 // has been revoked through the plugin's optional, cancel-only private file.
+// A native result may explicitly cover several user frames adopted into one
+// turn. Count that evidence, never infer coalescing from elapsed time or idleness.
+export class ReviewResultCoverage {
+  submitted = new Set()
+  covered = new Set()
+  inputResults = 0
+  reliable = true
+  submit(id) {
+    if (typeof id !== 'string' || !id || this.submitted.has(id) || this.submitted.size >= 4096) { this.reliable = false; return }
+    this.submitted.add(id)
+  }
+  observe(value) {
+    if (!this.reliable || value?.type !== 'result' || !Array.isArray(value.user_message_uuids)) return
+    const ids = value.user_message_uuids
+    if (!ids.every(id => typeof id === 'string') || new Set(ids).size !== ids.length) { this.reliable = false; return }
+    const adopted = ids.filter(id => this.submitted.has(id))
+    if (!adopted.length) return
+    this.inputResults++
+    for (const id of adopted) this.covered.add(id)
+  }
+  effectiveInputs(inputs) {
+    if (!this.reliable || !this.covered.size) return inputs
+    if (this.covered.size !== this.submitted.size) return null
+    return inputs - Math.max(0, this.covered.size - this.inputResults)
+  }
+}
+
 export const runReviewSession = async (argv, input = process.stdin, output = process.stdout) => {
   const streamInput = argv.includes('--review-stream-input')
   argv = argv.filter(arg => arg !== '--review-stream-input')
@@ -73,6 +101,7 @@ export const runReviewSession = async (argv, input = process.stdin, output = pro
   try { journalStart = statSync(debugFile).size } catch { /* New journal. */ }
   const child = spawn(argv[0], [...argv.slice(1), '--input-format', 'stream-json'], { stdio: ['pipe', 'pipe', 'inherit'], env: { ...process.env, DEEPSEEK_SUPERVISOR_CONTROL_FILE: controlFile } })
   const gate = new ReviewInputGate()
+  const coverage = new ReviewResultCoverage()
   let results = 0, inputCount = 0, followUpCount = 0, lifecycle = null, offset = journalStart, journal = '', response = '', closed = false, inputDone = false, inputBusy = true, revision = 0
   const inspect = () => {
     try {
@@ -99,14 +128,15 @@ export const runReviewSession = async (argv, input = process.stdin, output = pro
         }
       } finally { closeSync(fd) }
     } catch { /* Native startup may not have created its journal yet. */ }
-    if (!closed && inputDone && !inputBusy && reviewSessionCanClose(results, lifecycle, { inputs: inputCount, followUps: followUpCount })) { closed = true; child.stdin.end() }
+    const effectiveInputs = coverage.effectiveInputs(inputCount)
+    if (!closed && inputDone && !inputBusy && effectiveInputs !== null && reviewSessionCanClose(results, lifecycle, { inputs: effectiveInputs, followUps: followUpCount })) { closed = true; child.stdin.end() }
   }
   child.stdout.on('data', chunk => {
     output.write(chunk); response += chunk.toString('utf8')
     let at
     while ((at = response.indexOf('\n')) >= 0) {
       const line = response.slice(0, at); response = response.slice(at + 1)
-      try { if (JSON.parse(line).type === 'result') results++ } catch { /* Native diagnostic, not a result. */ }
+      try { const value = JSON.parse(line); if (value.type === 'result') { results++; coverage.observe(value) } } catch { /* Native diagnostic, not a result. */ }
     }
     if (response.length > 8 * 1024 * 1024) response = ''
     inspect()
@@ -122,10 +152,14 @@ export const runReviewSession = async (argv, input = process.stdin, output = pro
       const frame = JSON.parse(line)
       if (frame.type === 'user' || frame.type === 'control_request' && frame.request?.subtype === 'interrupt') {
         if (seenUser) { announce(++revision); await gate.wait(revision) }
-        if (frame.type === 'user') { seenUser = true; inputCount++ }
+        if (frame.type === 'user') {
+          seenUser = true; inputCount++
+          if (frame.uuid === undefined) frame.uuid = randomUUID()
+          coverage.submit(frame.uuid)
+        }
       }
       if (closed || nativeEnded) throw Error('native input already closed')
-      child.stdin.write(line + '\n')
+      child.stdin.write(JSON.stringify(frame) + '\n')
       inputBusy = false
     }
     if (streamInput) {

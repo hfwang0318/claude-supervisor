@@ -1,12 +1,12 @@
 import { test, expect, mock } from 'claude-code/testing'
 import type { TestBody } from 'claude-code/testing'
-const options = { assistance_mode: 'supervise', execution_mode: 'off', verifier_model: 'zhipu/glm-5.3-flash' }
+const options = { review_schedule: 'legacy', assistance_mode: 'supervise', execution_mode: 'off', verifier_model: 'zhipu/glm-5.3-flash' }
 const reply = () => JSON.stringify({ reviewed: ['architecture'], judgment: { dimension: 'architecture', question: 'Should the public interface be replaced?', requirementQuote: 'Preserve the API.', sourceIds: ['req', 'plan-1'], reason: 'The proposed replacement removes the existing entry point.', impact: 'Caller compatibility.', recommendation: 'adjust', uncertainty: 'The complete caller set is unknown.' }, action: { kind: 'none' } })
 const world = (on: Parameters<TestBody>[1]) => {
   mock.store(on); const clock = mock.clock(on, { now: 100000 })
-  const state = { hostVersion: '2.1.295', versionWait: undefined as Promise<void> | undefined, outputTokens: 20, modelRequests: [] as { maxTokens?: number; effort?: string }[], throwFollowUp: false, dropFollowUp: false, controlPath: '', control: JSON.stringify({ version: 1, revision: 0 }), calls: 0, unanswered: false, unansweredReason: 'aborted', logLimit: Infinity, nextPromptWait: undefined as Promise<void> | undefined, cwd: '/p', submitted: [] as string[], echo: true, timeouts: [] as number[], prompts: [] as string[], logs: [] as string[], processActions: [] as string[], validateDelay: 0, wait: undefined as Promise<void> | undefined, outputs: [reply(), reply()], rows: [{ role: 'assistant', text: 'Plan: replace the public method.', toolUses: [{ tool: 'Read', input: { file_path: '/p/api.js' }, text: 'exports.old = () => 1' }] }] }
+  const state = { factsCount: 1, failCwd: false, hostVersion: '2.1.295', versionWait: undefined as Promise<void> | undefined, outputTokens: 20, modelRequests: [] as { maxTokens?: number; effort?: string }[], throwFollowUp: false, dropFollowUp: false, controlPath: '', control: JSON.stringify({ version: 1, revision: 0 }), calls: 0, unanswered: false, unansweredReason: 'aborted', logLimit: Infinity, nextPromptWait: undefined as Promise<void> | undefined, cwd: '/p', submitted: [] as string[], echo: true, timeouts: [] as number[], prompts: [] as string[], logs: [] as string[], processActions: [] as string[], validateDelay: 0, wait: undefined as Promise<void> | undefined, outputs: [reply(), reply()], rows: [{ role: 'assistant', text: 'Plan: replace the public method.', toolUses: [{ tool: 'Read', input: { file_path: '/p/api.js' }, text: 'exports.old = () => 1' }] }] }
   on('session.version', async () => { if (state.versionWait) await state.versionWait; return { value: { version: state.hostVersion } } })
-  on('session.id', () => ({ value: 'review-session' })); on('session.model', () => ({ value: 'fixture' })); on('session.cwd', () => ({ value: state.cwd })); on('session.messages', () => ({ value: state.rows }) as never)
+  on('session.id', () => ({ value: 'review-session' })); on('session.model', () => ({ value: 'fixture' })); on('session.cwd', () => { if (state.failCwd) throw Error('workspace metadata unavailable'); return { value: state.cwd } }); on('session.messages', () => ({ value: state.rows }) as never)
   on('env.get', (_$, e) => ({ value: e.name === 'DEEPSEEK_SUPERVISOR_CONTROL_FILE' ? state.controlPath : 'on' })); on('fs.read', () => ({ value: state.control })); on('ui.status', () => ({ value: undefined })); on('ui.log', (_$, e) => { state.logs.push(e.text.slice(0, state.logLimit)); return { value: undefined } })
   on('command.register', (_$, e) => ({ value: { command: e.name } })); on('session.start', () => ({ cwd: '/p' })); on('prompt.submit', async (_$, e) => { state.submitted.push(e.text); if (state.throwFollowUp && e.text.includes('Engineering review')) throw Error('session no longer bound'); if (state.dropFollowUp && e.text.includes('Engineering review')) return { text: e.text, drop: 'unavailable' } as never; if (e.text === 'New queued task.' && state.nextPromptWait) await state.nextPromptWait; return { text: e.text } as never })
   on('classic.PostToolBatch', () => ({ additionalContext: ['host context'] }) as never); on('classic.Stop', () => ({}) as never)
@@ -15,7 +15,7 @@ const world = (on: Parameters<TestBody>[1]) => {
   on('process.run', async (_$, e) => {
     const request = JSON.parse(e.init?.stdin ?? '{}'); state.processActions.push(request.action)
     if (request.action === 'validate-facts' && state.validateDelay) await clock.advance(state.validateDelay)
-    const value = request.action === 'inspect' ? { facts: [{ id: 'f1', path: 'api.js', startLine: 1, quote: 'exports.old = () => 1', fileHash: 'h' }], files: [{ path: 'api.js', fileHash: 'h' }], manifestHash: 'm', incomplete: false } : request.action === 'validate-facts' ? true : null
+    const value = request.action === 'inspect' ? { facts: Array.from({ length: state.factsCount }, (_, index) => ({ id: `f${index + 1}`, path: 'api.js', startLine: 1, quote: 'exports.old = () => 1', fileHash: 'h' })), files: [{ path: 'api.js', fileHash: 'h' }], manifestHash: 'm', incomplete: false } : request.action === 'validate-facts' ? true : null
     return { value: { exitCode: 0, stdout: JSON.stringify(value), stderr: '', isStdoutTruncated: false, isStderrTruncated: false } } as never
   })
   return { state, clock }
@@ -634,4 +634,177 @@ test('multibyte change excerpts keep safe records within the review byte budget 
   expect(ctx.scope.omitted).toContain('change-record-budget')
   expect(ctx.scope.omitted).toContain('changes-are-bounded-record-excerpts')
   expect(state.calls).toBe(1)
+})
+
+const incrementalOptions = { ...options, review_schedule: 'incremental', review_interval: '3', review_max_calls: '3', review_output_budget: '12000' }
+test('native public text before the first write admits a proposed checkpoint without a regex phase', { options: incrementalOptions }, async ($, on) => {
+  const { state, clock } = world(on); state.rows = []; state.outputs = ['1. Preserve the existing entry point.\n2. Check the shared timer cancellation against the requirement.']
+  on('tool.call', () => ({ result: {}, text: 'written', ref: 1 }) as never)
+  on('turn.step', async function* ($, e) {
+    yield { kind: 'text', index: 0, text: 'Let me implement pendingActions and fetchOwed now.' } as const
+    return { turnId: e.turnId, index: e.index, answer: 'Let me implement pendingActions and fetchOwed now.', toolUses: [], stopReason: 'tool_use', usage: null }
+  })
+  await start($)
+  const stream = $.turn.step({ turnId: 't', index: 0, model: 'fixture', messageCount: 1 })
+  await stream.next()
+  state.rows = [{ role: 'assistant', text: 'Let me implement pendingActions and fetchOwed now.', toolUses: [{ tool_use_id: 'pending-write', tool: 'Write', input: { file_path: '/p/timer.ts', content: 'export const timer = 1' } }] }] as never
+  await $.tool.call({ tool: 'Write', file_path: '/p/timer.ts', content: 'export const timer = 1' } as never)
+  for await (const chunk of stream) { /* Native ordering is separately covered by the offline host probe. */ }
+  await flushBackground(clock)
+  expect(state.calls).toBe(1)
+  const context = JSON.parse(state.prompts[0]!.split('\n\n').at(-1)!)
+  expect(context.opportunity.reasons).toEqual(['first-write'])
+  expect(context.sources.some((s: { kind: string; text: string }) => s.kind === 'narrative' && s.text.includes('Let me implement'))).toBe(true)
+  expect(context.sources.some((s: { kind: string }) => s.kind === 'proposed-change')).toBe(true)
+  expect(context.sources.some((s: { kind: string }) => s.kind === 'change')).toBe(false)
+  expect((await batch($)).additionalContext?.join('\n')).toContain('2. Check the shared timer')
+})
+
+test('incremental mode uses completed request steps, skips empty intervals and reserves a completion call', { options: { ...incrementalOptions, review_interval: '1' } }, async ($, on) => {
+  const { state, clock } = world(on); state.rows = []; state.outputs = Array(5).fill('A useful advisory observation.')
+  on('turn.step', async function* (_$, e) { return { turnId: e.turnId, index: e.index, answer: e.index === 0 ? '' : `Observed public statement ${e.index}`, toolUses: [], stopReason: 'tool_use', usage: null } })
+  await start($)
+  for (let index = 0; index < 5; index++) {
+    for await (const chunk of $.turn.step({ turnId: 't', index, model: 'fixture', messageCount: 1 })) {}
+    await flushBackground(clock); await batch($)
+  }
+  expect(state.calls).toBe(1) // Reserve first-write and completion opportunities.
+  await observeStop($, clock, 'Completed. Behavior has not been verified.')
+  expect(state.calls).toBe(2)
+  expect(state.timeouts.every(t => t === 0)).toBe(true)
+})
+
+for (const invalid of [{ review_schedule: 'typo' }, { review_interval: '0' }, { review_max_calls: 'Infinity' }, { review_output_budget: '-1' }]) test(`invalid incremental policy ${JSON.stringify(invalid)} makes no semantic call`, { options: { ...incrementalOptions, ...invalid } }, async ($, on) => {
+  const { state, clock } = world(on); await start($)
+  await observeStop($, clock, 'Completed.')
+  expect(state.calls).toBe(0)
+  expect(state.logs.some(l => l.includes('invalid-review-policy'))).toBe(true)
+})
+for (const invalidation of ['prompt', 'off', 'cancel']) test(`queued incremental milestones cannot survive ${invalidation}`, { options: incrementalOptions }, async ($, on) => {
+  const { state, clock } = world(on); state.outputs = Array(4).fill('Historical advisory text.')
+  await start($)
+  let release = () => {}; state.wait = new Promise<void>(resolve => { release = resolve })
+  await $.classic.Stop({ last_assistant_message: 'First completion.' } as never)
+  await flushBackground(clock)
+  expect(state.calls).toBe(1)
+  await $.classic.Stop({ last_assistant_message: 'A later completion with new evidence.' } as never)
+  if (invalidation === 'prompt') await $.prompt.submit({ text: 'New task.', origin: { kind: 'sdk' } } as never)
+  if (invalidation === 'off') await $.command.run({ command: 'deepseek-supervisor', args: 'off' } as never)
+  if (invalidation === 'cancel') await $.turn.complete({ answer: '', durationMs: 1, isAborted: true, turnId: 't', reason: 'aborted' } as never)
+  release(); await flushBackground(clock)
+  expect(state.calls).toBe(1)
+  expect(state.logs.some(l => l.includes('REVIEW_QUEUED'))).toBe(false)
+})
+
+test('an end-turn response does not spend an ordinary call before its completion checkpoint', { options: { ...incrementalOptions, review_interval: '1' } }, async ($, on) => {
+  const { state, clock } = world(on); state.rows = []; state.outputs = ['A complete advisory report.']
+  on('turn.step', async function* (_$, e) { yield { kind: 'text', index: 0, text: 'Completed with limitations.' } as const; return { turnId: e.turnId, index: e.index, answer: 'Completed with limitations.', toolUses: [], stopReason: 'end_turn', usage: null } })
+  await start($)
+  for await (const chunk of $.turn.step({ turnId: 't', index: 0, model: 'fixture', messageCount: 1 })) {}
+  await flushBackground(clock)
+  expect(state.calls).toBe(0)
+  await $.classic.Stop({ last_assistant_message: 'Completed with limitations.' } as never)
+  await flushBackground(clock)
+  expect(state.calls).toBe(1)
+  expect(JSON.parse(state.prompts[0]!.split('\n\n').at(-1)!).opportunity.reasons).toEqual(['completion'])
+  await $.turn.complete({ turnId: 't', reason: 'answer', answer: 'Completed with limitations.', durationMs: 1, isAborted: false } as never)
+  await flushBackground(clock)
+  await $.classic.Stop({ last_assistant_message: 'Followup complete with new information.' } as never)
+  await flushBackground(clock)
+  expect(state.calls).toBe(1)
+})
+
+test('a failed project check queued during a slow review retains its own material and completes within shared budget', { options: { ...incrementalOptions, review_interval: '1' } }, async ($, on) => {
+  const { state, clock } = world(on); state.rows = []; state.outputs = Array(3).fill('A useful advisory report with uncertainty.')
+  on('turn.step', async function* (_$, e) { return { turnId: e.turnId, index: e.index, answer: 'A public technical hypothesis to examine.', toolUses: [], stopReason: 'tool_use', usage: null } })
+  await start($)
+  let release = () => {}; state.wait = new Promise<void>(resolve => { release = resolve })
+  for await (const chunk of $.turn.step({ turnId: 't', index: 0, model: 'fixture', messageCount: 1 })) {}
+  await flushBackground(clock); expect(state.calls).toBe(1)
+  state.rows = [{ role: 'assistant', text: '', toolUses: [{ tool: 'Bash', input: { command: 'node --test test.js' }, text: 'Exit code: 1\nassertion failed', result: { exitCode: 1 } }] }] as never
+  await batch($)
+  state.rows = [] // Mutating the host's later view cannot rewrite the queued failure.
+  release(); await flushBackground(clock)
+  await batch($); await flushBackground(clock)
+  expect(state.calls).toBe(2)
+  const c = JSON.parse(state.prompts[1]!.split('\n\n').at(-1)!)
+  expect(c.opportunity.reasons).toEqual(['failure'])
+  expect(c.sources.some((s: { text: string }) => s.text.includes('assertion failed'))).toBe(true)
+  await batch($)
+  await observeStop($, clock, 'Completed with the failed check disclosed.')
+  expect(state.calls).toBe(3)
+})
+
+test('a failed checkpoint capture cannot prevent the main write from executing', { options: incrementalOptions }, async ($, on) => {
+  const { state, clock } = world(on); let written = 0
+  on('tool.call', () => { written++; return { result: {}, text: 'written', ref: 1 } as never })
+  await start($); state.failCwd = true
+  const result = await $.tool.call({ tool: 'Write', file_path: '/p/api.js', content: 'export const value = 1' } as never)
+  expect(written).toBe(1)
+  expect('text' in result && result.text).toBe('written')
+  await flushBackground(clock)
+  expect(state.calls).toBe(0)
+})
+
+for (const outputBudget of ['4000', '6000']) test(`a ${outputBudget} token budget protects completion even when call slots remain`, { options: { ...incrementalOptions, review_interval: '1', review_output_budget: outputBudget } }, async ($, on) => {
+  const { state, clock } = world(on); state.rows = []; state.outputs = ['A complete review.']
+  on('turn.step', async function* (_$, e) { return { turnId: e.turnId, index: e.index, answer: 'A new public hypothesis.', toolUses: [], stopReason: 'tool_use', usage: null } })
+  await start($)
+  for await (const chunk of $.turn.step({ turnId: 't', index: 0, model: 'fixture', messageCount: 1 })) {}
+  await flushBackground(clock)
+  expect(state.calls).toBe(0)
+  await observeStop($, clock, 'Completed with verification limitations.')
+  expect(state.calls).toBe(1)
+  expect(state.modelRequests[0]?.maxTokens).toBe(1952)
+})
+
+test('optional source selection cannot consume the output reservation needed for completion', { options: { ...incrementalOptions, review_output_budget: '8000' } }, async ($, on) => {
+  const { state, clock } = world(on); state.rows = []; state.factsCount = 7
+  state.outputs = [JSON.stringify({ report: 'Keep the public API; inspect the supplied source.', action: { kind: 'location', request: { paths: ['api.js'], terms: [] } } }), 'Completion review with limitations.']
+  await start($)
+  state.rows = [{ role: 'assistant', text: '', toolUses: [{ tool: 'Bash', input: { command: 'node --test test.js' }, text: 'Exit code: 1\nassertion failed', result: { exitCode: 1 } }] }] as never
+  await batch($)
+  await flushBackground(clock)
+  expect(state.calls).toBe(1)
+  expect(state.logs.some(l => l.includes('source-selection-unknown'))).toBe(true)
+  await batch($)
+  await observeStop($, clock, 'Completed with current-source limits.')
+  expect(state.calls).toBe(2)
+})
+
+test('completed public write records without a tool id still supply bounded actual changes', { options: incrementalOptions }, async ($, on) => {
+  const { state, clock } = world(on)
+  state.outputs = ['A completion review.']
+  state.rows = [{ role: 'assistant', text: '', toolUses: [{ tool: 'Write', input: { file_path: '/p/api.ts', content: 'export const value = 7' }, text: 'File written.' }] }] as never
+  await start($)
+  await observeStop($, clock, 'Completed; behavior remains unverified.')
+  expect(state.calls).toBe(1)
+  const c = JSON.parse(state.prompts[0]!.split('\n\n').at(-1)!)
+  expect(c.sources.some((s: { kind: string; text: string }) => s.kind === 'change' && s.text.includes('value = 7'))).toBe(true)
+})
+
+test('omitted private tool output remains explicit in the incremental checkpoint scope', { options: incrementalOptions }, async ($, on) => {
+  const { state, clock } = world(on); state.rows = []; state.outputs = ['A scoped recovery question.']
+  on('turn.step', async function* (_$, e) { return { turnId: e.turnId, index: e.index, answer: 'The implementation needs a real dependency check.', toolUses: [], stopReason: 'tool_use', usage: null } })
+  await start($)
+  for await (const chunk of $.turn.step({ turnId: 't', index: 0, model: 'fixture', messageCount: 1 })) {}
+  state.rows = [{ role: 'assistant', text: '', toolUses: [{ tool: 'Bash', input: { command: 'node --test test.js' }, text: 'Exit code: 1\nAuthorization: Bearer synthetic-private-control', result: { exitCode: 1 } }] }] as never
+  await batch($); await flushBackground(clock)
+  expect(state.calls).toBe(1)
+  const c = JSON.parse(state.prompts[0]!.split('\n\n').at(-1)!)
+  expect(c.scope.omitted).toContain('observation-unavailable')
+  expect(JSON.stringify(c).includes('synthetic-private-control')).toBe(false)
+})
+
+test('native tool-result user rows do not hide completed checks or collapse distinct repeated failures', { options: { ...incrementalOptions, assistance_mode: 'recovery' } }, async ($, on) => {
+  const { state, clock } = world(on)
+  state.outputs = ['The same real check failed three times; distinguish dependency and implementation causes.']
+  state.rows = [{ role: 'user', text: 'Preserve the API.' }, ...Array.from({ length: 3 }, (_, i) => ({ role: 'assistant', text: '', toolUses: [{ tool_use_id: `actual-${i}`, tool: 'Bash', input: { command: 'node --test test.js' }, text: 'Exit code: 1\nassertion failed', result: { exitCode: 1 } }] })), { role: 'user', text: '' }] as never
+  await start($)
+  await batch($); await flushBackground(clock)
+  expect(state.calls).toBe(1)
+  const c = JSON.parse(state.prompts[0]!.split('\n\n').at(-1)!)
+  const observations = c.sources.filter((s: { kind: string }) => s.kind === 'observation')
+  expect(observations.length).toBe(3)
+  expect(new Set(observations.map((s: { text: string }) => JSON.parse(s.text).toolUseId)).size).toBe(3)
 })

@@ -60,13 +60,14 @@ worker match or relationship profile is required. The design must remain useful
 when the side model is weak or its capability relationship is unknown. Switching
 the worker invalidates old results; refusal uses rules without selecting a fallback.
 
-Each user prompt shares at most 2 side calls (including protocol retries), 4,000
-output tokens. Existing/facts modes retain the 30-second activity limit; semantic
-review modes exclude model waiting and retain 30 seconds for tools, validation
-and cleanup. Semantic modes currently admit a model call only for the verified
-public-host combination 2.1.295 and explicit `zhipu/glm-5.3-flash`. Its public
-request of 1,952 tokens becomes a wire cap of 4,000 (2,048 host allowance), so
-one call reserves the entire prompt budget; unused reservation is not refunded.
+Existing/facts and explicit `review_schedule=legacy` retain their per-prompt
+2-call / 4,000-output-token reservation. Incremental semantic review defaults to
+3 calls / 12,000 reserved output tokens, configurable through `review_max_calls`
+and `review_output_budget`; optional action followups share this same ceiling.
+Model waiting has no plugin timeout; tools, validation and cleanup retain their
+30-second activity budget. Semantic calls currently require the verified public
+host 2.1.295 and explicit `zhipu/glm-5.3-flash`: a requested 1,952 tokens plus
+2,048 host allowance reserves a wire cap of 4,000 per call, without refunds.
 Other host/model combinations abstain from semantic calls with
 `unverified-output-cap` diagnostics and retain record rules. Existing/facts keep
 their legacy request caps, whose wire bounds are unverified. Observed excess
@@ -148,8 +149,9 @@ cannot consume the prompt's only facts job. `FACTS_JOB.selectionMethod` records
 `assistance_mode=existing` remains the default. Opt into `supervise` for a
 single reviewer covering requirement–plan and plan–implementation consistency,
 architecture, decision direction, exploration/counterexamples, failure recovery
-and verification/completion. It reads attributed requirements, explicit plans,
-bounded change excerpts, recent tools and the final answer. Missing plans and
+and verification/completion. It reads the authoritative requirement, raw public narrative, proposed writes,
+bounded recorded changes, tool results and the final answer. The reviewer decides
+which narrative contains a real plan and which dimensions have enough evidence. Missing plans and
 omitted context remain unreviewed. Architecture/direction advice can reach the
 worker without first being converted into a command; a sourced recommendation
 is not a demonstrated defect or a repair certificate. Review input asks for
@@ -179,23 +181,39 @@ judgment quality, including historical advice. An invalid optional action does n
 discard a grounded judgment or authorize execution. `probe` and `recovery` restrict that action while
 using the same protocol. Generated expectations remain hypotheses; recovery
 never invents eliminated causes. One recovery packet and one semantic completion
-follow-up are allowed per prompt. Plans are reviewed before editing, changes
-after a recorded check, and completion when needed, sharing the same 2-call,
-4,000-output-token budget and 30 seconds of tool/validation/cleanup activity.
-Semantic model requests run in the background without a plugin model-wait timeout;
-PostToolBatch and Stop return without waiting for the model. Without an explicit plan, two distinct
-successful bounded Read/Grep results allow one exploration review per prompt,
-covering architecture, direction and exploration from the actual records. The
-missing plan remains unknown; plan-consistency dimensions are not reviewed.
-Pending, failed, truncated or repeated reads do not open this opportunity.
-Later source batches do not repeat it, and later phases share the same budget.
-`review_phase` defaults to `auto`. To observe a later stage under the same budget,
-select `plan`, `exploration`, `implementation`, `failure` or `completion`.
-Semantic admission waits for that evidence-based phase before reserving a call;
-missing target evidence produces no fallback call. Unknown values refuse semantic
-review. Phase selection changes timing, not the dimensions examined or execution
-permissions. Record rules remain active; frozen evaluation identities bind this
-setting, and changed phases are separate observations.
+follow-up are allowed per prompt.
+
+`review_schedule=incremental` is the semantic default. Native `turn.step` public
+text is captured as it streams, and `tool.call` snapshots the first explicit
+Edit/Write proposal before execution. This is a proposed change, not an executed
+fact; shell-based writes are not promised pre-write coverage. Completed main
+model requests count once each; side requests, subagents, tools and chunks do not.
+Every `review_interval` requests (default 5), new public material may create an
+ordinary opportunity. Identical retained narration and empty intervals do not
+create another opportunity. First explicit write, a newly recorded project-check
+failure, verification results and completion can bypass the interval. No semantic
+phase regex gates these opportunities. The reviewer selects applicable dimensions
+and reviews them together in the same natural-language response.
+
+One semantic request runs at a time. Ordinary work coalesces; bounded milestone
+snapshots keep their original evidence, including while a review is pending.
+The requirement and bounded prior anchors accompany new source IDs; privacy,
+window, byte and queue omissions are explicit. The host does not summarize away
+or authenticate raw statements. Default reservations protect completion and an
+early critical opportunity; a failure can use the early write reservation. These
+finite settings and N=5 are starting parameters, not demonstrated optima.
+Callbacks capture timing reliably but do not make model judgments correct.
+PostToolBatch and Stop do not wait for side-model replies; feedback enters the
+next safe context or the existing bounded completion followup.
+
+`review_schedule=legacy` preserves the old explicit-plan / two successful source
+reads / post-check admission and its old budget. Only this schedule applies
+`review_phase=auto|plan|exploration|implementation|failure|completion`. New runtime
+identities bind schedule, interval and budgets; old frozen identities stay
+readable with legacy semantics. `assistance_mode=existing` remains unchanged.
+Free real-record regression: `node eval/replay-review.mjs`. Eight curated cases
+retain public excerpts and source hashes from the 17-round archive; semantic
+quality labels remain manual and are not converted into passing quality scores.
 
 `execution_mode=off` still permits advisory review and explicitly unexecuted
 probe suggestions. `shadow` keeps observations without worker feedback.
@@ -206,7 +224,7 @@ project. New prompts, cancellation, model/project changes and off discard stale
 feedback; normal tool/answer progress within the task preserves historical advice; off/cancellation do not replenish the prompt budget. Source and
 snapshot observations are revalidated immediately before feedback.
 
-Generic repository-browsing narration alone is not a technical plan and cannot
+In legacy scheduling, generic repository-browsing narration alone is not a technical plan and cannot
 spend an early review opportunity on a directory listing. Concrete plans remain
 eligible; otherwise review waits for the bounded source-evidence trigger.
 
@@ -412,7 +430,11 @@ Options, in the `/config` menu or under `pluginConfigs` in settings:
 |---|---|---|
 | `verifier_model` | current worker | Empty follows the worker; an ID or host alias selects another side model |
 | `execution_mode` | `off` | Advisory review remains available; `shadow` suppresses feedback; `enabled` permits validated isolated execution |
-| `review_phase` | `auto` | Optional evidence-based review stage; defers calls without adding budget or fallback |
+| `review_schedule` | `incremental` | Semantic callback/incremental opportunities; `legacy` retains old phase admission |
+| `review_interval` | `5` | Completed main requests between ordinary opportunities; critical events bypass it |
+| `review_max_calls` | `3` | Finite incremental calls per user prompt, including optional followups |
+| `review_output_budget` | `12000` | Incremental output reservation including host allowance; no refunds |
+| `review_phase` | `auto` | Legacy schedule only: selected evidence phase |
 | `assistance_mode` | `existing` | `supervise` covers all process judgments; `facts`, `probe`, `recovery` isolate evidence actions |
 | `review_changes` | `true` | At the end of a turn that changed code, the verifier also reviews the change. |
 

@@ -122,3 +122,12 @@ for (const bad of [NaN, Infinity, -1]) test(`invalid reservation ${bad} never op
   expect(c.reserveCall(0, bad)).toBeNull()
   expect(c.reserveCall(0, 1, bad)).toBeNull()
 })
+
+test('configured semantic reservations stay finite across task reset without refunding output allowance', () => {
+  const c = new Coordinator(binding, { historical: true, maxCalls: 3, outputTokens: 12000 })
+  for (let i = 0; i < 3; i++) expect(c.reserveCall(i, 1952, 2048)).toEqual({ maxTokens: 1952, reservedTokens: 4000 })
+  expect(c.reserveCall(4, 1)).toBeNull()
+  c.invalidate({ ...binding, taskRevision: 2 })
+  for (let i = 0; i < 3; i++) expect(c.reserveCall(i, 1952, 2048)).not.toBeNull()
+  expect(c.reserveCall(4, 1)).toBeNull()
+})

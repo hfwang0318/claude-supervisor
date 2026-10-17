@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { reviewSessionCanClose, parseReviewLifecycle, parseReviewControl, ReviewInputGate } from './review-session.mjs'
+import { reviewSessionCanClose, parseReviewLifecycle, parseReviewControl, ReviewInputGate, ReviewResultCoverage } from './review-session.mjs'
 import { agentArgs, agentEnvironment, frozenDefaults, patchArgs, assertRuntimeModes } from './agent.mjs'
 import { mkdtempSync, writeFileSync, rmSync, mkdirSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -40,6 +40,20 @@ try {
   writeConfig('facts', 'supervise', 'auto')
   assert.doesNotThrow(() => assertRuntimeModes(phaseRuntime, { armModes: identity.armModes }, 'supervise'))
 } finally { rmSync(phaseRuntime, { recursive: true, force: true }) }
+const policyRuntime = mkdtempSync(join(tmpdir(), 'swe-pro-policy-test-'))
+try {
+  const policy = { schedule: 'incremental', interval: 5, maxCalls: 3, outputTokens: 12000 }
+  const identity = { armModes: { existing: 'existing', facts: 'supervise' }, reviewPhase: 'auto', reviewPolicy: policy }
+  for (const [slot, mode] of Object.entries(identity.armModes)) {
+    const dir = join(policyRuntime, 'plugin-' + slot, '.claude-plugin'); mkdirSync(dir, { recursive: true })
+    writeFileSync(join(dir, 'plugin.json'), JSON.stringify({ userConfig: Object.fromEntries(Object.entries(frozenDefaults(mode, { reviewPolicy: policy })).map(([k, v]) => [k, { default: v }])) }))
+  }
+  assert.equal(frozenDefaults('supervise', { reviewPolicy: policy }).review_schedule, 'incremental')
+  assert.doesNotThrow(() => assertRuntimeModes(policyRuntime, identity, 'supervise'))
+  assert.throws(() => assertRuntimeModes(policyRuntime, { ...identity, reviewPolicy: { ...policy, interval: 8 } }, 'supervise'), /config mismatch/)
+  assert.throws(() => assertRuntimeModes(policyRuntime, { ...identity, reviewPolicy: undefined }, 'supervise'), /policy/)
+  for (const invalid of [{ ...policy, interval: 0 }, { ...policy, maxCalls: Infinity }, { ...policy, outputTokens: -1 }]) assert.throws(() => frozenDefaults('supervise', { reviewPolicy: invalid }), /policy/)
+} finally { rmSync(policyRuntime, { recursive: true, force: true }) }
 const env = agentEnvironment()
 for (const key of ['ANTHROPIC_DEFAULT_SONNET_MODEL', 'ANTHROPIC_DEFAULT_OPUS_MODEL', 'ANTHROPIC_DEFAULT_HAIKU_MODEL', 'CLAUDE_CODE_SUBAGENT_MODEL']) assert.equal(env[key], env.ANTHROPIC_MODEL)
 assert.equal(env.ANTHROPIC_BASE_URL, 'http://model-gateway:8080')
@@ -58,7 +72,6 @@ try {
   git(['add', '-A']); git(['commit', '-qm', 'fix'])
   assert.match(git(patchArgs(base)), /\+fixed/)
 } finally { rmSync(repo, { recursive: true, force: true }) }
-console.log('SWE Pro agent configuration self-tests passed')
 
 const active = { active: true, followUps: 0 }
 assert.equal(reviewSessionCanClose(1, active), false)
@@ -119,3 +132,20 @@ process.stdin.once('data',()=>{ log('REVIEW_LIFECYCLE {"active":false,"followUps
 } finally { rmSync(lifecycleFixture, { recursive: true, force: true }) }
 
 assert.equal(reviewSessionCanClose(1, { active: false, followUps: 1, acceptedFollowUps: 0 }), true, 'a rejected attempt creates no expected result')
+
+const coverage = new ReviewResultCoverage()
+coverage.submit('user-one'); coverage.submit('user-two')
+assert.equal(coverage.effectiveInputs(2), 2, 'without adoption evidence keep conservative result counts')
+coverage.observe({ type: 'result', user_message_uuids: ['user-one', 'user-two'] })
+assert.equal(coverage.effectiveInputs(2), 1, 'two explicitly adopted inputs may share one native result')
+assert.equal(reviewSessionCanClose(2, { active: false, followUps: 1, acceptedFollowUps: 1 }, { inputs: coverage.effectiveInputs(2), followUps: 1 }), true)
+coverage.submit('user-three')
+assert.equal(coverage.effectiveInputs(3), null, 'old results cannot close a new unadopted input')
+coverage.observe({ type: 'result', user_message_uuids: ['user-three'] })
+assert.equal(coverage.effectiveInputs(3), 2)
+const duplicateCoverage = new ReviewResultCoverage()
+duplicateCoverage.submit('same'); duplicateCoverage.submit('same')
+duplicateCoverage.observe({ type: 'result', user_message_uuids: ['same', 'same'] })
+assert.equal(duplicateCoverage.effectiveInputs(2), 2, 'ambiguous repeated ids grant no merged-input credit')
+
+console.log('SWE Pro agent configuration self-tests passed')

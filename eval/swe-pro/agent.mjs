@@ -5,10 +5,14 @@ import { command } from './docker.mjs'
 import { MODEL, currentRoute, startGateway } from './gateway.mjs'
 
 export const NODE_IMAGE = 'node@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392'
-export const frozenDefaults = (mode, { reviewPhase = 'auto' } = {}) => {
+const normalizedReviewPolicy = policy => {
+  if (!policy || !['incremental', 'legacy'].includes(policy.schedule) || Object.keys(policy).some(key => !['schedule', 'interval', 'maxCalls', 'outputTokens'].includes(key)) || !Number.isSafeInteger(policy.interval) || policy.interval < 1 || policy.interval > 100 || !Number.isSafeInteger(policy.maxCalls) || policy.maxCalls < 1 || policy.maxCalls > 100 || !Number.isSafeInteger(policy.outputTokens) || policy.outputTokens < 1 || policy.outputTokens > 1000000) throw Error('invalid review policy')
+  return { schedule: policy.schedule, interval: policy.interval, maxCalls: policy.maxCalls, outputTokens: policy.outputTokens }
+}
+export const frozenDefaults = (mode, { reviewPhase = 'auto', reviewPolicy } = {}) => {
   if (!['facts', 'existing', 'supervise'].includes(mode)) throw Error('invalid mode')
   if (!['auto', 'plan', 'exploration', 'implementation', 'failure', 'completion'].includes(reviewPhase) || reviewPhase !== 'auto' && mode !== 'supervise') throw Error('invalid review phase for assistance mode')
-  return { verifier_model: MODEL, execution_mode: 'off', assistance_mode: mode, ...(reviewPhase !== 'auto' ? { review_phase: reviewPhase } : {}) }
+  return { verifier_model: MODEL, execution_mode: 'off', assistance_mode: mode, ...(reviewPhase !== 'auto' ? { review_phase: reviewPhase } : {}), ...(reviewPolicy ? (() => { const p = normalizedReviewPolicy(reviewPolicy); return { review_schedule: p.schedule, review_interval: String(p.interval), review_max_calls: String(p.maxCalls), review_output_budget: String(p.outputTokens) } })() : {}) }
 }
 export const agentArgs = mode => {
   frozenDefaults(mode)
@@ -40,19 +44,21 @@ export const armModes = (experimentalMode = 'facts') => {
 export const assertRuntimeModes = (runtime, identity, experimentalMode = 'facts') => {
   const expected = armModes(experimentalMode), actual = identity.armModes ?? armModes()
   if (JSON.stringify(actual) !== JSON.stringify(expected)) throw Error('runtime assistance mode differs from requested mode')
-  const reviewPhase = identity.reviewPhase ?? 'auto'
-  frozenDefaults(expected.facts, { reviewPhase })
+  const reviewPhase = identity.reviewPhase ?? 'auto', reviewPolicy = identity.reviewPolicy
+  frozenDefaults(expected.facts, { reviewPhase, reviewPolicy })
   for (const [slot, mode] of Object.entries(expected)) {
     const config = JSON.parse(readFileSync(join(runtime, `plugin-${slot}/.claude-plugin/plugin.json`)))
     const phase = mode === 'supervise' ? reviewPhase : 'auto'
     if ((config.userConfig?.review_phase?.default ?? 'auto') !== phase) throw Error(`runtime review phase config mismatch: ${slot}`)
-    for (const [key, value] of Object.entries(frozenDefaults(mode, { reviewPhase: phase }))) if (config.userConfig?.[key]?.default !== value) throw Error(`runtime mode config mismatch: ${slot}/${key}`)
+    if (!reviewPolicy && config.userConfig?.review_schedule?.default && config.userConfig.review_schedule.default !== 'legacy') throw Error('runtime review policy identity missing')
+    for (const [key, value] of Object.entries(frozenDefaults(mode, { reviewPhase: phase, reviewPolicy }))) if (config.userConfig?.[key]?.default !== value) throw Error(`runtime mode config mismatch: ${slot}/${key}`)
   }
   return expected
 }
-export const freezeRuntime = (root, runtime, { experimentalMode = 'facts', reviewPhase = 'auto' } = {}) => {
+export const freezeRuntime = (root, runtime, { experimentalMode = 'facts', reviewPhase = 'auto', reviewPolicy = { schedule: reviewPhase === 'auto' ? 'incremental' : 'legacy', interval: 5, maxCalls: reviewPhase === 'auto' ? 3 : 2, outputTokens: reviewPhase === 'auto' ? 12000 : 4000 } } = {}) => {
   const modes = armModes(experimentalMode)
-  frozenDefaults(modes.facts, { reviewPhase })
+  reviewPolicy = normalizedReviewPolicy(reviewPolicy)
+  frozenDefaults(modes.facts, { reviewPhase, reviewPolicy })
   const manifest = JSON.parse(readFileSync(join(runtime, 'manifest.json')))
   if (manifest.version !== '2.1.295' || createHash('sha256').update(readFileSync(join(runtime, 'claude'))).digest('hex') !== manifest.platforms['linux-x64'].checksum) throw Error('Claude runtime checksum mismatch')
   for (const mode of ['existing', 'facts']) {
@@ -60,12 +66,12 @@ export const freezeRuntime = (root, runtime, { experimentalMode = 'facts', revie
     if (existsSync(plugin)) throw Error('runtime already frozen; use stored identity or a new directory')
     for (const dir of ['hooks', 'supervisor', 'types', 'scripts', '.claude-plugin']) cpSync(join(root, dir), join(plugin, dir), { recursive: true, filter: path => !path.includes('/.claude-plugin/types') })
     const file = join(plugin, '.claude-plugin/plugin.json'), config = JSON.parse(readFileSync(file))
-    for (const [key, value] of Object.entries(frozenDefaults(modes[mode], { reviewPhase: modes[mode] === 'supervise' ? reviewPhase : 'auto' }))) config.userConfig[key].default = value
+    for (const [key, value] of Object.entries(frozenDefaults(modes[mode], { reviewPhase: modes[mode] === 'supervise' ? reviewPhase : 'auto', reviewPolicy }))) config.userConfig[key].default = value
     writeFileSync(file, JSON.stringify(config, null, 2))
   }
   cpSync(join(root, 'eval/swe-pro/gateway.mjs'), join(runtime, 'gateway.mjs'))
   cpSync(join(root, 'eval/swe-pro/review-session.mjs'), join(runtime, 'review-session.mjs'))
-  const receipt = { reviewSessionSHA256: createHash('sha256').update(readFileSync(join(runtime, 'review-session.mjs'))).digest('hex'), armModes: modes, reviewPhase, model: MODEL, sideModel: MODEL, claudeVersion: manifest.version, claudeSHA256: manifest.platforms['linux-x64'].checksum, nodeSHA256: createHash('sha256').update(readFileSync(join(runtime, 'node'))).digest('hex'), nodeImage: NODE_IMAGE, pluginHashes: Object.fromEntries(['existing', 'facts'].map(mode => [mode, treeHash(join(runtime, `plugin-${mode}`))])), gatewaySHA256: createHash('sha256').update(readFileSync(join(runtime, 'gateway.mjs'))).digest('hex') }
+  const receipt = { reviewSessionSHA256: createHash('sha256').update(readFileSync(join(runtime, 'review-session.mjs'))).digest('hex'), armModes: modes, reviewPhase, reviewPolicy, model: MODEL, sideModel: MODEL, claudeVersion: manifest.version, claudeSHA256: manifest.platforms['linux-x64'].checksum, nodeSHA256: createHash('sha256').update(readFileSync(join(runtime, 'node'))).digest('hex'), nodeImage: NODE_IMAGE, pluginHashes: Object.fromEntries(['existing', 'facts'].map(mode => [mode, treeHash(join(runtime, `plugin-${mode}`))])), gatewaySHA256: createHash('sha256').update(readFileSync(join(runtime, 'gateway.mjs'))).digest('hex') }
   writeFileSync(join(runtime, 'identity.json'), JSON.stringify(receipt, null, 2))
   return receipt
 }

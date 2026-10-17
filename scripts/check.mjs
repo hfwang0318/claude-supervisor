@@ -35,6 +35,7 @@ if (!flags.includes('--pure')) {
   run('real workspace/process isolation', process.execPath, ['scripts/selftest-workspace.mjs'])
 }
 if (!flags.includes('--host')) {
+  run('recorded reviewer regression', process.execPath, ['eval/replay-review.mjs'])
   for (const name of ['selftest', 'selftest-long', 'selftest-hard', 'selftest-late', 'selftest-weak', 'selftest-metrics', 'selftest-engineering', 'selftest-launch', 'selftest-assist', 'selftest-review']) run(`scorer ${name}`, process.execPath, [`eval/${name}.mjs`])
   for (const name of ['selftest', 'gateway-selftest', 'agent-selftest', 'natural-selftest', 'schedule-selftest', 'incremental-selftest', 'regression-selftest', 'continuation-selftest', 'capacity-selftest', 'capacity-monitor-selftest']) run(`SWE Pro ${name}`, process.execPath, [`eval/swe-pro/${name}.mjs`])
 }

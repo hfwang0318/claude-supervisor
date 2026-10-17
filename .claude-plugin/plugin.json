@@ -35,8 +35,32 @@
     "review_phase": {
       "type": "string",
       "title": "Semantic review phase",
-      "description": "auto (default) or plan, exploration, implementation, failure, completion. Defer semantic admission until the selected evidence-based phase; never fall back to an earlier phase or add budget. Unknown values disable semantic calls. Record rules stay active.",
+      "description": "Legacy schedule only: auto or plan, exploration, implementation, failure, completion. Defers admission to the selected evidence phase. Incremental schedule does not use this semantic phase gate.",
       "default": "auto"
+    },
+    "review_schedule": {
+      "type": "string",
+      "title": "Semantic review scheduling",
+      "description": "incremental (default) captures public callbacks and lets the reviewer choose applicable dimensions; legacy uses review_phase admission. Existing assistance stays unchanged.",
+      "default": "incremental"
+    },
+    "review_interval": {
+      "type": "string",
+      "title": "Incremental request interval",
+      "description": "Completed main requests between ordinary opportunities, 1–100. No new material skips the opportunity; key events bypass the interval. Starting value 5 is not an optimized claim.",
+      "default": "5"
+    },
+    "review_max_calls": {
+      "type": "string",
+      "title": "Semantic calls per user prompt",
+      "description": "Finite incremental semantic-call ceiling, 1–100, including optional action followup calls. Default 3 reserves first-write and completion opportunities.",
+      "default": "3"
+    },
+    "review_output_budget": {
+      "type": "string",
+      "title": "Semantic output reservation",
+      "description": "Finite incremental output-token reservation per user prompt, including host allowance, 1–1000000. Default 12000 covers three current Flash wire4000 reservations. No refund or hidden fallback.",
+      "default": "12000"
     }
   },
   "keywords": [
