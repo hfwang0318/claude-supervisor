@@ -1,0 +1,219 @@
+{
+  "version": 1,
+  "kind": "curated-public-record-replay-corpus",
+  "caseCount": 8,
+  "paidCalls": 0,
+  "containsPrivateThinking": false,
+  "containsSessionMetadata": false,
+  "interpretation": "Recorded input/report/event fixtures plus human-labeled expected behavior. Not replayed model responses or evidence of future judgment quality. Case17 remains a known production coverage gap until callback integration is implemented.",
+  "cases": [
+    {
+      "name": "prefixed-real-technical-intents",
+      "sources": [
+        {
+          "round": 15,
+          "artifact": "eval/results/review-iterations-flash/round-015/behavior-audit.json",
+          "sha256": "b3ec5fd68240ede515ca2d1a42306604e237e01adc96562ffc8ada3ae0224b63"
+        }
+      ],
+      "publicData": {
+        "texts": [
+          {
+            "time": "2026-10-17T05:59:49.079Z",
+            "text": "No CUE binary either. I'll implement everything based on the CUE v0.6.0 API (contemporaneous with this repo, May–June 2023, and compatible with its `go 1.20` directive), add the dependency to `go.mod`, and verify what I can offline (Go syntax via `gofmt`, YAML fixtures via the cached yaml.v3).\n\nLet me create the schema file first:"
+          },
+          {
+            "time": "2026-10-17T06:05:53.259Z",
+            "text": "Since I can't compile against the real CUE library offline, I'll build a faithful stub of the CUE v0.6.0 API in `/tmp` (never touching `/app`) to type-check my package against the exact signatures and smoke-test the test plumbing end-to-end:"
+          }
+        ]
+      },
+      "expectedBehavior": "Preserve actual implementation/recovery text with source identity despite introductory/causal wording.",
+      "limit": "These plans include weak verification assumptions; attribution is not approval."
+    },
+    {
+      "name": "search-fallback-not-exclusive-stage",
+      "sources": [
+        {
+          "round": 16,
+          "artifact": "eval/results/review-iterations-flash/round-016/prepared-review-inputs.json",
+          "sha256": "aaace0bfa7726a96a643634621b53483679fa396e1cf03fd0566aa8306b9cb38"
+        }
+      ],
+      "publicData": {
+        "text": "The Grep tool seems broken in this environment (it found nothing even for text I know exists). I'll fall back to `grep` via Bash:"
+      },
+      "expectedBehavior": "Keep original public text as evidence without letting a search-only label monopolize review admission.",
+      "limit": "A keyword blacklist is not a semantic classifier."
+    },
+    {
+      "name": "technical-text-before-first-edit",
+      "sources": [
+        {
+          "round": 17,
+          "artifact": "eval/results/review-iterations-flash/round-017/feedback-and-actions-audit.json",
+          "sha256": "d788240d2d0c7f12d945ff1f5b7a92058a1591e351784b2e3a0795115c3b08c5"
+        }
+      ],
+      "publicData": {
+        "texts": [
+          {
+            "time": "2026-10-17T08:38:44.381Z",
+            "text": "Now let me check the remaining consumers of these selectors and the ESLint config:"
+          },
+          {
+            "time": "2026-10-17T08:40:41.543Z",
+            "text": "I now have the full picture. Key discovery: the `retry` action/reducer exists but was **never registered** in the slice, which explains the \"no further attempt follows a failed fetch\" bug. Let me implement the changes.\n\n**1. `elementsTypes.ts`** — add `pendingActions`/`fetchOwed` state fields and `Stale` on query results:"
+          }
+        ],
+        "firstEditToolEmission": "2026-10-17T08:40:43.968Z",
+        "laterIntent": {
+          "time": "2026-10-17T08:42:13.646Z",
+          "text": "Babel-only transform (no type checking at test time). Still, I'll make the `retryStale` reducer meaningfully consume its payload so the declared signature is honored:"
+        },
+        "admissionEvents": [
+          {
+            "time": "2026-10-17T08:18:52.612Z",
+            "phase": "plan",
+            "selection": "plan",
+            "result": "skipped",
+            "reason": "insufficient-exploration-evidence"
+          },
+          {
+            "time": "2026-10-17T08:18:57.403Z",
+            "phase": "exploration",
+            "selection": "plan",
+            "result": "skipped",
+            "reason": "phase-deferred"
+          },
+          {
+            "time": "2026-10-17T08:40:45.698Z",
+            "phase": "plan",
+            "selection": "plan",
+            "result": "skipped",
+            "reason": "awaiting-post-edit-check"
+          },
+          {
+            "time": "2026-10-17T08:43:55.918Z",
+            "phase": "implementation",
+            "selection": "plan",
+            "result": "skipped",
+            "reason": "phase-deferred"
+          },
+          {
+            "time": "2026-10-17T09:02:03.355Z",
+            "phase": "completion",
+            "selection": "plan",
+            "result": "skipped",
+            "reason": "phase-deferred"
+          }
+        ]
+      },
+      "expectedBehavior": "Capture public technical text and immutable checkpoint before explicit editing; later edits must not erase earlier material.",
+      "limit": "Current production misses this opportunity. Historical tool-emission timestamps do not prove new callback order."
+    },
+    {
+      "name": "queued-without-next-request",
+      "sources": [
+        {
+          "round": 9,
+          "artifact": "eval/results/review-iterations-flash/round-009/feedback-and-actions-audit.json",
+          "sha256": "a4480f2b688b44da1275c0695b3978dec49b1b02ac86329ab2b3d3bb76a315c8"
+        },
+        {
+          "round": 9,
+          "artifact": "eval/results/review-iterations-flash/round-009/behavior-audit.json",
+          "sha256": "88fb35ebbb293230d7f6af3fc87ebe631e02358a896b405a7de29de10d97e09c"
+        }
+      ],
+      "publicData": {
+        "mainRequestsWithFeedback": 0
+      },
+      "expectedBehavior": "Queued report is not delivery; zero next request visibility cannot be called adoption.",
+      "limit": "No old task extension or replayed paid request."
+    },
+    {
+      "name": "natural-multiple-concerns",
+      "sources": [
+        {
+          "round": 12,
+          "artifact": "eval/results/review-iterations-flash/round-012/actual-review-reply.json",
+          "sha256": "0da0da2d7bf33706671621d726adad0008093a0442481dda0d59158fe7b51eea"
+        }
+      ],
+      "publicData": {
+        "report": "Advisory review of the checkpoint at sequence 60. All findings are based only on the supplied records; I have not seen anything after the last tool call.\n\n## 1. The change has never been compiled or executed — the only verification attempt failed (high impact)\n\n**Observation.** The only tool run is tool-6: `go vet ./internal/cue/` failed with network errors (\"dial tcp: lookup proxy.golang.org ... server misbehaving\") because `cuelang.org/go@v0.6.0` could not be resolved. That means since `cuelang.org/go` was added to `go.mod` (tool-5), the package has not successfully compiled, vetted, or run its tests.\n\n**Consequence.** Every requirement-level behavior is currently unverified:\n- Whether `go.sum` contains the new module (only `go.mod` was edited in the change excerpt; no `go mod tidy`/`go.sum` change appears in the records — the excerpt is bounded, so I cannot claim it is missing, but the vet failure is consistent with the dependency not being in the module cache).\n- Whether the exact error string `flags.0.rules.0.distributions.0.rollout: invalid value 110 (out of bound <=100)` matches CUE v0.6.0's actual formatting. This is a byte-exact requirement; CUE error message formats have varied across versions (e.g., presence of \"(out of bound <=100)\" vs alternative phrasings). This is a hypothesis to test, not a known defect.\n- Whether `yaml.Extract` + `BuildExpr(..., cue.Scope(schema))` + `Unify(schema).Validate()` produces the expected result, including whether the Unify order (`v.Unify(schema)`) surfaces the path as `flags.0.rules...` (list indices in CUE paths render as `[0]` in some versions — again a hypothesis, not an observation).\n- Whether the `MalformedYAML` subtest's input `\"\\tfoo: bar\"` actually fails `yaml.Extract`.\n\n**Next step.** Once the dependency is fetchable (vendor/module cache/proxy available offline), run `go test ./internal/cue/ -run TestValidate -v` and compare the actual `err.Error()` against the required byte-exact string; run `go mod tidy` or equivalent if the build fails on the missing module. A probe in the form of the project's own test command (`files: []`, command `go test ./internal/cue/`) is the natural check, but it is only meaningful after the dependency resolves.\n\n**Counterevidence/uncertainty.** The environment may have the module cached elsewhere; the vet failure could be transient DNS. But no successful build or test run appears in the provided records, so honest completion cannot yet be claimed.\n\n## 2. Schema/fixture consistency: `version` field plausibly mismatched with real Flipt configs — low-confidence, untested\n\n**Observation.** The schema declares `version?: string`, and both fixtures use `version: \"1.0\"` (quoted). If a real config uses `version: 1` (unquoted, numeric) it would fail. The requirement only specifies namespace/flags/segments, so a `version` field at all is an assumption by the implementer; the requirement does not forbid it. This is a hypothesis about real-world inputs, not a requirement violation.\n\n**Consequence.** Possibly over-strict validation of legitimate configs. **Next step.** Only worth checking if the task grader exercises additional fixtures; the provided requirements are satisfied as written. Low priority.\n\n## 3. Openness of the schema is an unverifiable interpretation choice\n\n**Observation.** The comment in `flipt.cue` says \"Structs are intentionally left open.\" The requirement doesn't state whether unknown fields should be rejected. Both behaviors arguably meet the stated requirements; flagging only so the choice is deliberate. No action needed unless hidden tests expect closed validation.\n\n## 4. Test-suite quality: the MalformedYAML test was initially a placeholder (resolved in-record, but history shows an incomplete first pass)\n\n**Observation.** tool-2 wrote a stub `MalformedYAML` subtest that did nothing (`_ = validate`), fixed by tool-3. The final state of `cue_test.go` in the change excerpt matches the corrected version. This is fine now; it's only evidence that self-review/iteration was needed and, notably, the subtest only asserts `require.Error` — it does not distinguish a YAML parse error from any other error. Minor: an assertion on the error type/message would better pin the \"returning the parse error directly if YAML parsing fails\" requirement. Not blocking.\n\n## Direction\n\nContinue, but the immediate priority is item 1: no evidence yet exists that the code compiles or that tests pass. Until `go test` succeeds (or a real failure is observed), the task should not be reported complete. The overall mechanism (embed → compile schema → extract YAML → scope → unify → validate) matches the required sequence in the PR description as written; the main open question is the exact error string under CUE v0.6.0."
+      },
+      "expectedBehavior": "Accept original natural-language multi-concern report without mandatory category, one-issue cap or echoed IDs; prose commands grant no execution.",
+      "limit": "Replay can test protocol/material handling, not prove report correctness."
+    },
+    {
+      "name": "mixed-private-and-safe-material",
+      "sources": [
+        {
+          "round": 13,
+          "artifact": "eval/results/review-iterations-flash/round-013/behavior-audit.json",
+          "sha256": "5af7521094a7a7d931972ff9cebed103c64a5f3c9bea7cfbf1fb5a25da5abc72"
+        }
+      ],
+      "publicData": {
+        "totalChangeRecords": 36,
+        "privacyAffectedRecords": 2,
+        "remainingSafeRecords": 34
+      },
+      "expectedBehavior": "One sensitive record must not discard unrelated safe original records; scope omissions remain explicit.",
+      "limit": "Counts come from audited actual013 diagnosis; secret original text is deliberately absent. Existing privacy regression tests exercise content."
+    },
+    {
+      "name": "scaffold-failure-vs-project-failure",
+      "sources": [
+        {
+          "round": 15,
+          "artifact": "eval/results/review-iterations-flash/round-015/prepared-review-inputs.json",
+          "sha256": "63cab1b235fa209d80fffe1cd154cfc5aca0bceb97b50a13c1bfb4a0a689cb5d"
+        },
+        {
+          "round": 15,
+          "artifact": "eval/results/review-iterations-flash/round-015/actual-review-reply.json",
+          "sha256": "30e96d84af5a27a205843ceb3af9cd1b91cc4f3e88efb7af3c8fce97d9310a7a"
+        }
+      ],
+      "publicData": {
+        "observation": {
+          "tool": "Bash",
+          "input": {
+            "command": "cat > /tmp/cueverify/go.mod <<'EOF'\nmodule go.flipt.io/flipt\n\ngo 1.20\n\nrequire (\n\tgithub.com/stretchr/testify v1.8.2\n\tcuelang.org/go v0.6.0\n)\n\nreplace cuelang.org/go => ./stub\nEOF\ncp /app/go.sum /tmp/cueverify/go.sum && cd /tmp/cueverify && GOWORK=off GOPROXY=off GOSUMDB=off go mod tidy 2>&1 | tail -3; GOWORK=off GOPROXY=off GOSUMDB=off go test ./internal/cue/... 2>&1 | tail -15",
+            "description": "Set up verification module and run tests against CUE stub"
+          },
+          "output": "go: cuelang.org/go@v0.6.0 (replaced by ./stub): reading stub/go.mod: open /tmp/cueverify/stub/go.mod: no such file or directory\n# go.flipt.io/flipt/internal/cue\ninternal/cue/cue.go:8:2: module ./stub: reading stub/go.mod: open /tmp/cueverify/stub/go.mod: no such file or directory\n# go.flipt.io/flipt/internal/cue\ninternal/cue/cue.go:9:2: module ./stub: reading stub/go.mod: open /tmp/cueverify/stub/go.mod: no such file or directory\nFAIL\tgo.flipt.io/flipt/internal/cue [setup failed]\nFAIL\nShell cwd was reset to /app\ngo: cuelang.org/go@v0.6.0 (replaced by ./stub): reading stub/go.mod: open /tmp/cueverify/stub/go.mod: no such file or directory\n# go.flipt.io/flipt/internal/cue\ninternal/cue/cue.go:8:2: module ./stub: reading stub/go.mod: open /tmp/cueverify/stub/go.mod: no such file or directory\n# go.flipt.io/flipt/internal/cue\ninternal/cue/cue.go:9:2: module ./stub: reading stub/go.mod: open /tmp/cueverify/stub/go.mod: no such file or directory\nFAIL\tgo.flipt.io/flipt/internal/cue [setup failed]\nFAIL\n\nShell cwd was reset to /app",
+          "completed": true,
+          "exitCode": null,
+          "truncated": false,
+          "outputStatus": "recorded"
+        },
+        "report": "## Advisory review — checkpoint-100-review-120\n\nOverall, the change material itself (req vs. change) is well aligned: the embedded schema, the exact `validate(b []byte, cctx *cue.Context)` signature, direct return of the YAML parse error, scope-scoped build, unify-then-`Validate`, and verbatim error handling all match the PR requirements, and both fixtures match the specified shapes. The main problems are in the verification and recovery process, not in the change text.\n\n### 1. The recorded \"verification\" never ran against the real CUE library, and the tests did not even compile (highest impact)\n\n**Observation.** Tools 3–6 build a hand-written stub of `cuelang.org/go` (tool-4/tool-5) under `/tmp/cueverify/stub`, including a fake `Unify`/`Validate` that simply re-implements the `rollout > 100` check in Go and formats an error string matching the required message. Tool-6 then shows the scaffold **failed outright**: `reading stub/go.mod: no such file or directory`, `FAIL ... [setup failed]`. No test was executed.\n\n**Consequence.** Two distinct risks are currently unverified:\n- **Byte-exact error message.** The requirement that `err.Error()` equal `\"flags.0.rules.0.distributions.0.rollout: invalid value 110 (out of bound <=100)\"` depends on the real CUE v0.6.0 error formatting (path notation, \"(out of bound <=100)\" phrasing). Nothing in the records confirms this; the stub was written *to produce* the expected string, so it cannot distinguish success from failure — it is confirmation by construction.\n- **Build/dependency state.** Tool-1 shows `grep -c cuelang go.sum` returned **0** and the description references a \"failed tidy\". `cuelang.org/go v0.6.0` is in `go.mod` but has no go.sum entries, so the real module likely cannot build offline. The stub path (outside `/app`) also means nothing in `/app` was ever compiled.\n\n**Hypothesis vs. observation.** Observed: tests failed with setup errors and go.sum lacks cuelang. Hypothesis: the real message format matches the requirement; the dependency can be fetched in this environment. These need real evidence, not stub output.\n\n**Next step.** Run the actual project check: `go mod tidy` / `go mod download cuelang.org/go` then `go test ./internal/cue/...` in `/app` with the real dependency. If the network/proxy is unavailable, the verification is incomplete and the byte-exactness requirement remains open — say so rather than treating the stub run as coverage. Also verify whether the real error message includes e.g. a filename prefix from `yaml.Extract(\"\", b)` or CUE's own formatting before claiming the `require.Equal` will pass.\n\n### 2. `CompileBytes` result is unchecked before use (lower impact, real but likely benign)\n\n**Observation.** In `cue.go`, `schema := cctx.CompileBytes(fliptSchema)` — the returned `Value`'s error is never inspected; the code proceeds to `Unify(schema).Validate()`. **Hypothesis:** if the embedded schema ever fails to compile (syntax error, package mismatch), the error may surface only through the final `Validate()` or may be lost, and diagnostics would be less clear. **Counterevidence:** for the current, known-good `flipt.cue` this path should not trigger, and the requirements only specify behavior for YAML-parse failure and constraint violations. Worth a deliberate decision (either check `schema.Err()` explicitly or accept and note it); not a correctness defect on the current material.\n\n### 3. Schema scope note: closed-world behavior is an implicit design choice\n\nThe schema lists specific fields but does not close the structs (`...` / `close()` semantics differ). With default open structs, unknown fields pass silently, whereas Flipt may want strict validation. The PR description does not require strictness, so this is advisory only: if typos in YAML keys should be caught, the schema needs closing; the provided records do not establish the intended strictness.\n\n### 4. Recovery process quality\n\nTool-6's failure is a scaffold-setup bug (missing `stub/go.mod`), not evidence about the implementation. The useful next question is not \"how to fix the stub\" but \"can the real dependency be fetched and the real test run?\" Continuing to elaborate the offline stub adds no verification value for the byte-exactness requirement, since the stub encodes the expected answer.\n\n### Direction\n\nContinue with the implementation as written, but replace stub-based checking with a real `go test ./internal/cue/...` run (or, if the environment is offline, explicitly report verification as blocked). Until then, honest completion status is: implementation written per requirements, **not verified to compile or pass against the real CUE dependency**.\n\nI take no machine action; the recommendations above are advisory."
+      },
+      "expectedBehavior": "Retain command/output evidence; a missing scratch go.mod is setup failure, not proof project implementation fails; handcrafted expected-error stub is not independent validation.",
+      "limit": "Human-labeled quality case; deterministic replay cannot simulate model judgment."
+    },
+    {
+      "name": "acknowledgment-after-self-correction",
+      "sources": [
+        {
+          "round": 16,
+          "artifact": "eval/results/review-iterations-flash/round-016/feedback-and-actions-audit.json",
+          "sha256": "dfe49420768bc892f38294dc73bbb851b525c8e00c22975105b8952b5e7cd58c"
+        }
+      ],
+      "publicData": {
+        "firstMainFeedback": "2026-10-17T07:00:51.447Z",
+        "persistentRequestHits": 108,
+        "selfCorrectionTextAt": "2026-10-17T07:00:30.671Z",
+        "compatibleSearchAt": "2026-10-17T07:00:31.209Z",
+        "acknowledgmentAt": "2026-10-17T07:00:59.621Z"
+      },
+      "expectedBehavior": "Persistent feedback appearances count as one delivery; correction before visibility cannot be attributed to review.",
+      "limit": "Acknowledgment is not evidence of causal benefit."
+    }
+  ]
+}
