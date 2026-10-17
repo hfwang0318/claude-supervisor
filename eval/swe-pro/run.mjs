@@ -39,8 +39,9 @@ if (!!continuationPath !== !!continuationAdapter) throw Error('--continue-from a
 if (continuationPath && (selectionPath || !arg('out', null))) throw Error('continuation requires a full baseline and a new explicit --out')
 if (!!selectionPath !== !!baselinePath) throw Error('--selection and --baseline-summary must be provided together')
 const modes = armModes(arg('experimental-mode', 'facts'))
-const taskTimeoutMs = Number(arg('task-timeout-ms', '3000000'))
-if (!Number.isSafeInteger(taskTimeoutMs) || taskTimeoutMs < 1 || taskTimeoutMs > 3000000) throw Error('task timeout must be 1 through 3000000ms')
+const taskTimeoutValue = arg('task-timeout-ms', 'none')
+const taskTimeoutMs = taskTimeoutValue === 'none' ? null : Number(taskTimeoutValue)
+if (taskTimeoutMs !== null && (!Number.isSafeInteger(taskTimeoutMs) || taskTimeoutMs < 1 || taskTimeoutMs > 3000000)) throw Error('task timeout must be none or 1 through 3000000ms')
 const models = { model: MODEL, sideModel: MODEL, armModes: modes }
 const incremental = selectionPath ? selectRegression(manifestBytes, readFileSync(resolve(selectionPath)), readFileSync(resolve(baselinePath)), models) : null
 if (!incremental) summarizeBaseline(manifestBytes, [], models)

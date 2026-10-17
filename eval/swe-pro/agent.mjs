@@ -85,7 +85,7 @@ export const openModelNetwork = async (runtime, auditPath) => {
   } catch (error) { await close(); throw error }
 }
 
-export const runAgent = async (task, instruction, mode, runtime, network, out, { timeoutMs = 3_000_000, preflight = false, signal } = {}) => {
+export const runAgent = async (task, instruction, mode, runtime, network, out, { timeoutMs = null, preflight = false, signal } = {}) => {
   mkdirSync(out, { recursive: true })
   const name = `dss-agent-${randomUUID()}`, started = Date.now()
   const identity = JSON.parse(readFileSync(join(runtime, 'identity.json')))

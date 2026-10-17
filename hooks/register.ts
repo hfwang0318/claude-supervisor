@@ -424,7 +424,7 @@ const engineeringReview = async ($: EngineInterface, list: Rows, final = false, 
     const invalid = await invalidReason()
     if (invalid) return skipped(invalid)
     if (!reply?.isAnswered) return skipped('review-unanswered')
-    const decision = parseReview(context, reply.text)
+    const decision = parseReview(context, reply.text, true)
     deadlineMs = await $.clock.now() + s.coordinator.remainingTime(await $.clock.now())
     if (!decision) return skipped('invalid-review-protocol')
     if (mode === 'probe' && !['none', 'probe'].includes(decision.action.kind) || mode === 'recovery' && !['none', 'recovery'].includes(decision.action.kind)) return skipped('invalid-action-for-mode')
@@ -436,11 +436,11 @@ const engineeringReview = async ($: EngineInterface, list: Rows, final = false, 
       const second = await ask($, prompt, deadlineMs - await $.clock.now(), job.signal)
       return second?.isAnswered ? second.text : null
     } })
-    const event = { kind: 'engineering-review', id, binding, mode, phase, reviewPhase: s.cfg.reviewPhase, contextScope: context.scope, reviewed: decision.reviewed, unreviewed: REVIEW_DIMENSIONS.filter(d => !decision.reviewed.includes(d)), judgment: decision.judgment, action: decision.action.kind, actionProtocol: outcome.actionProtocol, reason: outcome.reason, independentExecution: outcome.evidence !== null, sourceIds: context.sources.map(source => source.id), supplementalFacts: outcome.view?.facts.filter(f => outcome!.sourceFactIds.includes(f.id)).map(f => ({ id: f.id, path: f.path, line: f.startLine, fileHash: f.fileHash })) ?? [], observation: outcome.evidence ? { id: outcome.evidence.id, outcome: outcome.evidence.outcome, binding: outcome.evidence.binding, truncated: outcome.evidence.truncated } : null }
+    const event = { kind: 'engineering-review', id, binding, mode, phase, reviewPhase: s.cfg.reviewPhase, contextScope: context.scope, reviewed: decision.reviewed, unreviewed: REVIEW_DIMENSIONS.filter(d => !decision.reviewed.includes(d)), judgment: decision.judgment, report: decision.report ?? null, responseFormat: decision.report ? 'advisory-report' : 'structured-judgment', action: decision.action.kind, actionProtocol: outcome.actionProtocol, reason: outcome.reason, independentExecution: outcome.evidence !== null, sourceIds: context.sources.map(source => source.id), supplementalFacts: outcome.view?.facts.filter(f => outcome!.sourceFactIds.includes(f.id)).map(f => ({ id: f.id, path: f.path, line: f.startLine, fileHash: f.fileHash })) ?? [], observation: outcome.evidence ? { id: outcome.evidence.id, outcome: outcome.evidence.outcome, binding: outcome.evidence.binding, truncated: outcome.evidence.truncated } : null }
     await remember($, event)
     const metadata = event
     say($, `REVIEW ${JSON.stringify({ ...metadata, dimension: decision.judgment?.dimension ?? null, recommendation: decision.judgment?.recommendation ?? null })}`)
-    if (!await current() || !outcome.note || decision.judgment?.recommendation === 'continue' && decision.action.kind === 'none') return null
+    if (!await current() || !outcome.note || !decision.report && decision.judgment?.recommendation === 'continue' && decision.action.kind === 'none') return null
     retained = true
     return { id, binding, context, decision, outcome, deadlineMs }
   } catch {

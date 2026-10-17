@@ -347,3 +347,16 @@ E／S均900秒主观察timeout、空patch，官方parsed3／required3且整体fa
 当前覆盖瓶颈是固定单题15分钟自然执行未提供目标材料，不是本轮provider超时、投递故障或新代码缺陷的证据。依据既定停止规则，停止相同条件下无变化的付费循环并删除automation；保持现有预算／时限／抽样／安全门禁，不换题碰运气、不加预算或强制触发，不宣称全部核心能力达标。恢复付费循环前需要新的可复现问题或能明确解决覆盖限制的观察设计；本轮没有依据新增产品修复。保留用户全维度优化目标及未覆盖清单。
 
 本地归档：round-011/behavior-audit.json、behavior-status.json、prepared-review-inputs.json、public-tool-summary.json、router-behavior-audit.json、completed-receipts-sha256.json；审计脚本audit-round011.py按实际implementation阶段／窗口适配，不复用010结论。没有复制thinking／凭据／私有session元数据，没有修改Claude Code或全局Router，没有合并推送。报告收尾无生产改动，不重复执行已绑定的普通检查。
+
+
+### 2026-10-17：自然结束／自然语言多问题报告批次
+
+用户明确批准取消15分钟主任务限制、允许自然语言和一次多问题。新评测task-timeout-ms默认none，配置记录timeoutMs:null；底层无任务截止timer，仍响应用户取消／进程错误。评分／准备／隔离工具保留原时限，主模型原生参数和模型身份未改。历史审查驱动仍等待待完成审查及既有有限后续回合后才关闭输入，避免截断晚到反馈。旧轮次仍为限时数据，不能与新条件当作同条件成绩比较。
+
+生产语义审查显式接受自然语言／Markdown多问题报告，不要求分类、单问题字段或回显ID；插件附上真实checkpoint／材料范围。正文未经独立事实核验，不自动推断维度已通过。旧严格JSON解析仍兼容。可选report+action结构用于机器动作，非none动作必须绑定准确检查点，经过原安全gate；无效可选动作保留正文并标记invalid-protocol，文本命令不执行。自然正文上限24KiB，与原4000wire总输出预算并存，没有问题数量上限，也未增加调用次数。
+
+TDD：原282pass4fail复现正文解析／可选动作／单问题提示／历史流丢弃，修正后287宿主pass0fail；自然完成默认独立RED3000000≠null，GREEN验证none默认／显式数值兼容／null不生成1ms timer／取消。全部node scripts/check.mjs exit0，日志natural-batch-final-checks.log；作者TDD+diffreview，不把旧独立review说成覆盖本批。
+
+同冻结Linux CLI2.1.295／Node／GNUloader，networknone的natural-report-native-verified/receipt.json：合成审查等待35036ms、wire4000／low／宿主timeoutnull；无JSON无分类无ID正文含两个问题，在主模型第6请求同时可见，1次submitted、2个result、自然退出0，0paid／0真实候选执行。此为机制证据，非真实模型质量。初次夹具保留existing默认而驱动等待supervise通知，120s外层夹具截止、0模型请求，日志／setup-diagnosis保留；随后独立新目录明确supervise／Flash通过，未改生产代码来迁就夹具。原165关键hash逐项保持。
+
+下一轮新source/out：仍从最新完整caller-scope双失败一次固定seed抽一题，Eexisting／Ssupervise并行两槽；Simplementation时机保持，明确观察自然到达实施阶段、多个有根据问题的报告、实际反馈／后续主模型动作，不追求官方pass，不自动full。主任务自然结束，不延长／重跑任何旧任务。不以合成回放代替真实质量结论。

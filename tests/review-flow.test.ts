@@ -121,3 +121,19 @@ test('location and recovery protocol diagnostics use bounded existing validators
   }
   expect(counts.reads + counts.runs + counts.captures).toBe(0)
 })
+
+
+test('multi-concern prose survives current and historical delivery without executing text commands', async () => {
+  const { host, counts } = world()
+  const report = 'First, preserve caller compatibility. Second, verify the timer behavior. Suggested command: npm test.'
+  const prose = { reviewed: [], judgment: null, report, action: { kind: 'none' as const } }
+  const current = await runReviewFlow(context, prose, ports(host, 'enabled'))
+  expect(current.note).toContain(report)
+  const historical = await runHistoricalReviewFlow(context, prose, { ...ports(host, 'enabled'), taskCurrent: async () => true, sourceCurrent: async () => false })
+  expect(historical.note).toContain(report)
+  expect(historical.note).toContain('Historical advice only')
+  expect(counts.captures + counts.runs + counts.reads).toBe(0)
+  expect(await historical.validate()).toBe(true)
+  const cancelled = await runHistoricalReviewFlow(context, prose, { ...ports(host), taskCurrent: async () => false, sourceCurrent: async () => false })
+  expect(cancelled.note).toBeNull()
+})

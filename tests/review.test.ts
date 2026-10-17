@@ -119,17 +119,17 @@ test('negative native Grep results remain evidence but cannot spend the first ex
   const withMatch = [{ ...withRead[0]!, toolUses: [...withRead[0]!.toolUses, { tool: 'Grep', input: { path: '/p/api.js', pattern: 'validate' }, text: '12: exports.validate = validate // "No matches found" is a message, not this result' }] }]
   expect(hasExplorationEvidence(buildReviewContext(binding, asked, withMatch, '', 'plan')!)).toBe(true)
 })
-test('historical response template is valid raw JSON with all mandatory echo identities in the same object', async () => {
+test('optional machine-action template keeps explicit checkpoint identity without restricting prose', async () => {
   const c = context()
   const tracked = { ...c, checkpoint: { reviewId: 'review-15', checkpointId: 'checkpoint-8-review-15', observedAt: 100, sequence: 8, requirementSignature: 'req', materialSignature: 'material', sourceIds: c.sources.map(s => s.id), lastTool: undefined } }
   const prompt = reviewPrompt(tracked, 'supervise')
-  expect(prompt).toContain('without Markdown or code fences')
-  const line = prompt.split('\n\n').find(s => s.startsWith('Response template: '))
+  expect(prompt).toContain('Natural-language prose or Markdown')
+  const line = prompt.split('\n\n').find(s => s.startsWith('Optional action template: '))
   expect(typeof line).toBe('string')
-  const example = JSON.parse(line!.slice('Response template: '.length))
+  const example = JSON.parse(line!.slice('Optional action template: '.length))
   expect(example.reviewId).toBe('review-15')
   expect(example.checkpointId).toBe('checkpoint-8-review-15')
-  expect(parseReview(tracked, JSON.stringify(example))).not.toBeNull()
+  expect(parseReview(tracked, JSON.stringify(example), true)?.report).toBe(example.report)
   // The observed old reply remains rejected: never fill in missing provenance.
   expect(parseReview(tracked, '```json\n{"reviewed":["exploration","verification"],"judgment":null,"action":{"kind":"none"}}\n```')).toBeNull()
   expect(parseReview(tracked, '{"reviewed":["exploration","verification"],"judgment":null,"action":{"kind":"none"}}')).toBeNull()
@@ -164,4 +164,42 @@ test('omitted history creates an explicit evidence limit for both reviewer input
   expect(note).toContain('bounded change excerpt')
   const withoutEarlier=reviewNote(context(),parsed)
   expect(withoutEarlier.includes('Earlier history is omitted')).toBe(false)
+})
+
+
+test('advisory response accepts multiple natural-language concerns without categories or echoed identity', async () => {
+  const c = { ...context(), checkpoint: { reviewId: 'r', checkpointId: 'c', observedAt: 100, sequence: 4, requirementSignature: 'req', materialSignature: 'mat', sourceIds: ['req','change'] } }
+  const text = '1. The timer in change can overlap; compare the shared-timer requirement.\n2. The public API may change; inspect callers before committing. These are hypotheses, not verified defects.'
+  const r = parseReview(c, text, true)!
+  expect(r?.report).toBe(text)
+  expect(r?.reviewed).toEqual([])
+  expect(r?.action.kind).toBe('none')
+  const note = reviewNote(c, r)
+  expect(note).toContain(text)
+  expect(note).toContain('checkpoint c')
+  expect(note).toContain('not independently checked')
+  expect(note).toContain('not classified')
+})
+test('optional action requires a strict bound envelope while malformed commands stay advisory', async () => {
+  const c = { ...context(), checkpoint: { reviewId: 'r', checkpointId: 'c', observedAt: 100, sequence: 4, requirementSignature: 'req', materialSignature: 'mat', sourceIds: ['req','change'] } }
+  const report = 'Two issues: timer ownership and caller compatibility. Read api.js for evidence.'
+  const good = { report, reviewId: 'r', checkpointId: 'c', action: { kind: 'location', request: { paths: ['api.js'], terms: [] } } }
+  expect(parseReview(c, JSON.stringify(good), true)?.action.kind).toBe('location')
+  for (const value of [{...good, checkpointId:'other'}, {...good, action:{kind:'shell',command:'rm -rf .'}}, {...good, action:{kind:'location',request:{paths:['../secret'],terms:[]}}}]) {
+    const r = parseReview(c, JSON.stringify(value), true)!
+    expect(r.report).toBe(report)
+    expect(r.action.kind).toBe('none')
+    expect(r.actionRejected).toBe(true)
+  }
+  expect(parseReview(c, 'Run `rm -rf .` then retry.', true)?.action.kind).toBe('none')
+})
+test('advisory mode keeps privacy and size rejection and does not require one-judgment JSON', async () => {
+  expect(parseReview(context(), 'password=private-value-123', true)).toBeNull()
+  expect(parseReview(context(), 'x'.repeat(70000), true)).toBeNull()
+  expect(parseReview(context(), '   ', true)).toBeNull()
+  const prompt = reviewPrompt(context(), 'supervise')
+  expect(prompt).toContain('all important, distinct concerns')
+  expect(prompt).toContain('Natural-language prose or Markdown')
+  expect(prompt.includes('Give at most one important grounded judgment')).toBe(false)
+  expect(prompt.includes('Return exactly one raw JSON object')).toBe(false)
 })

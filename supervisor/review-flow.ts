@@ -15,6 +15,7 @@ export type ActionProtocol = 'not-requested' | 'valid-protocol' | 'invalid-proto
 // permission, an authenticated oracle, or a judgment-quality certificate.
 export const reviewActionProtocol = (context: ReviewContext, reply: ReviewReply): ActionProtocol => {
   const action = reply.action
+  if (reply.actionRejected) return 'invalid-protocol'
   if (action.kind === 'none') return 'not-requested'
   const valid = action.kind === 'probe' ? parseProbeCandidate(context, action.candidate)
     : action.kind === 'location' ? parseFactRequest(JSON.stringify(action.request))
@@ -28,7 +29,7 @@ export const runReviewFlow = async (context: ReviewContext, reply: ReviewReply, 
   let deadlineMs = ports.deadlineMs
   let snapshot: Snapshot | null = null, view: FactView | null = null, evidence: ExecutionEvidence | null = null, closed = false
   let sourceFactIds: string[] = []
-  let reason = 'prepared', note = reply.judgment ? reviewNote(context, reply) : ''
+  let reason = 'prepared', note = reply.judgment || reply.report ? reviewNote(context, reply) : ''
   const current = async () => await host.now() < deadlineMs && await ports.current()
   const outcome = (): ReviewOutcome => ({
     actionProtocol: reviewActionProtocol(context, reply),
@@ -91,7 +92,7 @@ export const runReviewFlow = async (context: ReviewContext, reply: ReviewReply, 
 // Historical judgments belong to the task; action evidence belongs to an exact
 // source version. Never execute a stale action against the live workspace.
 export const historicalReviewOutcome = (context: ReviewContext, reply: ReviewReply, executionMode: ReviewFlowPorts['executionMode'], taskCurrent: () => Promise<boolean>): ReviewOutcome => ({
-  note: executionMode === 'shadow' || !reply.judgment ? null : `${reviewNote(context, reply)}\n\nHistorical advice only: current applicability is unknown. Supplemental actions/evidence are not established for the current workspace; no historical test or source excerpt certifies later code. The main assistant may gather fresh evidence or reject this advice with counterevidence.`,
+  note: executionMode === 'shadow' || !(reply.judgment || reply.report) ? null : `${reviewNote(context, reply)}\n\nHistorical advice only: current applicability is unknown. Supplemental actions/evidence are not established for the current workspace; no historical test or source excerpt certifies later code. The main assistant may gather fresh evidence or reject this advice with counterevidence.`,
   actionProtocol: reviewActionProtocol(context, reply),
   reason: 'historical-advice', view: null, sourceFactIds: [], evidence: null,
   validate: taskCurrent, cleanup: async () => {},

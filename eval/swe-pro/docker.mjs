@@ -13,7 +13,7 @@ export const command = (args, { timeoutMs = 300_000, log, input, signal } = {}) 
   child.stderr.on('data', chunk => retain(err, chunk))
   child.stdin.on('error', () => {})
   child.stdin.end(input)
-  const timer = setTimeout(() => { timedOut = true; child.kill('SIGKILL') }, timeoutMs)
+  const timer = timeoutMs === null ? undefined : setTimeout(() => { timedOut = true; child.kill('SIGKILL') }, timeoutMs)
   const cancel = () => { cancelled = true; child.kill('SIGKILL') }
   signal?.addEventListener('abort', cancel, { once: true })
   child.once('error', error => { clearTimeout(timer); reject(error) })

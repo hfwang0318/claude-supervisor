@@ -154,9 +154,9 @@ test('source validation time is charged before another review can start', { opti
   expect(state.calls).toBe(1)
   expect(state.timeouts).toEqual([0])
 })
-test('budget and invalid protocol skips have bounded phase-specific unreviewed diagnostics', { options }, async ($, on) => {
+test('budget and unsafe response skips have bounded phase-specific unreviewed diagnostics', { options }, async ($, on) => {
   const { state, clock } = world(on); await start($)
-  state.outputs = ['not json', reply()]
+  state.outputs = ['password=private-value-123', reply()]
   await observeBatch($, clock)
   expect(state.logs.some(l => l.includes('invalid-review-protocol'))).toBe(true)
   state.rows[0]!.text = 'Plan: preserve the public method through an adapter.'
@@ -577,4 +577,17 @@ test('cancellation after a selected implementation call prevents late delivery',
   await $.turn.complete({answer:'',durationMs:1,isAborted:true,turnId:'t',reason:'aborted'} as never)
   release();await flushBackground(clock)
   expect((await pending).additionalContext).toEqual(['host context'])
+})
+
+
+test('natural multi-concern report is delivered without category labels or model identity echo', { options }, async ($, on) => {
+  const { state, clock } = world(on); await start($)
+  const report = '1. Preserve the public entry point in api.js; changing it can break callers.\n2. Verify shared timer cancellation; overlapping callbacks are still a hypothesis. Suggested command: npm test.'
+  state.outputs = [report]; state.echo = false
+  const result = await observeBatch($, clock)
+  expect(result.additionalContext?.join('\n')).toContain(report)
+  expect(result.additionalContext?.join('\n')).toContain('checkpoint')
+  expect(state.logs.some(l => l.includes('advisory-report'))).toBe(true)
+  expect(state.processActions.length).toBe(0)
+  expect(state.calls).toBe(1)
 })

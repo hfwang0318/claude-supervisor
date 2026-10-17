@@ -10,7 +10,7 @@ export type ReviewCheckpoint = { reviewId: string; checkpointId: string; observe
 export type ReviewContext = { checkpoint?: ReviewCheckpoint; binding: Binding; phase: 'plan' | 'exploration' | 'implementation' | 'failure' | 'completion'; sources: ReviewSource[]; scope: { omitted: string[]; repositoryComplete: false } }
 export type ReviewJudgment = { dimension: ReviewDimension; question: string; requirementQuote: string; sourceIds: string[]; reason: string; impact: string; recommendation: 'continue' | 'adjust' | 'replan' | 'gather-evidence'; uncertainty: string }
 export type ReviewAction = { kind: 'none' } | { kind: 'location'; request: FactRequest } | { kind: 'probe'; candidate: unknown } | { kind: 'recovery'; observationIds: string[]; question: string }
-export type ReviewReply = { reviewed: ReviewDimension[]; judgment: ReviewJudgment | null; action: ReviewAction }
+export type ReviewReply = { reviewed: ReviewDimension[]; judgment: ReviewJudgment | null; action: ReviewAction; report?: string; actionRejected?: boolean }
 export type AssistPacket = {
   binding: Binding; kind: 'location' | 'probe' | 'recovery'; question: string
   requirementQuote: string; factIds: string[]; observationIds: string[]
