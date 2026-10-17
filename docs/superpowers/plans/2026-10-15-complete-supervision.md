@@ -236,3 +236,16 @@ scope-triage-native-replay/receipt.json按实际012记录对照冻结旧／新he
 
 
 完成阶段原生夹具已验证：firstside在main5最终答复后，真实REVIEWcompletion，35036ms晚到双问题正文、main6同时可见、2results自然exit0，0paid／0候选执行。Round013唯一启动sourcead666bf、seedf17880c6961d578ffa693e9fe6c41f7a固定Protone65、Eauto/Scompletion并行2槽、none/null自然结束，controller59220/monitor59223，03:36:54Z环境校准。293ALLordinary/实际scope回放/完成夹具/180hash/nativepreflight8117ms门禁完整。仅观察新范围／triage修正及最终声明，不宣称质量已改善；本轮有真实代码修改但时机与012不同，分开记录。
+
+
+### Round013：自然完成与完成阶段反馈审计
+
+2026-10-17T04:34:36Z两组2/2自然完成、基础及完整行为审计结束，controller59220/monitor59223和容器均退出。E2701623ms（约45分02秒）18008Bpatch／S3073671ms（约51分14秒）23136Bpatch，原生exit0；官方E1parsed/3required、S2parsed/3required overallfailed，仅描述，不推断三项逐一失败或监督收益。保持none/null，不靠旧时限终结。
+
+S首次完成阶段实际调用38335ms／无插件timeout／4609in1744out／wire4000low／Router200end_turn，一份prepared与实际Routercontext省略sessionId后逐字一致。4837字符自然报告四项加design note，正文含围栏JSON建议仍是文本，不提取执行，actionnone/not-requested、0facts。04:28:51.605queued／.709submitted，04:28:51.767真实下一主请求完整可见，后续7hits是一次反馈。主明确逐项回应，补读源码、正确捕获tsc exit0、纠正5new+44preexisting为5new+39preexisting，并在纠正首次错误cwd后用pristine39tests复现open-handle警告；没有反馈后实现编辑。可见验证／报告动作改变，但独立任务质量效益unknown。
+
+报告正确限界“提供记录没有源码／tsc证据”，计数错真实；完整轨迹其实04:18:54已有tsc PIPESTATUS0，因此补跑部分是有限材料造成的冗余。开句柄警告存在，但“likely retry timers”仍是假设，基线反证不证明新代码毫无影响。design note把reset权衡留在非缺陷说明，未虚构hidden-grader需求。无明示技术方案，需求—方案／方案—实现输入不足；探索／方向／验证有部分实际观察，架构／精确时序及需求反例未验证，恢复仅退出码与cwd纠正。最终主答仍将React useEffect等同同一dispatch内同步发出，不能认证该严格时序要求；官方失败不归因于此。晚到完成审查及有限follow-up已真实自然完成，链路健康非全维达标。
+
+新可复现材料问题：真实36条改动中2条触发既有脱敏规则，聚合23958byte小于24576上限，却导致34条其余安全改动一起change-unavailable。同冻结Linux／networknone／0model／0项目执行的round013-material-diagnosis与privacy-details复现；20KB控制仍拒绝，非此次大小上限原因。未降低隐私或复制敏感值。下一批只保留独立通过原隐私检查的有界改动原文，明确遗漏隐私／预算部分；不更改实际任务代码，不把部分材料认证成完整当前diff，不增加预算。
+
+Router301window/301bodyparsed，244原需求匹配＋40仅内存S绑定＝284归因Flash200，17不归因；本地E128requests109starts／S175requests134starts，全部实际身份Flash。673资源样本min6788026368B/swap0/OOM0/no429，完整usage/costunknown。新增15criticalhash累计195保持；原pending快照不改，behavior-status另存终结。基础audit不重跑，原输入／报告／patch不修改。下轮只在实证批次RED→GREEN＋全部普通检查与免费实际材料回放后冻结新版本，不立即无变化付费。
