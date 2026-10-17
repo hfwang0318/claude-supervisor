@@ -238,3 +238,22 @@ test('sentence-prefixed exploration, quoted intentions and hypothetical examples
     "Earlier I said: I'll replace the public method, but that plan was rejected.",
   ]) expect(buildReviewContext(binding, asked, [{ role: 'assistant', text, toolUses: [] }], '', 'plan')!.sources.some(s => s.kind === 'plan')).toBe(false)
 })
+
+
+test('a search-tool fallback after a failed search is exploration rather than an engineering plan', async () => {
+  const text = "The Grep tool seems broken in this environment (it found nothing even for text I know exists). I'll fall back to `grep` via Bash:"
+  const c = buildReviewContext(binding, asked, [{ role: 'assistant', text, toolUses: [{ tool: 'Bash', input: { command: 'grep --include=*.ts Stale src' }, text: 'grep: unrecognized option: include=*.ts' }] }], '', 'plan')!
+  expect(c.sources.some(s => s.kind === 'plan')).toBe(false)
+  expect(c.sources.some(s => s.kind === 'observation' && s.text.includes('unrecognized option'))).toBe(true)
+  expect(parseReview(c, JSON.stringify(reply()))).toBeNull()
+})
+test('a plan label cannot turn a search-only tool switch into a technical proposal', async () => {
+  for (const text of ['Plan: fall back to grep via Bash.', "Search returned nothing. I'll switch to ripgrep.", "I'll fall back to `grep`."]) {
+    const c = buildReviewContext(binding, asked, [{ role: 'assistant', text }], '', 'plan')!
+    expect(c.sources.some(s => s.kind === 'plan')).toBe(false)
+  }
+  for (const text of ["I'll fall back to cached state until the shared timer can refresh the list.", "I'll switch to grep. I'll implement one shared scheduler to avoid duplicate timers.", 'Plan: inspect the timer owner, then centralize cancellation in Scheduler.']) {
+    const c = buildReviewContext(binding, asked, [{ role: 'assistant', text }], '', 'plan')!
+    expect(c.sources.find(s => s.kind === 'plan')?.text).toBe(text)
+  }
+})
