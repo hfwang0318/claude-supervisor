@@ -21,15 +21,23 @@ const parseReviewAction = (value: unknown): ReviewReply['action'] | null => {
   return action as ReviewReply['action']
 }
 
-const explicitPlan = (text: string) => {
-  const visible = text.replace(/```[\s\S]*?(?:```|$)/g, '').trim()
-  const intention = visible.replace(/^(?:(?:Plan|Approach|方案|计划)\s*[:：]\s*|I (?:will|intend to)\s+|I'll\s+|我(?:打算|计划|将)\s*)/i, '')
+const genericExploration = (text: string) => {
+  const intention = text.replace(/^(?:(?:Plan|Approach|方案|计划)\s*[:：]\s*|I (?:will|intend to)\s+|I'll\s+|我(?:打算|计划|将)\s*)/i, '')
   // Generic reconnaissance narration supplies no design decision to compare
   // against requirements. Concrete mechanisms and multi-step plans remain plans.
-  if (/^(?:(?:start|begin)\s+by\s+|first\s+)?(?:explor(?:e|ing)|inspect(?:ing)?|brows(?:e|ing)|read(?:ing)?|list(?:ing)?)\s+(?:the\s+)?(?:repository|repo|project|codebase)(?:\s+(?:structure|layout|files))?(?:\s+to\s+understand\s+(?:the\s+)?(?:codebase|project|repository))?[.!]?$/i.test(intention) || /^(?:先|首先)?(?:查看|检查|阅读|浏览|探索)(?:仓库|项目|代码库)(?:结构|目录|布局)?[。！]?$/u.test(intention)) return false
+  return /^(?:(?:start|begin)\s+(?:by\s+)?|first\s+)?(?:explor(?:e|ing)|inspect(?:ing)?|brows(?:e|ing)|read(?:ing)?|list(?:ing)?)\s+(?:the\s+)?(?:repository|repo|project|codebase)(?:\s+(?:structure|layout|files))?(?:\s+to\s+understand\s+(?:the\s+)?(?:codebase|project|repository))?[.!]?$/i.test(intention) || /^(?:先|首先)?(?:查看|检查|阅读|浏览|探索)(?:仓库|项目|代码库)(?:结构|目录|布局)?[。！]?$/u.test(intention)
+}
+const explicitPlan = (text: string) => {
+  const visible = text.replace(/```[\s\S]*?(?:```|$)/g, '').trim()
+  if (genericExploration(visible)) return false
   return visible.split('\n').some(line => {
     if (/^\s*(?:>|["'“「])/.test(line)) return false
-    return /^\s*(?:Plan|Approach|方案|计划)\s*[:：]\s*(?!(?:none|unknown|not)(?:\b)|暂无|没有|尚未|未定|待定)\S/i.test(line) || /^\s*(?:I (?:will|intend to)\s+|I'll\s+|我(?:打算|计划|将)\s*[^，。！？])/i.test(line)
+    if (/^\s*(?:Plan|Approach|方案|计划)\s*[:：]\s*(?!(?:none|unknown|not)(?:\b)|暂无|没有|尚未|未定|待定)\S/i.test(line)) return true
+    if (/^\s*(?:For example\b|If\b|Suppose\b|Earlier\b|Previously\b)/i.test(line)) return false
+    // A concrete intent may follow an introductory sentence or causal clause.
+    // Quoted/code text cannot supply an assistant's own future commitment.
+    const own = line.replace(/`[^`\n]*`|"[^"\n]*"|“[^”\n]*”|「[^」\n]*」/g, ' ')
+    return own.split(/(?<=[.!?。！？,，;；])\s+/u).some(clause => /^\s*(?:I (?:will|intend to)\s+|I'll\s+|我(?:打算|计划|将)\s*[^，。！？])/i.test(clause) && !genericExploration(clause.trim()))
   })
 }
 

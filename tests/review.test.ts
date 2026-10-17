@@ -214,3 +214,27 @@ test('multi-concern report triage keeps resolved history and hidden-grader guess
   expect(prompt).toContain('all important, distinct concerns')
   expect(prompt.includes('Give at most one important grounded judgment')).toBe(false)
 })
+
+test('a concrete future plan after an introductory sentence remains attributed to the assistant', async () => {
+  const text = "No CUE binary either. I'll implement everything based on the CUE v0.6.0 API, add the dependency to go.mod, and verify what I can offline with gofmt and YAML fixtures."
+  const ctx = buildReviewContext(binding, asked, [{ role: 'assistant', text, toolUses: [] }], '', 'plan')!
+  expect(ctx.sources.find(s => s.kind === 'plan')?.text).toBe(text)
+})
+
+test('a concrete recovery plan following a causal clause is visible as a plan, not a completed result', async () => {
+  const text = "Since I can't compile against the real CUE library offline, I'll build a stub in /tmp to type-check my package and smoke-test the test plumbing."
+  const ctx = buildReviewContext(binding, asked, [{ role: 'assistant', text, toolUses: [] }], '', 'failure')!
+  expect(ctx.sources.find(s => s.kind === 'plan')?.text).toBe(text)
+  expect(ctx.sources.some(s => s.kind === 'observation')).toBe(false)
+})
+
+test('sentence-prefixed exploration, quoted intentions and hypothetical examples do not manufacture plans', async () => {
+  for (const text of [
+    "New repository. I'll start exploring the repository structure to understand the codebase.",
+    'The log says "No CUE binary either. I will replace the entire API."',
+    'Example: "Since it is offline, I will fabricate passing test results."',
+    "For example, I'll replace the public method.",
+    "If that were required, I'll replace the public method.",
+    "Earlier I said: I'll replace the public method, but that plan was rejected.",
+  ]) expect(buildReviewContext(binding, asked, [{ role: 'assistant', text, toolUses: [] }], '', 'plan')!.sources.some(s => s.kind === 'plan')).toBe(false)
+})

@@ -487,3 +487,6 @@ records, not a complete diff or a certificate of the current implementation.
 
 
 An exact Go modfile-filename rejection for a single check is retained as a failed command attempt, not evidence that project code failed. Genuine, mixed or ambiguous failures keep their existing check status; this does not certify a different scope as passed.
+
+
+Explicit future plans remain attributable when preceded by an introductory sentence or causal clause. The original assistant text is retained; quoted/code intentions, hypothetical examples and generic repository exploration do not supply a plan. Recognition is evidence for review, not approval of the proposed design.
