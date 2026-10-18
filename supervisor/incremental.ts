@@ -1,4 +1,5 @@
 import { bytesOf, redact } from '../hooks/prompt'
+import { evidenceOf } from '../hooks/evidence'
 import type { ReviewSource } from './contracts'
 
 export type ReviewTrigger = 'interval' | 'first-write' | 'failure' | 'verification' | 'completion'
@@ -30,6 +31,7 @@ export class IncrementalReview<T = unknown> {
   private steps = new Set<string>()
   private milestones = new Set<string>()
   private sources: ReviewSource[] = []
+  private anchors: ReviewSource[] = []
   private omitted = new Set<string>()
   private pinned: ReviewOpportunity<T>[] = []
   private ordinary: ReviewOpportunity<T> | null = null
@@ -43,7 +45,7 @@ export class IncrementalReview<T = unknown> {
   }
   reset() {
     this.seen.clear(); this.steps.clear(); this.milestones.clear()
-    this.sources = []; this.omitted.clear(); this.pinned = []; this.ordinary = null
+    this.sources = []; this.anchors = []; this.omitted.clear(); this.pinned = []; this.ordinary = null
     this.count = 0; this.sequence = 0; this.lastTakenSequence = 0; this.dirty = false
   }
   add(key: string, kind: ReviewSource['kind'], text: string) {
@@ -54,8 +56,21 @@ export class IncrementalReview<T = unknown> {
     this.seen.add(key)
     if (redact(text) !== text) { this.omitted.add('privacy-affected-incremental-material'); return }
     if (bytesOf(text) > 16384) { this.omitted.add('incremental-material-budget'); return }
-    if (this.sources.some(source => source.kind === kind && source.text === text)) return
-    this.sources.push({ id: `event-${++this.sequence}`, kind, text })
+    if (this.sources.some(source => source.text === text && (source.kind === kind || kind === 'narrative' && source.kind === 'answer'))) return
+    if (kind === 'answer') this.sources = this.sources.filter(source => source.kind !== 'narrative' || source.text !== text)
+    const source = { id: `event-${++this.sequence}`, kind, text }
+    this.sources.push(source)
+    // Existing check recognition selects historical material only. It grants no
+    // verification, repair, command equivalence or current-source authority.
+    if (kind === 'observation') {
+      try {
+        const use = JSON.parse(text)
+        if (use.completed === true && use.truncated !== true && use.tool === 'Bash' && evidenceOf([{ role: 'assistant', text: '', toolUses: [{ tool: use.tool, input: use.input, text: use.output, result: { exitCode: use.exitCode } }] }]).runs.length) {
+          this.anchors.push(source)
+          while (this.anchors.length > 8 || bytesOf(JSON.stringify(this.anchors)) > 8192) { this.anchors.shift(); this.omitted.add('incremental-anchor-budget') }
+        }
+      } catch { /* Unstructured observations remain ordinary bounded records. */ }
+    }
     this.dirty = true
     while (this.sources.length > 32 || bytesOf(JSON.stringify(this.sources)) > 24576) {
       this.sources.shift(); this.omitted.add('incremental-material-budget')
@@ -71,7 +86,14 @@ export class IncrementalReview<T = unknown> {
     if (!this.dirty || !this.sources.length) return
     const milestone = `${reason}:${key}`
     if (reason !== 'interval' && this.milestones.has(milestone)) return
-    const opportunity: ReviewOpportunity<T> = { frame, reasons: [reason], sources: this.sources.map(s => ({ ...s })), omitted: ['incremental-public-record-window', ...this.omitted], sequence: this.sequence, newSourceIds: [], priorAnchorIds: [] }
+    const selected: ReviewSource[] = []
+    for (const source of [this.sources.at(-1)!, ...this.anchors.toReversed(), ...this.sources.toReversed()]) {
+      if (selected.some(s => s.id === source.id)) continue
+      if (selected.length >= 32 || bytesOf(JSON.stringify([...selected, source])) > 24576) { this.omitted.add('incremental-material-budget'); continue }
+      selected.push({ ...source })
+    }
+    selected.sort((a, b) => Number(a.id.slice(6)) - Number(b.id.slice(6)))
+    const opportunity: ReviewOpportunity<T> = { frame, reasons: [reason], sources: selected, omitted: ['incremental-public-record-window', ...this.omitted], sequence: this.sequence, newSourceIds: [], priorAnchorIds: [] }
     if (reason === 'interval') this.ordinary = opportunity
     else {
       if (this.milestones.size >= 4096) { this.omitted.add('incremental-event-limit'); return }

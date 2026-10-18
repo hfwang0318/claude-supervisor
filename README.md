@@ -206,13 +206,30 @@ Callbacks capture timing reliably but do not make model judgments correct.
 PostToolBatch and Stop do not wait for side-model replies; feedback enters the
 next safe context or the existing bounded completion followup.
 
+Incremental context prioritizes bounded actual change excerpts, preserves up to
+8 prior check observations within an 8KiB anchor budget, and deduplicates an
+identical final narrative/answer. The complete selected record window still fits
+24KiB and the material context fits 48KiB before host checkpoint metadata.
+Anchors preserve original commands/results;
+they do not prove a repair, equivalence between check scopes or current validity.
+The reviewer is asked to compare actual assertions and intermediate states with
+the requirement: eventual results do not prove immediate dispatch or exact timer
+boundaries, and direct dispatches/mocks may omit real integration paths.
+
+New diagnostic parts include a pre-log length and non-authenticating checksum.
+Native redaction remains enabled. The reader separates unaltered reconstructed
+inputs, complete-but-altered diagnostics (`alteredInputs`, never exact input), and
+missing/malformed parts. It does not decode around redaction or certify changed
+source text. Legacy diagnostic formats remain readable with their original limits.
+
 `review_schedule=legacy` preserves the old explicit-plan / two successful source
 reads / post-check admission and its old budget. Only this schedule applies
 `review_phase=auto|plan|exploration|implementation|failure|completion`. New runtime
 identities bind schedule, interval and budgets; old frozen identities stay
 readable with legacy semantics. `assistance_mode=existing` remains unchanged.
-Free real-record regression: `node eval/replay-review.mjs`. Eight curated cases
-retain public excerpts and source hashes from the 17-round archive; semantic
+Free real-record regression: `node eval/replay-review.mjs`. Nine curated cases
+retain public excerpts and source hashes from the 17-round archive and the first
+incremental pilot, with an additional diagnostic-framing regression. Semantic
 quality labels remain manual and are not converted into passing quality scores.
 
 `execution_mode=off` still permits advisory review and explicitly unexecuted

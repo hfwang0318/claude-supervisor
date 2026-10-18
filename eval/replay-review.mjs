@@ -5,7 +5,7 @@ import { join, dirname, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { createHash } from 'node:crypto'
 import ts from 'typescript'
-import { reviewMetrics } from './swe-pro/review-metrics.mjs'
+import { readReviewInputs, reviewMetrics } from './swe-pro/review-metrics.mjs'
 
 // Execute the actual pure production modules, without a host, network or model.
 // Transpilation is confined to a fresh temporary directory; source is untouched.
@@ -18,9 +18,10 @@ try {
     mkdirSync(dirname(join(temp, file)), { recursive: true }); writeFileSync(join(temp, file + '.mjs'), output)
   }
   const { IncrementalReview } = await import(pathToFileURL(join(temp, 'supervisor/incremental.mjs')))
-  const { buildIncrementalContext, parseReview } = await import(pathToFileURL(join(temp, 'supervisor/review.mjs')))
+  const { buildIncrementalContext, parseReview, reviewInputLogs, reviewPrompt } = await import(pathToFileURL(join(temp, 'supervisor/review.mjs')))
   const { evidenceOf, reviewChangesOf } = await import(pathToFileURL(join(temp, 'hooks/evidence.mjs')))
   const { Coordinator } = await import(pathToFileURL(join(temp, 'supervisor/coordinator.mjs')))
+  const { redact } = await import(pathToFileURL(join(temp, 'hooks/prompt.mjs')))
   const corpus = JSON.parse(readFileSync(join(root, 'eval/data/review-replay-v1/cases.json')))
   const cases = Object.fromEntries(corpus.cases.map(c => [c.name, c.publicData]))
   let availableSourceHashes = 0
@@ -94,6 +95,50 @@ try {
     assert.equal(metrics.deliveryCount, 1); assert.equal(metrics.validatedBenefit, 'unknown'); assert.equal(metrics.mainActionChanged, 'unknown')
   }
   checked.push('acknowledgment-after-self-correction: timing/no-causal-certificate')
+  {
+    const c = context((() => { const r = new IncrementalReview(1); r.step('1', 'Keep PUBLIC source text unchanged.'); return r.take() })())
+    const logs = reviewInputLogs({ kind: 'engineering-review-input', id: 'framing-case', status: 'prepared', modelId: 'fixture', promptSignature: 'fixed', context: c }).map(l => 'deepseek-supervisor: ' + l)
+    const clean = readReviewInputs(logs.join('\n'))
+    assert.equal(clean.inputs.length, 1)
+    const changed = readReviewInputs(logs.map(l => l.replace('PUBLIC', 'public')).join('\n'))
+    assert.equal(changed.inputs.length, 0, 'equal-length native log edits must not authenticate an original diagnostic')
+    assert.equal(changed.alteredInputs.length, 1)
+    const missing = readReviewInputs(logs.filter(l => !l.includes('REVIEW_INPUT_PART ')).join('\n'))
+    assert.equal(missing.inputs.length, 0)
+    assert.equal(missing.alteredInputs.length, 0, 'missing parts cannot become an altered-but-complete input')
+  }
+  checked.push('diagnostic-host-alteration: fidelity-not-missing-parts')
+  {
+    const data = cases['completion-code-and-counterevidence'], r = new IncrementalReview(5)
+    const baseline = JSON.stringify(data.priorBaselineObservation)
+    r.add('prior-baseline', 'observation', baseline)
+    for (const source of data.completionSources) r.add(source.id, source.kind, source.text)
+    r.request('completion')
+    // Retain original safe file excerpts independently; privacy filtering is not
+    // rewriting code. These files were unchanged after the original checkpoint.
+    const chunks = data.unchangedPreCompletionFileDiffs.split('diff --git ').slice(1).map(part => 'diff --git ' + part)
+    const safe = chunks.filter(text => redact(text) === text)
+    const c = buildIncrementalContext(binding, data.requirement, r.take(), safe.join(''), 'completion', safe.length !== chunks.length ? ['privacy-affected-changes'] : [])
+    assert.ok(c.sources.some(s => s.kind === 'change' && s.text.includes('pendingActions')))
+    assert.ok(c.sources.some(s => s.kind === 'observation' && s.text === baseline))
+    const answer = data.completionSources.find(s => s.kind === 'answer').text
+    assert.equal(c.sources.filter(s => s.text === answer).length, 1)
+    assert.equal(c.sources.find(s => s.text === answer).kind, 'answer')
+    assert.ok(Buffer.byteLength(JSON.stringify(c)) <= 49152)
+    assert.equal(parseReview(c, 'Coverage remains uncertain: test success alone is not an exact timing or intermediate-state oracle.', true).judgment, null)
+    const prompt = reviewPrompt(c, 'supervise')
+    assert.ok(prompt.endsWith(JSON.stringify(c)), 'all actual oracles/code/counterevidence reach the same reviewer input')
+    // Real legacy diagnostic parts stay frozen. The new reader can distinguish
+    // their observed host alteration without authenticating changed source text.
+    const debugPath = join(root, 'eval/results/incremental-review-flash/pilot-001/run/instance_protonmail__webclients-e65cc5f33719e02e1c378146fb981d27bc24bdf4/facts/agent/debug.log')
+    if (existsSync(debugPath)) {
+      const audited = readReviewInputs(readFileSync(debugPath, 'utf8'))
+      assert.equal(audited.inputs.length, 2); assert.equal(audited.alteredInputs.length, 1); assert.equal(audited.incompleteInputs, 0)
+      assert.equal(audited.alteredInputs[0].id, 'review-193')
+      assert.equal(audited.alteredInputs[0].exactPreparedInput, false)
+    }
+  }
+  checked.push('completion-code-and-counterevidence: actual-inputs/semantic-oracle-labels-manual')
   const traceFlag = process.argv.indexOf('--trace'), sweep = []
   if (traceFlag >= 0) {
     const trace = JSON.parse(readFileSync(process.argv[traceFlag + 1]))

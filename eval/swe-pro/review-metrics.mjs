@@ -2,7 +2,7 @@
 const dimensions = ['requirement-plan', 'plan-implementation', 'architecture', 'direction', 'exploration', 'verification', 'recovery']
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value)
 export const readReviewInputs = debug => {
-  const heads = [], parts = [], inputs = []
+  const heads = [], parts = [], inputs = [], alteredInputs = []
   let malformedEvents = 0, incompleteInputs = 0
   const key = e => `${e.id}\n${e.promptSignature}`
   const validPrivacy = e => e.representation === undefined && e.omittedBindingFields === undefined || e.representation === 'session-id-omitted' && Array.isArray(e.omittedBindingFields) && e.omittedBindingFields.length === 1 && e.omittedBindingFields[0] === 'sessionId' && object(e.context?.binding) && !Object.hasOwn(e.context.binding, 'sessionId')
@@ -25,21 +25,24 @@ export const readReviewInputs = debug => {
     if (head.contextEncoding !== 'json-parts' || !Number.isSafeInteger(head.parts) || head.parts < 1 || head.parts > 128 || !Number.isSafeInteger(head.characters) || head.characters < 1 || head.characters > 131072 || group.length !== head.parts || new Set(group.map(p => p.index)).size !== head.parts || group.some(p => p.total !== head.parts || !Number.isSafeInteger(p.index) || p.index < 0 || p.index >= head.parts || typeof p.text !== 'string' || p.text.length > 2000)) { incompleteInputs++; continue }
     try {
       const text = group.toSorted((a, b) => a.index - b.index).map(p => p.text).join('')
-      if (text.length !== head.characters) throw Error('incomplete input')
       const e = JSON.parse(text)
       if (!object(e) || key(e) !== key(head) || e.modelId !== head.modelId || e.status !== 'prepared' || !object(e.context) || !Array.isArray(e.context.sources) || !validPrivacy(e) || e.representation !== head.representation || JSON.stringify(e.omittedBindingFields) !== JSON.stringify(head.omittedBindingFields)) throw Error('input metadata mismatch')
-      inputs.push(e)
+      let hash = 2166136261
+      for (let i = 0; i < text.length; i++) hash = Math.imul(hash ^ text.charCodeAt(i), 16777619)
+      if (text.length !== head.characters || head.checksum !== undefined && head.checksum !== (hash >>> 0).toString(16)) {
+        alteredInputs.push({ ...e, diagnosticFidelity: 'altered', declaredCharacters: head.characters, observedCharacters: text.length, exactPreparedInput: false })
+      } else inputs.push(e)
     } catch { incompleteInputs++ }
   }
   const headKeys = new Set(heads.map(key))
-  return { inputs, incompleteInputs, malformedEvents, orphanPartGroups: new Set(parts.filter(p => !headKeys.has(key(p))).map(key)).size }
+  return { inputs, alteredInputs, incompleteInputs, malformedEvents, orphanPartGroups: new Set(parts.filter(p => !headKeys.has(key(p))).map(key)).size }
 }
 export const reviewMetrics = debug => {
   const parse = marker => [...debug.matchAll(new RegExp(`deepseek-supervisor: ${marker} (\\{[^\\n]+\\})`, 'g'))].flatMap(m => { try { const v = JSON.parse(m[1]); return v && typeof v === 'object' && !Array.isArray(v) ? [v] : [] } catch { return [] } })
   const reviews = parse('REVIEW'), deliveries = parse('REVIEW_DELIVERY')
   const inputs = readReviewInputs(debug)
   return {
-    inputAudit: { prepared: inputs.inputs.length, sessionIdentityOmitted: inputs.inputs.filter(e => e.representation === 'session-id-omitted').length, incompleteInputs: inputs.incompleteInputs, malformedEvents: inputs.malformedEvents, orphanPartGroups: inputs.orphanPartGroups },
+    inputAudit: { prepared: inputs.inputs.length, alteredInputs: inputs.alteredInputs.length, sessionIdentityOmitted: inputs.inputs.filter(e => e.representation === 'session-id-omitted').length, incompleteInputs: inputs.incompleteInputs, malformedEvents: inputs.malformedEvents, orphanPartGroups: inputs.orphanPartGroups },
     factsReturned: parse('ASSIST').filter(e => e.delivery === 'context-returned' && e.packet?.kind === 'location').length,
     sourceFactCount: deliveries.filter(d => ['context-returned', 'submitted'].includes(d.delivery)).reduce((n, d) => n + (Number.isSafeInteger(d.sourceFactCount) && d.sourceFactCount > 0 && d.sourceFactCount <= 6 ? d.sourceFactCount : 0), 0),
     reviews, deliveries, deliveryCount: deliveries.filter(d => ['context-returned', 'submitted'].includes(d.delivery)).length,

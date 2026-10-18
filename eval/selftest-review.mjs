@@ -74,5 +74,12 @@ try {
   assert.equal(reviewMetrics(eventLine('REVIEW_INPUT', normalized)).inputAudit.sessionIdentityOmitted, 1, 'privacy-normalized input must be distinguishable from an exact session binding')
   const mislabeled = { ...normalized, context: { ...normalized.context, binding: { sessionId: 'must-not-be-logged' } } }
   assert.equal(readReviewInputs(eventLine('REVIEW_INPUT', mislabeled)).inputs.length, 0, 'claimed omission must not conceal a retained private identity')
+  const hostAlteredParts = inputParts.map(line => line.replace('Keep the public API.', 'Keep the [REDACTED] API.'))
+  const hostAltered = readReviewInputs([inputHead, ...hostAlteredParts].join('\n'))
+  assert.equal(hostAltered.inputs.length, 0)
+  assert.equal(hostAltered.incompleteInputs, 0, 'all correlated parts exist; changed content is not a missing-part failure')
+  assert.equal(hostAltered.alteredInputs.length, 1, 'retain the normalized diagnostic separately without authenticating its source text')
+  assert.ok(hostAltered.alteredInputs[0].context.sources[0].text.includes('[REDACTED]'))
+  assert.equal(reviewMetrics([inputHead, ...hostAlteredParts].join('\n')).inputAudit.alteredInputs, 1)
   console.log('Comprehensive review identity/behavior metrics self-tests passed; fixture processes only, no model calls')
 } finally { rmSync(dir, { recursive: true, force: true }) }

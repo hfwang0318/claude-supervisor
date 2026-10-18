@@ -85,17 +85,29 @@ export const buildReviewContext = (binding: Binding, asked: string, rows: readon
 export const buildIncrementalContext = (binding: Binding, asked: string, opportunity: import('./incremental').ReviewOpportunity, changes: string, phase: ReviewContext['phase'], changeOmissions: readonly string[] = []): ReviewContext | null => {
   if (!safeText(asked, 16384)) return null
   const context: ReviewContext = { binding: { ...binding }, phase, opportunity: { reasons: [...opportunity.reasons], sequence: opportunity.sequence, newSourceIds: [...opportunity.newSourceIds], priorAnchorIds: [...opportunity.priorAnchorIds] }, sources: [{ id: 'req', kind: 'requirement', text: asked }], scope: { omitted: [...new Set([...opportunity.omitted, ...changeOmissions])], repositoryComplete: false } }
-  for (const source of opportunity.sources) {
-    if (safeText(source.text, 16384) && bytesOf(JSON.stringify(context)) + bytesOf(JSON.stringify(source)) <= 49152) context.sources.push({ ...source })
-    else context.scope.omitted.push('incremental-source-unavailable')
-  }
-  if (context.sources.some(source => source.kind === 'change')) context.scope.omitted.push('changes-are-bounded-record-excerpts')
-  if (changes.trim() && !context.sources.some(source => source.kind === 'change' && source.text === changes)) {
+  if (changes.trim()) {
     context.scope.omitted.push('changes-are-bounded-record-excerpts')
     const source: ReviewSource = { id: 'change', kind: 'change', text: changes }
     if (safeText(changes, 24576) && bytesOf(JSON.stringify(context)) + bytesOf(JSON.stringify(source)) <= 49152) context.sources.push(source)
     else context.scope.omitted.push('change-record-budget')
   }
+  const answer = opportunity.sources.findLast(source => source.kind === 'answer')
+  const priority = (source: ReviewSource) => source.kind === 'proposed-change' ? 0 : source === answer ? 1 : source.kind === 'change' ? 2 : source.kind === 'observation' ? 3 : source.kind === 'narrative' ? 4 : 5
+  const candidates = opportunity.sources.filter(source => !(changes.trim() && source.kind === 'change') && !(source.kind === 'narrative' && source.text === answer?.text)).toSorted((a, b) => priority(a) - priority(b))
+  if (context.sources.some(source => source.kind === 'change') || candidates.some(source => source.kind === 'change')) context.scope.omitted.push('changes-are-bounded-record-excerpts')
+  // Reserve omission metadata before filling the last bytes of the context.
+  // Adding the flag only after a rejected source could exceed the same cap.
+  const alreadyUnavailable = context.scope.omitted.includes('incremental-source-unavailable')
+  context.scope.omitted = [...new Set([...context.scope.omitted, 'incremental-source-unavailable'])]
+  let sourceOmitted = false
+  for (const source of candidates) {
+    if (safeText(source.text, 16384) && bytesOf(JSON.stringify({ ...context, sources: [...context.sources, source] })) <= 49152) context.sources.push({ ...source })
+    else sourceOmitted = true
+  }
+  if (!alreadyUnavailable && !sourceOmitted) context.scope.omitted = context.scope.omitted.filter(reason => reason !== 'incremental-source-unavailable')
+  const retainedIds = new Set(context.sources.map(source => source.id))
+  context.opportunity!.newSourceIds = context.opportunity!.newSourceIds.filter(id => retainedIds.has(id))
+  context.opportunity!.priorAnchorIds = context.opportunity!.priorAnchorIds.filter(id => retainedIds.has(id))
   return context.sources.length > 1 ? context : null
 }
 
@@ -175,6 +187,8 @@ export const reviewPrompt = (context: ReviewContext, mode: 'supervise' | 'probe'
   ...reviewLimits(context),
   'Report all important, distinct concerns supported by these records, ordered by impact. Do not stop after one issue or repeat the same issue. For each concern, explain the observed evidence (source ID/path/quote when useful), likely consequence, useful next step, uncertainty and counterevidence. Distinguish observations from hypotheses. If no important concern is supported, say so without claiming correctness.',
   'Only unresolved, material concerns belong in the problem list. Resolved issues are counterevidence, not new current problems; acknowledge a visible fix instead of reopening its earlier placeholder. A deliberate choice with no concrete consequence or no useful next step need not become a numbered problem. Do not invent hidden-test or hidden-grader expectations to manufacture requirements. Architecture or direction advice may rely on observed design trade-offs without a failing test, but explain the concrete consequence for this task and separate it from unsupported possibilities. Keep all important concerns; there is no one-issue limit.',
+  'Judge requirement coverage from the actual test oracle, not test names, comments or passing counts. Where relevant, compare assertions and intermediate states with the exact requested behavior: an eventual result after await/tick/waitFor does not prove an effect happened inside the initiating dispatch, and a generous timeout does not establish an exact fixed delay. A final-content assertion may miss or contradict an owed/loading/placeholder requirement. Direct reducer dispatches or mocks may bypass the real caller/event path. Identify the smallest distinguishing counterexample and what it would establish; do not invent the test outcome or treat a proposed oracle as validated.',
+  'Historical check anchors retain their original command, result and source identity only. A later pass, a changed test or a pristine-code comparison does not automatically resolve an earlier failure in another scope or authenticate the current implementation. Use visible failures, replacements and baseline results as counterevidence; if their relation is not shown, ask a focused question rather than claiming a repair or demanding a redundant repeat.',
   'Natural-language prose or Markdown is the default response. No JSON, category labels, fixed fields, exact requirement quote or echoed IDs are required for advice. The host attaches the actual frozen checkpoint and source scope; it does not infer reviewed dimensions or certify factual claims from prose. The main assistant decides what remains applicable.',
   ...(context.checkpoint ? [`This input is a frozen historical checkpoint captured at ${context.checkpoint.observedAt}. You have not seen execution after it. Do not claim current applicability, a later repair, or later verification. IDs are only required if you request a machine action.`] : []),
   'Optional machine action only: return a raw JSON envelope with your entire multi-concern report in report and one action. Keep exactly the reviewId/checkpointId shown in this template for a non-none action; do not embed an action in prose expecting execution. Advice survives a rejected optional action, but that action is not executed.',
@@ -182,21 +196,27 @@ export const reviewPrompt = (context: ReviewContext, mode: 'supervise' | 'probe'
   'If new evidence is necessary, action may instead be {"kind":"location","request":{"paths":[],"terms":["literal"],"searchPaths":["observed relative path"]}}, {"kind":"probe","candidate":{"question":"one testable distinction","requirementQuote":"exact req substring","command":"one bounded project command","files":[],"oracle":"existing-test|spec-example|invariant|disagreement","oracleExplanation":"source or hypothesis","sourceIds":["provided source IDs"]}}, or {"kind":"recovery","observationIds":["provided failed tool IDs"],"question":"one unresolved question"}. No repair, demonstrated/fixed verdict or invented observation. No secrets, absolute/parent/symlink paths. At most six source files/two literal terms, three probe files (64KiB total). Generated expectations remain hypotheses.',
   'Probe files are new suggested scripts only: each entry is an object such as {"path":"__supervisor_probes/check.js","content":"console.log(0)"}, never a path string. Existing source paths are not files entries; cite their supplied source IDs and describe observed paths in the rationale or bounded command. Use files:[] for an existing workspace script or project check. Generated paths must be under __supervisor_probes/, end in .py/.js/.mjs/.cjs/.sh, have no parent traversal, and total at most three files/64KiB. Generated files and expectations are untrusted hypotheses, not written or authenticated by proposing them.',
   'Probe command must be one import-and-print line, one workspace script, or a project check, subject to the existing safety gate. Examples of command shapes: python3 -c "print(1)", node -e "console.log(1)", node __supervisor_probes/check.js. No network, secrets/environment access, installs, destructive commands, shell substitution or redirects. Static source lookup and grep pipelines are not probes; use location with observed relative paths and literal terms, or action:none with advice. existing-test requires the exact command in a supplied tool observation and files:[]; other oracle labels still require a sourced rationale and remain hypotheses. Do not invent a runnable test or weaken command restrictions to force an action.',
-  `Mode: ${mode}; allowed dimensions: ${availableDimensions(context).join(', ') || 'none'}. ${mode === 'probe' ? 'Select only probe or none.' : mode === 'recovery' ? 'Select only recovery or none.' : 'Choose one action at most; none is valid.'}`,
+  `Mode: ${mode}; ${context.opportunity ? `advisory dimensions: ${REVIEW_DIMENSIONS.join(', ')}; choose applicability from the supplied material, with no opportunity or insufficient input when necessary` : `allowed dimensions: ${availableDimensions(context).join(', ') || 'none'}`}. ${mode === 'probe' ? 'Select only probe or none.' : mode === 'recovery' ? 'Select only recovery or none.' : 'Choose one action at most; none is valid.'}`,
   JSON.stringify(context),
 ].join('\n\n')
 }
 
-// Only the debug representation omits the private session identity. Native
-// logging redacts that field inside encoded parts, invalidating the inner JSON.
-// Keep model input, persisted evidence and runtime Binding validation unchanged.
+// Diagnostic checksum detects host log edits; it is not an authentication hash.
+// Native redaction remains active. Never encode source text to bypass it.
+const diagnosticChecksum = (text: string) => {
+  let hash = 2166136261
+  for (let i = 0; i < text.length; i++) hash = Math.imul(hash ^ text.charCodeAt(i), 16777619)
+  return (hash >>> 0).toString(16)
+}
+
+// Only diagnostics omit session identity. All sizes use pre-log UTF-16 text;
+// the reader distinguishes complete-but-altered logs from missing parts.
 export const reviewInputLogs = (input: { kind: string; id: string; status: string; modelId: string | null; promptSignature: string; context: ReviewContext }): string[] => {
   const diagnostic = { ...input, representation: 'session-id-omitted', omittedBindingFields: ['sessionId'], context: { ...input.context, binding: { ...input.context.binding, sessionId: undefined } } }
   const serialized = JSON.stringify(diagnostic)
-  if (serialized.length <= 6000) return [`REVIEW_INPUT ${serialized}`]
   const parts = Math.ceil(serialized.length / 1000)
   return [
-    `REVIEW_INPUT ${JSON.stringify({ ...diagnostic, context: undefined, contextEncoding: 'json-parts', parts, characters: serialized.length })}`,
+    `REVIEW_INPUT ${JSON.stringify({ ...diagnostic, context: undefined, contextEncoding: 'json-parts', parts, characters: serialized.length, checksum: diagnosticChecksum(serialized) })}`,
     ...Array.from({ length: parts }, (_, index) => `REVIEW_INPUT_PART ${JSON.stringify({ id: input.id, promptSignature: input.promptSignature, index, total: parts, text: serialized.slice(index * 1000, (index + 1) * 1000) })}`),
   ]
 }

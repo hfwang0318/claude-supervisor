@@ -202,7 +202,12 @@ for (const unusable of ['failed', 'pending', 'running', 'truncated', 'duplicate'
 test('bounded review materials remain auditable with declared session omission even if the provider never answers', { options }, async ($, on) => {
   const { state, clock } = world(on); await start($); state.unanswered = true
   expect((await observeBatch($, clock)).additionalContext).toEqual(['host context'])
-  const inputs = state.logs.filter(l => l.includes('REVIEW_INPUT ')).map(l => JSON.parse(l.slice(l.indexOf('REVIEW_INPUT ') + 13)))
+  const inputs = state.logs.filter(l => l.includes('REVIEW_INPUT ')).map(l => {
+    const head = JSON.parse(l.slice(l.indexOf('REVIEW_INPUT ') + 13))
+    if (head.contextEncoding !== 'json-parts') return head
+    const parts = state.logs.filter(l => l.includes('REVIEW_INPUT_PART ')).map(l => JSON.parse(l.slice(l.indexOf('REVIEW_INPUT_PART ') + 18))).filter(p => p.id === head.id)
+    return JSON.parse(parts.sort((a, b) => a.index - b.index).map(p => p.text).join(''))
+  })
   expect(inputs.length).toBe(1)
   expect(inputs[0].context.sources[0].text).toBe('Preserve the API.')
   expect(inputs[0].context.sources.some((s: { text: string }) => s.text.includes('exports.old'))).toBe(true)
