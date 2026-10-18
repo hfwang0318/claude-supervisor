@@ -524,6 +524,8 @@ when another change must be withheld. Privacy and byte-budget omissions are
 explicit in both the model input and feedback. Excerpts remain bounded historical
 records, not a complete diff or a certificate of the current implementation. Under byte pressure, the latest excerpt for each file is considered before older repeated edits; retained excerpts are still presented in original chronological order. Incremental checkpoints identify the latest included tool from its public event record and retain a real tool-use ID only when supplied.
 
+Incremental historical advice can survive navigation inside a verified Git worktree. The host compares canonical worktree and Git-directory identities using a bounded, read-only system-Git lookup; path prefixes alone are insufficient. Unknown identities, nested repositories and other worktrees keep the cancellation boundary. Supplemental actions still require the original execution directory and source checks. The existing and legacy schedules keep their prior behavior.
+
 
 An exact Go modfile-filename rejection for a single check is retained as a failed command attempt, not evidence that project code failed. Genuine, mixed or ambiguous failures keep their existing check status; this does not certify a different scope as passed.
 

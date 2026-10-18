@@ -121,6 +121,7 @@ type Runtime = {
   jobNumber: number; modelDisabled: boolean; cfg: Config; stateUsable: boolean; journal: Promise<unknown>; recordEnd: number; workerModel: string | null; factsAttempted: boolean
   reviewSignatures: Set<string>; reviewAttempts: number; reviewStopSent: boolean; reviewRecoveryUsed: boolean; reviewSkipKeys: Set<string>
   reviewPending?: { binding: Binding; token: number }; reviewReady?: PreparedReview; reviewDraining?: { binding: Binding }; reviewInputPending?: string; reviewSequence: number; mainActive: boolean; reviewCwd: string
+  reviewWorkspace?: { root: string; gitDirectory: string } | null; reviewProjectPending?: Promise<void>
   incremental: IncrementalReview<ReviewFrame>; firstWrite: boolean; publicStep?: { key: string; text: string; binding: Binding; truncated?: boolean; capturedText?: string };
   reviewControl?: { path: string; revision: number; busy: boolean; timer?: ReturnType<EngineInterface['clock']['every']> }
 }
@@ -379,6 +380,7 @@ type ReviewCapture = { binding: Binding; asked: string; sequence: number; captur
 type ReviewFrame = { capture: ReviewCapture; list: Rows; final: boolean; answer: string }
 const reviewFrame = async ($: EngineInterface, list: Rows, final = false, answer = '', excludeToolId?: string): Promise<ReviewFrame> => {
   const s = await runtimeOf($)
+  await refreshReviewProject($, s)
   const capture: ReviewCapture = { binding: { ...s.coordinator.binding }, asked: s.asked, sequence: s.reviewSequence, capturedAt: await $.clock.now(), cwd: s.reviewCwd }
   if (s.cfg.reviewSchedule === 'incremental') {
     const completedRows = list.map(row => ({ ...row, toolUses: row.toolUses?.filter(use => (excludeToolId === undefined || use.tool_use_id !== excludeToolId) && (use.result !== undefined || use.text !== undefined || use.isError === true)) }))
@@ -455,12 +457,11 @@ const engineeringReview = async ($: EngineInterface, list: Rows, final = false, 
   let deadlineMs = Infinity
   const invalidReason = async () => {
     if (sessions.get(binding.sessionId) !== s) return 'cancelled'
-    await selectionOf($)
+    await refreshReviewProject($, s)
     const enabled = await isOn($)
     if (!enabled) return 'disabled'
     if (job.signal.aborted) return job.signal.reason === 'cancelled' || job.signal.reason === 'disabled' ? job.signal.reason : 'stale-binding'
     if (!sameTask(binding, s.coordinator.binding)) return 'stale-binding'
-    if (await $.session.cwd() !== captured.cwd) { s.coordinator.invalidate({ ...s.coordinator.binding, generationId: `project-${++s.jobNumber}` }, { preserveBudget: true, now: await $.clock.now() }); return 'project-changed' }
     return null
   }
   const current = async () => await invalidReason() === null
@@ -482,7 +483,7 @@ const engineeringReview = async ($: EngineInterface, list: Rows, final = false, 
       if (s.reviewRecoveryUsed) return null
       s.reviewRecoveryUsed = true
     }
-    outcome = await runHistoricalReviewFlow(context, decision, { host: hostOf($, job.signal), executionMode: s.cfg.executionMode, deadlineMs, excludeModelWait: true, current, taskCurrent: current, sourceCurrent: async () => s.coordinator.remainingTime(await $.clock.now()) > 0 && sameBinding(binding, s.coordinator.binding), ask: async prompt => {
+    outcome = await runHistoricalReviewFlow(context, decision, { host: hostOf($, job.signal), executionMode: s.cfg.executionMode, deadlineMs, excludeModelWait: true, current, taskCurrent: current, sourceCurrent: async () => s.coordinator.remainingTime(await $.clock.now()) > 0 && sameBinding(binding, s.coordinator.binding) && await $.session.cwd() === captured.cwd, ask: async prompt => {
       if (incremental && !final && await semanticCapacity($, s) <= 1) return null
       const second = await ask($, prompt, deadlineMs - await $.clock.now(), job.signal)
       return second?.isAnswered ? second.text : null
@@ -547,11 +548,27 @@ const pollReviewControl = async ($: EngineInterface, s: Runtime) => {
 
 const refreshReviewProject = async ($: EngineInterface, s: Runtime) => {
   await selectionOf($)
-  const cwd = await $.session.cwd()
-  if (cwd !== s.reviewCwd) {
-    s.coordinator.invalidate({ ...s.coordinator.binding, generationId: `project-${++s.jobNumber}` }, { preserveBudget: true, now: await $.clock.now() })
-    s.reviewCwd = cwd
-  }
+  // Concurrent callbacks share the same lookup. If cwd changes while it is
+  // pending, the post-lookup cwd check invalidates conservatively.
+  if (s.reviewProjectPending) return s.reviewProjectPending
+  const pending = (async () => {
+    const cwd = await $.session.cwd(), binding = { ...s.coordinator.binding }
+    let workspace = s.reviewWorkspace
+    if (s.cfg.reviewSchedule === 'incremental' && (cwd !== s.reviewCwd || workspace === undefined)) {
+      const deadlineMs = await $.clock.now() + 2500
+      const value = await service($, { action: 'workspace-identity', root: cwd, deadlineMs }, deadlineMs).catch(() => null) as { root?: unknown; gitDirectory?: unknown } | null
+      const path = (v: unknown): v is string => typeof v === 'string' && v.startsWith('/') && v.length <= 4096 && !/[\0\r\n]/.test(v) && redact(v) === v
+      workspace = value && path(value.root) && path(value.gitDirectory) ? { root: value.root, gitDirectory: value.gitDirectory } : null
+    }
+    if (!sameTask(binding, s.coordinator.binding)) return
+    const latestCwd = await $.session.cwd()
+    const sameWorkspace = s.cfg.reviewSchedule === 'incremental' && s.reviewWorkspace && workspace && s.reviewWorkspace.root === workspace.root && s.reviewWorkspace.gitDirectory === workspace.gitDirectory
+    if (latestCwd !== cwd || cwd !== s.reviewCwd && !sameWorkspace) s.coordinator.invalidate({ ...s.coordinator.binding, generationId: `project-${++s.jobNumber}` }, { preserveBudget: true, now: await $.clock.now() })
+    s.reviewCwd = latestCwd
+    s.reviewWorkspace = latestCwd === cwd ? workspace : undefined
+  })()
+  s.reviewProjectPending = pending
+  try { await pending } finally { if (s.reviewProjectPending === pending) s.reviewProjectPending = undefined }
   if (s.reviewDraining && !sameTask(s.reviewDraining.binding, s.coordinator.binding)) s.reviewDraining = undefined
   if (s.reviewPending && !sameTask(s.reviewPending.binding, s.coordinator.binding)) s.reviewPending = undefined
   if (s.reviewReady && !sameTask(s.reviewReady.binding, s.coordinator.binding)) s.reviewReady = undefined
@@ -1143,7 +1160,7 @@ export const register: Register = (on, options) => {
         await say($, 'REVIEW_CONTROL {"revision":null,"status":"unavailable"}')
       }
     }
-    s.reviewPending = undefined; s.reviewReady = undefined; s.mainActive = true; s.reviewCwd = await $.session.cwd()
+    s.reviewPending = undefined; s.reviewReady = undefined; s.mainActive = true; s.reviewCwd = await $.session.cwd(); s.reviewWorkspace = undefined; s.reviewProjectPending = undefined
     s.factsAttempted = false
     s.reviewSignatures.clear(); s.reviewAttempts = 0; s.reviewStopSent = false; s.reviewRecoveryUsed = false; s.reviewSkipKeys.clear()
     s.isInteractive = e.isInteractive !== false

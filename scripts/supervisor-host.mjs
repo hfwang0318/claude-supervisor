@@ -15,6 +15,23 @@ const ignored = name => name === '.git' || name === '.superpowers'
 const inside = (root, path) => path === root || (!isAbsolute(relative(root, path)) && !relative(root, path).startsWith('..'))
 const alive = deadline => { if (!Number.isFinite(deadline) || Date.now() >= deadline) throw Error('deadline exhausted') }
 
+// Metadata only: canonical worktree and git-directory identity. No shell,
+// candidate command, repository config mutation or prefix-based identity guess.
+export const workspaceIdentity = (cwd, deadlineMs) => {
+  try {
+    alive(deadlineMs)
+    if (typeof cwd !== 'string' || !isAbsolute(cwd) || cwd.length > 4096 || /[\0\r\n]/.test(cwd)) return null
+    cwd = realpathSync(cwd)
+    const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('GIT_')))
+    const query = flag => execFileSync('/usr/bin/git', ['-C', cwd, '-c', 'core.fsmonitor=false', 'rev-parse', flag], { encoding: 'utf8', timeout: Math.max(1, Math.min(1000, deadlineMs - Date.now())), maxBuffer: 8192, env: { ...env, GIT_OPTIONAL_LOCKS: '0', GIT_TERMINAL_PROMPT: '0' }, stdio: ['ignore', 'pipe', 'pipe'] }).trim()
+    const root = realpathSync(query('--show-toplevel'))
+    const gitDirectory = realpathSync(query('--absolute-git-dir'))
+    alive(deadlineMs)
+    if (root === '/' || !inside(root, cwd) || /[\0\r\n]/.test(root + gitDirectory)) return null
+    return { root, gitDirectory }
+  } catch { return null }
+}
+
 export const manifest = (root, deadlineMs) => {
   alive(deadlineMs)
   root = realpathSync(root)
@@ -170,6 +187,7 @@ export const execute = async (snapshot, command, files, deadlineMs) => {
 }
 
 export const handle = async request => {
+  if (request.action === 'workspace-identity') return workspaceIdentity(request.root, request.deadlineMs)
   if (request.action === 'inspect') return inspectFacts(request.root, request.request, request.deadlineMs, { filesOnly: request.filesOnly === true })
   if (request.action === 'validate-facts') return validateFacts(request.root, request.view, request.deadlineMs)
   if (request.action === 'manifest') return manifest(request.root, request.deadlineMs)

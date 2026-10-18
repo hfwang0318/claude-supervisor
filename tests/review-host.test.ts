@@ -4,7 +4,7 @@ const options = { review_schedule: 'legacy', assistance_mode: 'supervise', execu
 const reply = () => JSON.stringify({ reviewed: ['architecture'], judgment: { dimension: 'architecture', question: 'Should the public interface be replaced?', requirementQuote: 'Preserve the API.', sourceIds: ['req', 'plan-1'], reason: 'The proposed replacement removes the existing entry point.', impact: 'Caller compatibility.', recommendation: 'adjust', uncertainty: 'The complete caller set is unknown.' }, action: { kind: 'none' } })
 const world = (on: Parameters<TestBody>[1]) => {
   mock.store(on); const clock = mock.clock(on, { now: 100000 })
-  const state = { factsCount: 1, failCwd: false, hostVersion: '2.1.295', versionWait: undefined as Promise<void> | undefined, outputTokens: 20, modelRequests: [] as { maxTokens?: number; effort?: string }[], throwFollowUp: false, dropFollowUp: false, controlPath: '', control: JSON.stringify({ version: 1, revision: 0 }), calls: 0, unanswered: false, unansweredReason: 'aborted', logLimit: Infinity, nextPromptWait: undefined as Promise<void> | undefined, cwd: '/p', submitted: [] as string[], echo: true, timeouts: [] as number[], prompts: [] as string[], logs: [] as string[], processActions: [] as string[], validateDelay: 0, wait: undefined as Promise<void> | undefined, outputs: [reply(), reply()], rows: [{ role: 'assistant', text: 'Plan: replace the public method.', toolUses: [{ tool: 'Read', input: { file_path: '/p/api.js' }, text: 'exports.old = () => 1' }] }] }
+  const state = { workspaceWait: undefined as Promise<void> | undefined, workspaceRoot: null as string | null, factsCount: 1, failCwd: false, hostVersion: '2.1.295', versionWait: undefined as Promise<void> | undefined, outputTokens: 20, modelRequests: [] as { maxTokens?: number; effort?: string }[], throwFollowUp: false, dropFollowUp: false, controlPath: '', control: JSON.stringify({ version: 1, revision: 0 }), calls: 0, unanswered: false, unansweredReason: 'aborted', logLimit: Infinity, nextPromptWait: undefined as Promise<void> | undefined, cwd: '/p', submitted: [] as string[], echo: true, timeouts: [] as number[], prompts: [] as string[], logs: [] as string[], processActions: [] as string[], validateDelay: 0, wait: undefined as Promise<void> | undefined, outputs: [reply(), reply()], rows: [{ role: 'assistant', text: 'Plan: replace the public method.', toolUses: [{ tool: 'Read', input: { file_path: '/p/api.js' }, text: 'exports.old = () => 1' }] }] }
   on('session.version', async () => { if (state.versionWait) await state.versionWait; return { value: { version: state.hostVersion } } })
   on('session.id', () => ({ value: 'review-session' })); on('session.model', () => ({ value: 'fixture' })); on('session.cwd', () => { if (state.failCwd) throw Error('workspace metadata unavailable'); return { value: state.cwd } }); on('session.messages', () => ({ value: state.rows }) as never)
   on('env.get', (_$, e) => ({ value: e.name === 'DEEPSEEK_SUPERVISOR_CONTROL_FILE' ? state.controlPath : 'on' })); on('fs.read', () => ({ value: state.control })); on('ui.status', () => ({ value: undefined })); on('ui.log', (_$, e) => { state.logs.push(e.text.slice(0, state.logLimit)); return { value: undefined } })
@@ -14,8 +14,9 @@ const world = (on: Parameters<TestBody>[1]) => {
   on('model.complete', async (_$, e) => { state.calls++; state.modelRequests.push({ maxTokens: e.maxTokens, effort: e.effort }); state.timeouts.push(e.timeoutMs ?? 0); state.prompts.push(e.prompt); if (state.wait) await state.wait; let text = state.outputs.shift() ?? 'null'; try { const context = JSON.parse(e.prompt.split('\n\n').at(-1)!); if (state.echo && context.checkpoint) text = JSON.stringify({ ...JSON.parse(text), reviewId: context.checkpoint.reviewId, checkpointId: context.checkpoint.checkpointId }) } catch {} return { value: state.unanswered ? { isAnswered: false, reason: state.unansweredReason, ...(state.unansweredReason === 'api-error' ? { status: 429, error: 'rate_limit' } : {}), usage: { input_tokens: 0, output_tokens: state.outputTokens } } : { isAnswered: true, text, usage: { input_tokens: 10, output_tokens: state.outputTokens } } } as never })
   on('process.run', async (_$, e) => {
     const request = JSON.parse(e.init?.stdin ?? '{}'); state.processActions.push(request.action)
+    if (request.action === 'workspace-identity' && state.workspaceWait) await state.workspaceWait
     if (request.action === 'validate-facts' && state.validateDelay) await clock.advance(state.validateDelay)
-    const value = request.action === 'inspect' ? { facts: Array.from({ length: state.factsCount }, (_, index) => ({ id: `f${index + 1}`, path: 'api.js', startLine: 1, quote: 'exports.old = () => 1', fileHash: 'h' })), files: [{ path: 'api.js', fileHash: 'h' }], manifestHash: 'm', incomplete: false } : request.action === 'validate-facts' ? true : null
+    const value = request.action === 'workspace-identity' ? state.workspaceRoot ? { root: state.workspaceRoot, gitDirectory: state.workspaceRoot + '/.git' } : null : request.action === 'inspect' ? { facts: Array.from({ length: state.factsCount }, (_, index) => ({ id: `f${index + 1}`, path: 'api.js', startLine: 1, quote: 'exports.old = () => 1', fileHash: 'h' })), files: [{ path: 'api.js', fileHash: 'h' }], manifestHash: 'm', incomplete: false } : request.action === 'validate-facts' ? true : null
     return { value: { exitCode: 0, stdout: JSON.stringify(value), stderr: '', isStdoutTruncated: false, isStderrTruncated: false } } as never
   })
   return { state, clock }
@@ -828,4 +829,68 @@ test('incremental checkpoint identifies the latest actually included tool despit
   const context = JSON.parse(state.prompts[0]!.split('\n\n').at(-1)!)
   expect(context.checkpoint.lastTool?.toolUseId).toBe('check-latest')
   expect(context.checkpoint.lastTool?.tool).toBe('Bash')
+})
+
+test('pending historical advice survives verified navigation within one worktree without a new semantic call', { options: { ...incrementalOptions, review_interval: '1' } }, async ($, on) => {
+  const { state, clock } = world(on)
+  state.rows = []; state.outputs = ['Compare the current implementation to the exact requirement; later applicability remains unknown.']
+  state.workspaceRoot = '/p'
+  on('turn.step', async function* (_$, e) { return { turnId: e.turnId, index: e.index, answer: 'An implementation hypothesis with a shared timer.', toolUses: [], stopReason: 'tool_use', usage: null } })
+  await start($)
+  let release = () => {}; state.wait = new Promise<void>(resolve => { release = resolve })
+  for await (const chunk of $.turn.step({ turnId: 't', index: 0, model: 'fixture', messageCount: 1 })) {}
+  await flushBackground(clock); expect(state.calls).toBe(1)
+  state.cwd = '/p/packages/mail'
+  await batch($); release(); await flushBackground(clock)
+  const delivered = await observeBatch($, clock)
+  expect(delivered.additionalContext?.join('\n')).toContain('Compare the current implementation to the exact requirement')
+  expect(state.calls).toBe(1)
+})
+
+for (const destination of [null, '/other', '/p/nested']) test(`navigation with ${destination ?? 'unknown'} workspace identity cancels pending advice`, { options: { ...incrementalOptions, review_interval: '1' } }, async ($, on) => {
+  const { state, clock } = world(on); state.rows = []; state.workspaceRoot = '/p'; state.outputs = ['Old workspace advice must not be delivered.']
+  on('turn.step', async function* (_$, e) { return { turnId: e.turnId, index: e.index, answer: 'A technical hypothesis.', toolUses: [], stopReason: 'tool_use', usage: null } })
+  await start($)
+  let release = () => {}; state.wait = new Promise<void>(resolve => { release = resolve })
+  for await (const chunk of $.turn.step({ turnId: 't', index: 0, model: 'fixture', messageCount: 1 })) {}
+  await flushBackground(clock); expect(state.calls).toBe(1)
+  state.cwd = destination ? destination + '/package' : '/unknown'; state.workspaceRoot = destination
+  await batch($); release(); await flushBackground(clock)
+  expect((await observeBatch($, clock)).additionalContext).toEqual(['host context'])
+  expect(state.logs.some(line => line.includes('REVIEW_DELIVERY') && line.includes('context-returned'))).toBe(false)
+})
+
+test('same-worktree navigation retains prose but cannot inspect old relative source requests in the new cwd', { options: { ...incrementalOptions, review_interval: '1' } }, async ($, on) => {
+  const { state, clock } = world(on); state.rows = []; state.workspaceRoot = '/p'
+  state.outputs = [JSON.stringify({ report: 'Preserve the public interface; applicability remains uncertain.', action: { kind: 'location', request: { paths: ['api.js'], terms: [] } } })]
+  on('turn.step', async function* (_$, e) { return { turnId: e.turnId, index: e.index, answer: 'A technical hypothesis.', toolUses: [], stopReason: 'tool_use', usage: null } })
+  await start($)
+  let release = () => {}; state.wait = new Promise<void>(resolve => { release = resolve })
+  for await (const chunk of $.turn.step({ turnId: 't', index: 0, model: 'fixture', messageCount: 1 })) {}
+  await flushBackground(clock); expect(state.calls).toBe(1)
+  state.cwd = '/p/subdirectory'; await batch($); release(); await flushBackground(clock)
+  const note = (await observeBatch($, clock)).additionalContext?.join('\n')
+  expect(note).toContain('Preserve the public interface')
+  expect(note).toContain('Historical advice only')
+  expect(state.processActions.filter(action => action !== 'workspace-identity')).toEqual([])
+  expect(state.calls).toBe(1)
+})
+
+
+test('cwd changing during a shared identity lookup cancels old advice instead of pairing proof with a later directory', { options: { ...incrementalOptions, review_interval: '1' } }, async ($, on) => {
+  const { state, clock } = world(on); state.rows = []; state.workspaceRoot = '/p'; state.outputs = ['Old advice must not cross an unverified navigation race.']
+  on('turn.step', async function* (_$, e) { return { turnId: e.turnId, index: e.index, answer: 'A technical hypothesis.', toolUses: [], stopReason: 'tool_use', usage: null } })
+  await start($)
+  let releaseModel = () => {}; state.wait = new Promise<void>(resolve => { releaseModel = resolve })
+  for await (const chunk of $.turn.step({ turnId: 't', index: 0, model: 'fixture', messageCount: 1 })) {}
+  await flushBackground(clock); expect(state.calls).toBe(1)
+  let releaseIdentity = () => {}; state.workspaceWait = new Promise<void>(resolve => { releaseIdentity = resolve })
+  state.cwd = '/p/package'
+  const a = batch($), b = batch($)
+  for (let i = 0; i < 10 && state.processActions.filter(action => action === 'workspace-identity').length < 2; i++) await clock.advance(10)
+  expect(state.processActions.filter(action => action === 'workspace-identity').length).toBe(2)
+  state.cwd = '/unverified'; state.workspaceRoot = null
+  releaseIdentity(); await Promise.all([a, b]); releaseModel(); await flushBackground(clock)
+  expect((await observeBatch($, clock)).additionalContext).toEqual(['host context'])
+  expect(state.logs.some(line => line.includes('REVIEW_DELIVERY') && line.includes('context-returned'))).toBe(false)
 })

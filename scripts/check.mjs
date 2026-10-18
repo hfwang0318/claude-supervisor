@@ -33,6 +33,7 @@ if (!flags.includes('--pure')) {
   run('real read-only facts', process.execPath, ['scripts/selftest-assist.mjs'])
   run('real scoped facts', process.execPath, ['scripts/selftest-scoped-facts.mjs'])
   run('real workspace/process isolation', process.execPath, ['scripts/selftest-workspace.mjs'])
+  run('real worktree identity boundaries', process.execPath, ['scripts/selftest-workspace-identity.mjs'])
 }
 if (!flags.includes('--host')) {
   run('recorded reviewer regression', process.execPath, ['eval/replay-review.mjs'])
