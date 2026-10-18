@@ -1,6 +1,6 @@
 {
   "name": "deepseek-supervisor",
-  "version": "0.8.2",
+  "version": "0.9.0",
   "description": "Evidence-based supervision for any side model: defaults to the current worker and validates observations without assuming superior model capability.",
   "author": {
     "name": "LACAN-1"
@@ -70,6 +70,6 @@
     "deepseek",
     "review"
   ],
-  "homepage": "https://github.com/LACAN-1/deepseek-supervisor",
-  "repository": "https://github.com/LACAN-1/deepseek-supervisor"
+  "homepage": "https://github.com/hfwang0318/claude-supervisor",
+  "repository": "https://github.com/hfwang0318/claude-supervisor"
 }

@@ -47,7 +47,7 @@ Claude Code 自带一个旁路代理 "You should know"，看着 Claude 干活，
 
 历史语义调度取消模型等待时限。本仓库 headless 驱动通过私有的仅取消通知，在转交新输入／off／interrupt 前中止旧审查；免费原生验证已覆盖晚到35秒反馈和取消。
 不修改 Claude Code。直接原生 SDK 客户端若绕过本驱动，仍可能延迟输入；交互端取消尚未实测。
-整体验收审查的三项重要问题已修复，253宿主测试及全部普通检查通过；未自动启动新付费测试，详见[接入与限制报告](docs/evals/2026-10-16-historical-review.md)。
+整体验收审查的三项重要问题已修复，352宿主测试及全部普通检查通过；未自动启动新付费测试，详见[接入与限制报告](docs/evals/2026-10-16-historical-review.md)。
 
 `verifier_model` 留空时，使用宿主当前的主模型；也可以指定另一个模型 ID 或宿主别名。
 不根据模型名称判断能力，不要求主模型 ID 匹配或提供强弱关系证明。
@@ -289,22 +289,32 @@ DSS_CMD=claude-deepseek node eval/run.mjs --suite late --reps 3
 
 ## 需要什么
 
-- 支持插件函数钩子的 Claude Code（有 `claude plugin validate` 和 `claude plugin test` 命令）。在 **2.1.290** 上开发；0.6.0 在 **2.1.293** 上测试，0.7.0 和 0.8.0 在 **2.1.295** 上测试。需要 `bash` 和 `cp`。验证者要在副本里跑命令，需要 macOS（`sandbox-exec`）。
+- 支持插件函数钩子的 Claude Code（有 `claude plugin validate` 和 `claude plugin test` 命令）。在 **2.1.290** 上开发；0.6.0 在 **2.1.293** 上测试，0.7.0–0.9.0 在 **2.1.295** 上测试。需要 `bash` 和 `cp`。验证者要在副本里跑命令，需要 macOS（`sandbox-exec`）。
 
 ## 安装
+
+这个 fork 发布在 **hfwang0318/claude-supervisor**；上游项目是 [LACAN-1/deepseek-supervisor](https://github.com/LACAN-1/deepseek-supervisor)。
 
 在终端里运行：
 
 ```bash
-claude plugin marketplace add LACAN-1/deepseek-supervisor
+claude plugin marketplace add hfwang0318/claude-supervisor
 claude plugin install deepseek-supervisor@deepseek-supervisor
 ```
 
 以后更新用 `claude plugin update deepseek-supervisor@deepseek-supervisor`。
 
-想装旧版，按标签装（`v0.4.0`：像 "You should know" 那样每 6 步审一遍对话记录；或 `v0.8.0`）。已经添加过这个 marketplace 的，先用 `claude plugin marketplace remove deepseek-supervisor` 移除。
+想固定这个版本：
 
 ```bash
+claude plugin marketplace add "hfwang0318/claude-supervisor#v0.9.0"
+claude plugin install deepseek-supervisor@deepseek-supervisor
+```
+
+想装上游旧版，按标签装（`v0.4.0`：像 "You should know" 那样每 6 步审一遍对话记录；或 `v0.8.0`）。如果已经添加过同名 marketplace，先移除：
+
+```bash
+claude plugin marketplace remove deepseek-supervisor
 claude plugin marketplace add "LACAN-1/deepseek-supervisor#v0.4.0"
 claude plugin install deepseek-supervisor@deepseek-supervisor
 ```
@@ -371,7 +381,7 @@ Claude Code 第一次加载插件时，会把类型声明写进 `.claude-plugin/
 | `hooks/prompt.ts` | 结论检测、验证者的提示词和对它答复的解析、什么命令能在哪里跑、脱敏、给模型的提示 |
 | `hooks/band.tsx` | 提示框上方那一栏 |
 | `types/index.d.ts` | 条目的结构和插件状态的约定 |
-| `tests/*.test.ts` | 121 个宿主测试（当前分支），跑在 Claude Code 的插件测试工具上；标着 `live:` 的，是真实运行里出现过的误报 |
+| `tests/*.test.ts` | 352 个宿主测试（当前分支），跑在 Claude Code 的插件测试工具上；标着 `live:` 的，是真实运行里出现过的误报 |
 | `eval/` | 同一批任务开插件和不开插件各跑一遍，由代码打分；见 [eval/README.md](eval/README.md) |
 
 ## 许可证
@@ -380,7 +390,7 @@ MIT
 
 ## 工程验证
 
-`npm ci --ignore-scripts` 后运行 `node scripts/check.mjs`，依次验证宿主清单、types、TypeScript、无模型测试、真实进程隔离和八组评分器自检。缺少 types 时本地 `/deepseek-supervisor issues` 命令负责生成，不提交模型提示。公共 CI 的 `--pure` 是部分检查；macOS/Claude Code 自托管完整检查状态单列。发布需完整支持环境结果。
+`npm ci --ignore-scripts` 后运行 `node scripts/check.mjs`，依次验证宿主清单、types、TypeScript、无模型测试、真实进程隔离、十组评分器自检和十组 SWE Pro 自检。缺少 types 时本地 `/deepseek-supervisor issues` 命令负责生成，不提交模型提示。公共 CI 的 `--pure` 是部分检查；macOS/Claude Code 自托管完整检查状态单列。发布需完整支持环境结果。
 
 [当前实施结果与未通过门槛](docs/evals/2026-10-11-p0-implementation.md)。尚未完成付费 S=M/S<M pilot，未声明质量收益或 P0/E0 发布验收通过。
 

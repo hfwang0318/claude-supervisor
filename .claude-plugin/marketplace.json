@@ -1,7 +1,7 @@
 {
   "name": "deepseek-supervisor",
   "owner": {
-    "name": "LACAN-1"
+    "name": "hfwang0318"
   },
   "metadata": {
     "description": "deepseek-supervisor: a supervisor for Claude Code on a weaker third-party model, from evidence: the session's own record, and a second model running things"
