@@ -580,6 +580,40 @@ export const settledBy = (ev: Evidence, item: { rule?: Kind; quote: string; prob
  */
 const changeHunk = (c: Evidence['changes'][number]) => [`--- ${c.path}`, ...clip(c.old, 1200).split('\n').filter(l => l !== '').map(l => `- ${l}`), ...clip(c.new, 1800).split('\n').map(l => `+ ${l}`)].join('\n')
 
+// Advisory excerpts describe individual recorded edits, never the current file.
+// Bound diff work independently from the output budget; oversized records keep
+// the original prefix fallback. Delta lines stay verbatim; gaps stay explicit.
+const changeDelta = (c: Change): { text: string; contextOmitted: boolean } | null => {
+  if (c.old.length + c.new.length > 65536) return null
+  const before = c.old === '' ? [] : c.old.split('\n'), after = c.new === '' ? [] : c.new.split('\n')
+  const width = after.length + 1, cells = (before.length + 1) * width
+  if (cells > 65536) return null
+  const lengths = new Uint32Array(cells)
+  for (let i = before.length - 1; i >= 0; i--) for (let j = after.length - 1; j >= 0; j--) {
+    lengths[i * width + j] = before[i] === after[j] ? 1 + lengths[(i + 1) * width + j + 1]! : Math.max(lengths[(i + 1) * width + j]!, lengths[i * width + j + 1]!)
+  }
+  const lines: string[] = []
+  let i = 0, j = 0
+  while (i < before.length || j < after.length) {
+    if (i < before.length && j < after.length && before[i] === after[j]) { lines.push(`  ${before[i++]}`); j++ }
+    else if (j < after.length && (i === before.length || lengths[i * width + j + 1]! > lengths[(i + 1) * width + j]!)) lines.push(`+ ${after[j++]}`)
+    else lines.push(`- ${before[i++]}`)
+  }
+  const keep = new Set<number>()
+  for (let k = 0; k < lines.length; k++) if (!lines[k]!.startsWith('  ')) {
+    for (let n = Math.max(0, k - 2); n <= Math.min(lines.length - 1, k + 2); n++) keep.add(n)
+  }
+  if (!keep.size) return { text: changeHunk(c), contextOmitted: false }
+  const output = [`--- ${c.path} [recorded change excerpts; gaps omit unchanged lines]`]
+  let last = -1, contextOmitted = false
+  for (const at of [...keep].sort((a, b) => a - b)) {
+    if (at > last + 1) { output.push(`[… ${at - last - 1} unchanged record lines omitted]`); contextOmitted = true }
+    output.push(lines[at]!); last = at
+  }
+  if (last < lines.length - 1) { output.push(`[… ${lines.length - last - 1} unchanged record lines omitted]`); contextOmitted = true }
+  return { text: output.join('\n'), contextOmitted }
+}
+
 export const changesOf = (ev: Evidence, limit = 9000) => {
   const since = ev.prompts.at(-1)?.at ?? 0
   const hunks = ev.changes
@@ -604,18 +638,29 @@ export const reviewChangesOf = (ev: Evidence, limit = 24576) => {
   const since = ev.prompts.at(-1)?.at ?? 0
   const omitted = new Set<string>()
   const changes = ev.changes.filter(c => c.at >= since && isCode(c.path))
-  const latest = new Map<string, number>()
-  changes.forEach((change, index) => latest.set(change.path, index))
-  // Prefer the latest excerpt per file before older repeated edits. Selection
-  // priority is not presentation order: retained original hunks stay chronological.
-  const order = changes.map((change, index) => ({ change, index })).sort((a, b) => Number(latest.get(b.change.path) === b.index) - Number(latest.get(a.change.path) === a.index) || b.index - a.index)
+  const depths = new Map<string, number>(), order: { change: Change; index: number; depth: number }[] = []
+  for (let index = changes.length - 1; index >= 0; index--) {
+    const change = changes[index]!, depth = depths.get(change.path) ?? 0
+    order.push({ change, index, depth }); depths.set(change.path, depth + 1)
+  }
+  // Latest edits go first, then each file gets another turn before repeated
+  // revisions of one file consume the remainder. Display remains chronological.
+  order.sort((a, b) => a.depth - b.depth || b.index - a.index)
   const selected: { index: number; hunk: string }[] = []
   let bytes = 0
   for (const { change, index } of order) {
-    const hunk = changeHunk(change)
-    if (redact(hunk) !== hunk) { omitted.add('privacy-affected-changes'); continue }
+    const prefix = changeHunk(change)
+    // Do not revive an already withheld record by trimming private context.
+    if (redact(prefix) !== prefix) { omitted.add('privacy-affected-changes'); continue }
+    const delta = changeDelta(change)
+    let hunk = delta?.text ?? prefix
+    if (!delta) omitted.add('change-record-diff-limit')
+    if (redact(hunk) !== hunk) { omitted.add('privacy-affected-changes'); hunk = prefix }
+    if (bytes + bytesOf(hunk) + (selected.length ? 1 : 0) > limit) { omitted.add('change-record-budget'); hunk = prefix }
     const size = bytesOf(hunk) + (selected.length ? 1 : 0)
     if (bytes + size > limit) { omitted.add('change-record-budget'); continue }
+    if (hunk === prefix && (change.old.length > 1200 || change.new.length > 1800)) omitted.add('change-record-prefix-limit')
+    if (delta?.contextOmitted && hunk === delta.text) omitted.add('change-record-context')
     selected.push({ index, hunk }); bytes += size
   }
   return { text: selected.sort((a, b) => a.index - b.index).map(item => item.hunk).join('\n'), omitted: [...omitted] }

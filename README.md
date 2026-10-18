@@ -208,7 +208,13 @@ next safe context or the existing bounded completion followup.
 
 Incremental context prioritizes bounded actual change excerpts, preserves up to
 8 prior check observations within an 8KiB anchor budget, and deduplicates an
-identical final narrative/answer. The complete selected record window still fits
+identical final narrative/answer. Advisory change material uses bounded recorded
+line differences with explicit gaps instead of repeatedly showing file prefixes.
+Latest edits are selected first, then older edits take turns across files; retained
+records remain chronological. A record already withheld for privacy stays withheld.
+Work, privacy or remaining byte limits may require the original clipped prefix,
+with the limitation declared. These are historical excerpts, not a current full diff.
+The complete selected record window still fits
 24KiB and the material context fits 48KiB before host checkpoint metadata.
 Anchors preserve original commands/results;
 they do not prove a repair, equivalence between check scopes or current validity.

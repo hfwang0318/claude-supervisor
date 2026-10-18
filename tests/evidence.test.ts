@@ -578,3 +578,47 @@ test('review change budget preserves recent repairs across files before repeated
   expect(material.omitted).toContain('change-record-budget')
   expect(changesOf(evidenceOf([ask, say('', ...uses)]))).toContain('earlier-0-')
 })
+
+test('advisory change excerpts expose late edits instead of repeating an unchanged file prefix', () => {
+  const prefix = Array.from({ length: 90 }, (_, i) => `// unchanged setup line ${i}`).join('\n') + '\n'
+  const old = prefix + 'export function refresh() {\n  return fetchNow()\n}\n'
+  const next = prefix + 'export function refresh() {\n  if (pendingJobs > 0) return hold()\n  return fetchNow()\n}\n'
+  const record = evidenceOf([ask, say('', { tool: 'Edit', input: { file_path: '/p/refresh.ts', old_string: old, new_string: next }, text: 'ok' })])
+  const material = reviewChangesOf(record)
+  expect(material.text).toContain('+   if (pendingJobs > 0) return hold()')
+  expect(material.text).not.toContain('unchanged setup line 40')
+  expect(material.text.length < 1200).toBe(true)
+  expect(changesOf(record)).not.toContain('pendingJobs > 0')
+})
+
+test('older change selection gives another file a turn before repeated revisions exhaust the budget', () => {
+  const uses: Use[] = [
+    { tool: 'Edit', input: { file_path: '/p/refresh.ts', old_string: '', new_string: 'function initialMechanism() { return queueLength }\n' + 'a'.repeat(1000) }, text: 'ok' },
+    ...Array.from({ length: 6 }, (_, i) => ({ tool: 'Edit', input: { file_path: '/p/view.ts', old_string: `renderOld${i}()`, new_string: `renderRevision${i}()\n` + 'b'.repeat(900) }, text: 'ok' })),
+    { tool: 'Edit', input: { file_path: '/p/view.ts', old_string: 'renderOld()', new_string: 'renderCorrected()' }, text: 'ok' },
+    { tool: 'Edit', input: { file_path: '/p/refresh.ts', old_string: 'queueLength', new_string: 'activeCount' }, text: 'ok' },
+  ]
+  const material = reviewChangesOf(evidenceOf([ask, say('', ...uses)]), 2900)
+  expect(material.text).toContain('function initialMechanism()')
+  expect(material.text).toContain('+ activeCount')
+  expect(material.text).toContain('+ renderCorrected()')
+  expect(new TextEncoder().encode(material.text).length <= 2900).toBe(true)
+  expect(material.omitted).toContain('change-record-budget')
+})
+
+test('change windowing cannot revive a previously privacy-withheld record by trimming its context', () => {
+  const prefix = 'token=private-before-123\n' + '// unchanged public context\n'.repeat(40)
+  const material = reviewChangesOf(evidenceOf([ask, say('', { tool: 'Edit', input: { file_path: '/p/private.ts', old_string: prefix + 'return before()', new_string: prefix + 'return privateTailChange()' }, text: 'ok' })]))
+  expect(material.text).toBe('')
+  expect(material.omitted).toContain('privacy-affected-changes')
+})
+
+test('advisory diff work has a finite fallback and reports its unavailable tail', () => {
+  const source = '// large unchanged record\n'.repeat(600)
+  const record = evidenceOf([ask, say('', { tool: 'Edit', input: { file_path: '/p/large.ts', old_string: source + 'return previous()', new_string: source + 'return newTail()' }, text: 'ok' })])
+  const material = reviewChangesOf(record)
+  expect(material.text).not.toContain('newTail()')
+  expect(material.omitted).toContain('change-record-diff-limit')
+  expect(material.omitted).toContain('change-record-prefix-limit')
+  expect(new TextEncoder().encode(material.text).length <= 24576).toBe(true)
+})

@@ -55,6 +55,20 @@ try {
     checked.push('historical-long-report-native-log-boundary')
   }
 
+  {
+    const fixture = JSON.parse(readFileSync(join(root, 'eval/data/review-replay-v1/late-recorded-edit.json')))
+    if (existsSync(join(root, fixture.source.artifact))) {
+      assert.equal(createHash('sha256').update(readFileSync(join(root, fixture.source.artifact))).digest('hex'), fixture.source.sha256)
+      availableSourceHashes++
+    }
+    const change = fixture.change
+    const material = reviewChangesOf({ prompts: [], changes: [{ ...change, at: 1 }] })
+    for (const fragment of fixture.expectedPublicSourceFragments) assert.ok(material.text.includes(fragment), 'a recorded implementation branch beyond the former prefix must be available')
+    assert.ok(new TextEncoder().encode(material.text).length <= 24576)
+    assert.equal(redact(material.text), material.text)
+    assert.ok(material.omitted.includes('change-record-context'))
+    checked.push('historical-late-recorded-edit-coverage')
+  }
   for (const row of cases['prefixed-real-technical-intents'].texts) {
     const r = new IncrementalReview(1); r.step(row.time, row.text)
     assert.ok(context(r.take()).sources.some(s => s.kind === 'narrative' && s.text === row.text))
