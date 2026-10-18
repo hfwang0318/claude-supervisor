@@ -139,7 +139,7 @@ const steps = async ($: Parameters<TestBody>[0], n: number, agentId?: string) =>
 const end = ($: Parameters<TestBody>[0], answer: string, reason: 'answer' | 'aborted' = 'answer') =>
   $.turn.complete({ answer, durationMs: 1, isAborted: reason === 'aborted', turnId: 't1', reason } as never)
 const prompt = ($: Parameters<TestBody>[0], text: string) => $.prompt.submit({ text, origin: { kind: 'composer' } } as never)
-const issues = ($: Parameters<TestBody>[0]) => $.command.run({ command: 'deepseek-supervisor', args: 'issues' } as never).then(r => (r as { text: string }).text)
+const issues = ($: Parameters<TestBody>[0]) => $.command.run({ command: 'code-supervisor', args: 'issues' } as never).then(r => (r as { text: string }).text)
 
 test('the claims in a text are the sentences that say something is so', async () => {
   expect(claimsOf('Ran them. All tests pass. Next I will tidy up.')).toEqual(['All tests pass.'])
@@ -247,7 +247,7 @@ test('a new claim sends the verifier into a copy; what the output contradicts re
   expect(w.notes.length).toBe(1)
   expect(w.notes[0]).toContain('source: All tests pass.')
   expect(await issues($)).toContain('#1 [open] One test fails')
-  const drawn = await $.ui.mount({ plugin: 'deepseek-supervisor', surface: 'terminal', component: 'AbovePrompt', props: band } as never)
+  const drawn = await $.ui.mount({ plugin: 'code-supervisor', surface: 'terminal', component: 'AbovePrompt', props: band } as never)
   expect(await drawn.find({ text: /One test fails/ })).toBeDefined()
 })
 
@@ -424,7 +424,7 @@ test('on Anthropic\'s own endpoint it stays idle unless switched on', async ($, 
   await end($, 'All tests pass.')
   await w.clock.advance(10)
   expect(w.asked.length).toBe(0)
-  await $.command.run({ command: 'deepseek-supervisor', args: 'on' } as never)
+  await $.command.run({ command: 'code-supervisor', args: 'on' } as never)
   await steps($, 3)
   await w.clock.advance(10)
   expect(w.asked.length).toBe(1)
@@ -439,7 +439,7 @@ test('a note the session refuses is still in the band, and the person is told', 
   await w.clock.advance(10)
   expect(w.notes.length).toBe(0)
   expect(w.toasts.at(-1)).toContain('did not reach the model')
-  const drawn = await $.ui.mount({ plugin: 'deepseek-supervisor', surface: 'terminal', component: 'AbovePrompt', props: band } as never)
+  const drawn = await $.ui.mount({ plugin: 'code-supervisor', surface: 'terminal', component: 'AbovePrompt', props: band } as never)
   expect(await drawn.find({ text: /One test fails/ })).toBeDefined()
 })
 
@@ -704,15 +704,25 @@ test('the verifier\'s model is the person\'s to choose', { options: { verifier_m
   expect(w.models[0]).toBe('deepseek-v4-pro')
 })
 
-test('DEEPSEEK_SUPERVISOR=on turns it on where it would idle; the command still has the last word', async ($, on) => {
+test('CODE_SUPERVISOR=on turns it on where it would idle; the command still has the last word', async ($, on) => {
   const w = world(on)
   w.state.baseUrl = 'https://api.anthropic.com'
-  w.state.env.DEEPSEEK_SUPERVISOR = 'on'
+  w.state.env.CODE_SUPERVISOR = 'on'
   await start($)
   await steps($, 3)
   await w.clock.advance(10)
   expect(w.asked.length).toBe(1)
-  await $.command.run({ command: 'deepseek-supervisor', args: 'off' } as never)
+  await $.command.run({ command: 'code-supervisor', args: 'off' } as never)
+  await steps($, 3)
+  await w.clock.advance(10)
+  expect(w.asked.length).toBe(1)
+})
+
+test('the old DEEPSEEK_SUPERVISOR variable still turns it on', async ($, on) => {
+  const w = world(on)
+  w.state.baseUrl = 'https://api.anthropic.com'
+  w.state.env.DEEPSEEK_SUPERVISOR = 'on'
+  await start($)
   await steps($, 3)
   await w.clock.advance(10)
   expect(w.asked.length).toBe(1)
@@ -892,7 +902,7 @@ for (const action of ['new-prompt', 'off', 'reload'] as const) {
     await steps($, 3)
     await w.clock.advance(10)
     if (action === 'new-prompt') await prompt($, 'new requirement')
-    if (action === 'off') await $.command.run({ command: 'deepseek-supervisor', args: 'off' } as never)
+    if (action === 'off') await $.command.run({ command: 'code-supervisor', args: 'off' } as never)
     if (action === 'reload') await start($)
     release?.()
     await w.clock.advance(10)

@@ -80,13 +80,15 @@ assert.equal(reviewSessionCanClose(1, { active: false, followUps: 0 }), true)
 assert.equal(reviewSessionCanClose(1, { active: false, followUps: 1, acceptedFollowUps: 1 }), false)
 assert.equal(reviewSessionCanClose(2, { active: false, followUps: 1, acceptedFollowUps: 1 }), true)
 assert.equal(reviewSessionCanClose(1, null), false)
-assert.deepEqual(parseReviewLifecycle('2026-10-16T00:00:00.000Z [DEBUG] [deepseek-supervisor] $.ui.log (to debug): deepseek-supervisor: REVIEW_LIFECYCLE {"active":true,"followUps":0}'), active)
+assert.deepEqual(parseReviewLifecycle('2026-10-16T00:00:00.000Z [DEBUG] [code-supervisor] $.ui.log (to debug): code-supervisor: REVIEW_LIFECYCLE {"active":true,"followUps":0}'), active)
+assert.deepEqual(parseReviewLifecycle('2026-10-16T00:00:00.000Z [DEBUG] [deepseek-supervisor] $.ui.log (to debug): deepseek-supervisor: REVIEW_LIFECYCLE {"active":true,"followUps":0}'), active, 'old journal prefix remains readable')
 assert.equal(parseReviewLifecycle('REVIEW_LIFECYCLE {"active":false,"followUps":-1}'), null)
 assert.equal(parseReviewLifecycle('REVIEW_LIFECYCLE invalid'), null)
 
 assert.equal(parseReviewLifecycle('tool stdout REVIEW_LIFECYCLE {"active":false,"followUps":0}'), null)
 
-assert.deepEqual(parseReviewControl('2026-10-16T00:00:00.000Z [DEBUG] [deepseek-supervisor] $.ui.log (to debug): deepseek-supervisor: REVIEW_CONTROL {"revision":1,"status":"cancelled"}'), { revision: 1, status: 'cancelled' })
+assert.deepEqual(parseReviewControl('2026-10-16T00:00:00.000Z [DEBUG] [code-supervisor] $.ui.log (to debug): code-supervisor: REVIEW_CONTROL {"revision":1,"status":"cancelled"}'), { revision: 1, status: 'cancelled' })
+assert.deepEqual(parseReviewControl('2026-10-16T00:00:00.000Z [DEBUG] [deepseek-supervisor] $.ui.log (to debug): deepseek-supervisor: REVIEW_CONTROL {"revision":1,"status":"cancelled"}'), { revision: 1, status: 'cancelled' }, 'old control prefix remains readable')
 assert.equal(parseReviewControl('tool stdout REVIEW_CONTROL {"revision":1,"status":"cancelled"}'), null)
 const inputGate = new ReviewInputGate()
 let ready = false
@@ -113,7 +115,7 @@ try {
   const debug = join(lifecycleFixture, 'debug.log'), fake = join(lifecycleFixture, 'native.mjs')
   writeFileSync(fake, `import { appendFileSync } from 'node:fs'
 const debug=process.argv[process.argv.indexOf('--debug-file')+1]
-const log=x=>appendFileSync(debug,'2026-10-16T00:00:00.000Z [DEBUG] [deepseek-supervisor] $.ui.log (to debug): deepseek-supervisor: '+x+'\\n')
+const log=x=>appendFileSync(debug,'2026-10-16T00:00:00.000Z [DEBUG] [code-supervisor] $.ui.log (to debug): code-supervisor: '+x+'\\n')
 log('REVIEW_CONTROL {"revision":0,"status":"ready"}')
 process.stdin.once('data',()=>{ log('REVIEW_LIFECYCLE {"active":false,"followUps":0}');process.stdout.write('{"type":"result"}\\n',()=>process.exit(0)) })
 `)

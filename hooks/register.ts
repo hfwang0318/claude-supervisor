@@ -20,7 +20,7 @@ import { HISTORY as READINGS_KEPT, readingOf } from './weather'
 import type { Finding, Kind } from './evidence'
 import { changesOf, contradictions, evidenceOf, isCheckClaim, isCheckCommand, isCheckKind, isClaim, keyOf, recordFindings, reviewChangesOf, settledBy, skipped, supports, unreported } from './evidence'
 import type { Facts, Mode, VerifyInput, VerifyResult } from './prompt'
-import { assistPacketPrompt, localPacketPrompt, factRequestPrompt, base, bytesOf, claimsOf, clip,  factsOf, isSameItem, noteText, parseTurn, probeRefusal, redact, refusal, ROUNDS, shown, squash, verifyPrompt } from './prompt'
+import { assistPacketPrompt, localPacketPrompt, factRequestPrompt, base, bytesOf, claimsOf, clip,  factsOf, isSameItem, isSupervisorNote, noteText, parseTurn, probeRefusal, redact, refusal, ROUNDS, shown, squash, verifyPrompt } from './prompt'
 
 // Claude Code's own "You should know" is hidden whenever ANTHROPIC_BASE_URL points
 // away from Anthropic (observed on 2.1.290: that one variable alone), so it never
@@ -59,12 +59,12 @@ const HISTORY = 50
 
 // The band's two values, drawn by hooks/band.tsx. The scan wants every file that
 // writes one to name it in a const of its own; types/index.d.ts holds both to one shape.
-const cards = atom({ plugin: 'deepseek-supervisor', key: 'cards' } as const, null)
-const isHidden = atom({ plugin: 'deepseek-supervisor', key: 'isHidden' } as const, false)
+const cards = atom({ plugin: 'code-supervisor', key: 'cards' } as const, null)
+const isHidden = atom({ plugin: 'code-supervisor', key: 'isHidden' } as const, false)
 // The numbered items. In $.state, not a module variable, so a hot reload neither
 // forgets what the model was told nor reuses an id.
 const EMPTY: Track = { schemaVersion: 2, nextId: 1, issues: [], seen: [], runs: 0 }
-const track = atom({ plugin: 'deepseek-supervisor', key: 'track' } as const, EMPTY)
+const track = atom({ plugin: 'code-supervisor', key: 'track' } as const, EMPTY)
 
 type Config = { reviewSchedule: 'incremental' | 'legacy' | null; reviewInterval: number; reviewMaxCalls: number; reviewOutputBudget: number; reviewPolicyValid: boolean; reviewPhase: 'auto' | ReviewContext['phase'] | null; verifierModel: string; reviewChanges: boolean; executionMode: 'off' | 'shadow' | 'enabled'; assistanceMode: 'existing' | 'facts' | 'supervise' | 'probe' | 'recovery' }
 const reviewOption = (options: PluginOptions | undefined, key: string) => (options as Record<string, unknown> | undefined)?.[key]
@@ -88,16 +88,19 @@ const configOf = (options: PluginOptions | undefined): Config => ({
   executionMode: options?.execution_mode === 'enabled' || options?.execution_mode === 'shadow' ? options.execution_mode : 'off',
 })
 
-const say = ($: EngineInterface, line: string) => $.ui.log(`deepseek-supervisor: ${line}`, { to: 'debug' })
+const say = ($: EngineInterface, line: string) => $.ui.log(`code-supervisor: ${line}`, { to: 'debug' })
 
-// `on` and `off` are what the person chose, with the command or DEEPSEEK_SUPERVISOR;
+// `on` and `off` are what the person chose, with the command or CODE_SUPERVISOR;
 // with neither, it runs where the built-in one is hidden: ANTHROPIC_BASE_URL set to
 // a host that is not Anthropic's.
 type Setting = 'auto' | 'on' | 'off'
 const settingOf = async ($: EngineInterface): Promise<Setting> => {
   const v = await $.store.get('mode').catch(() => undefined)
   if (v === 'on' || v === 'off') return v
-  const env = (await $.env.get('DEEPSEEK_SUPERVISOR').catch(() => undefined))?.trim().toLowerCase()
+  const named = (await $.env.get('CODE_SUPERVISOR').catch(() => undefined))?.trim()
+  // The 0.9.x variable remains readable so an existing shell setup keeps working.
+  const legacy = named ? undefined : (await $.env.get('DEEPSEEK_SUPERVISOR').catch(() => undefined))?.trim()
+  const env = (named || legacy)?.toLowerCase()
   return env === 'on' || env === 'off' ? env : 'auto'
 }
 
@@ -157,19 +160,19 @@ const show = async ($: EngineInterface) => {
   if (!(await isOn($)))
     return $.ui.status(
       (await settingOf($)) === 'off'
-        ? 'deepseek-supervisor is off (/deepseek-supervisor on)'
-        : 'deepseek-supervisor idle: Anthropic endpoint, where the built-in "You should know" runs (/deepseek-supervisor on to force)',
+        ? 'code-supervisor is off (/code-supervisor on)'
+        : 'code-supervisor idle: Anthropic endpoint, where the built-in "You should know" runs (/code-supervisor on to force)',
     )
-  if (!s.stateUsable) return $.ui.status('deepseek-supervisor unknown state schema; supervision disabled; original state preserved')
+  if (!s.stateUsable) return $.ui.status('code-supervisor unknown state schema; supervision disabled; original state preserved')
   const open = (await read($, track)).issues.filter(i => i.status === 'open').length
   const selection = await selectionOf($)
-  $.ui.status(`deepseek-supervisor ${selection.modelId !== null && !s.modelDisabled ? 'checking' : 'rules-only'} · ${s.told} noted` + (open === 0 ? '' : ` (${open} open)`) + (s.last === '' ? '' : ` · last: ${s.last}`))
+  $.ui.status(`code-supervisor ${selection.modelId !== null && !s.modelDisabled ? 'checking' : 'rules-only'} · ${s.told} noted` + (open === 0 ? '' : ` (${open} open)`) + (s.last === '' ? '' : ` · last: ${s.last}`))
 }
 
 // The context window's fill, for the line above the prompt (weather.tsx, drawn in
 // band.tsx). Taken when a session starts and when a main-loop turn ends; a host
 // that reports no usage leaves the line out and never breaks the check.
-const readings = atom({ plugin: 'deepseek-supervisor', key: 'readings' } as const, [] as Reading[])
+const readings = atom({ plugin: 'code-supervisor', key: 'readings' } as const, [] as Reading[])
 const takeReading = async ($: EngineInterface) => {
   const reading = readingOf((await $.session.usage().catch(() => undefined))?.context)
   if (reading !== undefined) await update($, readings, h => [...(h ?? []), reading].slice(-READINGS_KEPT)).catch(() => undefined)
@@ -425,7 +428,7 @@ const engineeringReview = async ($: EngineInterface, list: Rows, final = false, 
   if (s.modelDisabled) return skipped('side-model-unavailable')
   if (!s.coordinator.modelBudgetAvailable) return skipped('budget-exhausted')
   if (!incremental && final && s.reviewStopSent) return skipped('completion-feedback-already-offered')
-  const latestPrompt = list.findLastIndex(r => r.role === 'user' && r.text.trim() && !r.text.includes('[deepseek-supervisor]') && !/^\s*<(?:system-reminder|command-|local-command|teammate-message)|^\s*Another Claude session/.test(r.text))
+  const latestPrompt = list.findLastIndex(r => r.role === 'user' && r.text.trim() && !isSupervisorNote(r.text) && !/^\s*<(?:system-reminder|command-|local-command|teammate-message)|^\s*Another Claude session/.test(r.text))
   const rows = latestPrompt < 0 ? list : list.slice(latestPrompt + 1)
   const changeMaterial = captured.material?.changes ?? reviewChangesOf(record)
   const context = incremental && captured.opportunity ? buildIncrementalContext(binding, captured.asked, captured.opportunity, changeMaterial.text, phase, changeMaterial.omitted) : buildReviewContext(binding, captured.asked, answer ? [...rows, { role: 'assistant', text: answer, toolUses: [] }] : rows, changeMaterial.text, phase, changeMaterial.omitted)
@@ -629,7 +632,7 @@ const proposedWriteInput = (event: { tool: string }) => {
 const incrementalBatch = async ($: EngineInterface, list: Rows) => {
   const s = await runtimeOf($)
   const record = evidenceOf(list), since = record.prompts.at(-1)?.at ?? 0
-  const rows = list.slice(Math.max(0, list.findLastIndex(r => r.role === 'user' && r.text.trim() && !r.text.includes('[deepseek-supervisor]') && !/^\s*<(?:system-reminder|command-|local-command|teammate-message)|^\s*Another Claude session/.test(r.text)) + 1))
+  const rows = list.slice(Math.max(0, list.findLastIndex(r => r.role === 'user' && r.text.trim() && !isSupervisorNote(r.text) && !/^\s*<(?:system-reminder|command-|local-command|teammate-message)|^\s*Another Claude session/.test(r.text)) + 1))
   // Reuse only record formatting/privacy checks, never legacy plan admission.
   const tools = buildReviewContext(s.coordinator.binding, s.asked, rows.map(row => ({ ...row, text: '' })), '', 'implementation')
   for (const omission of tools?.scope.omitted ?? []) s.incremental.omit(omission)
@@ -932,8 +935,8 @@ const check = async ($: EngineInterface, list: Rows, o: CheckOptions): Promise<I
   const images = unopenedClaimed(facts, o.claims)
   let v: VerifyResult | undefined
   if (handed.length > 0 || changes !== '' || rechecks) {
-    $.ui.status('deepseek-supervisor checking what the model said…')
-    const fallback = list.find(r => r.role === 'user' && r.text.trim() !== '' && !r.text.includes('[deepseek-supervisor]'))?.text ?? ''
+    $.ui.status('code-supervisor checking what the model said…')
+    const fallback = list.find(r => r.role === 'user' && r.text.trim() !== '' && !isSupervisorNote(r.text))?.text ?? ''
     const jobId = `check-${++s.jobNumber}`
     const job = s.coordinator.start(jobId, await $.clock.now())
     if (job) {
@@ -1093,7 +1096,7 @@ const tick = async ($: EngineInterface) => {
     })
     if (delivery !== 'delivered') {
       say($, `note not delivered (${delivery})`)
-      $.ui.toast('deepseek-supervisor: a note did not reach the model; see the band above the prompt')
+      $.ui.toast('code-supervisor: a note did not reach the model; see the band above the prompt')
     }
   } catch (err) {
     say($, `check failed: ${err}`)
@@ -1148,7 +1151,9 @@ export const register: Register = (on, options) => {
     s.coordinator = new Coordinator({ ...s.coordinator.binding }, { historical: semanticMode(s), ...(s.cfg.reviewSchedule === 'incremental' && semanticMode(s) ? { maxCalls: s.cfg.reviewMaxCalls, outputTokens: s.cfg.reviewOutputBudget } : {}) })
     s.incremental = new IncrementalReview(s.cfg.reviewInterval); s.firstWrite = false; s.publicStep = undefined
     s.reviewControl?.timer?.cancel(); s.reviewControl = undefined
-    const controlPath = semanticMode(s) ? await $.env.get('DEEPSEEK_SUPERVISOR_CONTROL_FILE') : undefined
+    const controlPath = semanticMode(s)
+      ? ((await $.env.get('CODE_SUPERVISOR_CONTROL_FILE').catch(() => undefined)) ?? (await $.env.get('DEEPSEEK_SUPERVISOR_CONTROL_FILE').catch(() => undefined)))
+      : undefined
     if (controlPath?.startsWith('/') && !controlPath.includes('\0')) {
       try {
         const revision = await readReviewControl($, controlPath)
@@ -1168,7 +1173,7 @@ export const register: Register = (on, options) => {
     // A reload starts here too: what was raised before it does not hold a turn after it.
     s.turnFrom = await $.clock.now()
     await $.command
-      .register({ name: 'deepseek-supervisor', immediate: true, description: 'Checks the model at work: rules on what it ran, and a second model running its claims. on, off, auto, log, or issues', argumentHint: '[on|off|auto|log|issues]' })
+      .register({ name: 'code-supervisor', immediate: true, description: 'Checks the model at work: rules on what it ran, and a second model running its claims. on, off, auto, log, or issues', argumentHint: '[on|off|auto|log|issues]' })
       .catch(err => say($, `command not registered: ${err}`))
     await show($)
     return result
@@ -1371,7 +1376,7 @@ export const register: Register = (on, options) => {
     return next(e)
   })
 
-  on('command.run', { command: 'deepseek-supervisor' }, async ($, e) => {
+  on('command.run', { command: 'code-supervisor' }, async ($, e) => {
     const s = await runtimeOf($)
     const arg = e.args.trim().toLowerCase()
     if (arg === 'log') {
@@ -1403,9 +1408,9 @@ export const register: Register = (on, options) => {
         await update($, cards, () => null)
       }
       await show($)
-      return { text: `deepseek-supervisor is ${arg}${arg === 'auto' ? ` (${(await isOn($)) ? 'checking' : "idle on Anthropic's endpoint"})` : ''}.` }
+      return { text: `code-supervisor is ${arg}${arg === 'auto' ? ` (${(await isOn($)) ? 'checking' : "idle on Anthropic's endpoint"})` : ''}.` }
     }
     const setting = await settingOf($)
-    return { text: `deepseek-supervisor is ${setting}${setting === 'auto' ? ` (${(await isOn($)) ? 'checking' : "idle on Anthropic's endpoint"})` : ''}. Usage: /deepseek-supervisor [on|off|auto|log|issues]` }
+    return { text: `code-supervisor is ${setting}${setting === 'auto' ? ` (${(await isOn($)) ? 'checking' : "idle on Anthropic's endpoint"})` : ''}. Usage: /code-supervisor [on|off|auto|log|issues]` }
   })
 }

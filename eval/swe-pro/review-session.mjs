@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 const journalPayload = (line, kind) => {
-  const prefix = /^\S+ \[DEBUG\] \[deepseek-supervisor\] \$\.ui\.log \(to debug\): deepseek-supervisor: (REVIEW_LIFECYCLE|REVIEW_CONTROL) (\{.*\})$/.exec(line)
+  const prefix = /^\S+ \[DEBUG\] \[(?:code-supervisor|deepseek-supervisor)\] \$\.ui\.log \(to debug\): (?:code-supervisor|deepseek-supervisor): (REVIEW_LIFECYCLE|REVIEW_CONTROL) (\{.*\})$/.exec(line)
   if (!prefix || prefix[1] !== kind) return null
   try { return JSON.parse(prefix[2]) } catch { return null }
 }
@@ -99,7 +99,7 @@ export const runReviewSession = async (argv, input = process.stdin, output = pro
   announce(0)
   let journalStart = 0
   try { journalStart = statSync(debugFile).size } catch { /* New journal. */ }
-  const child = spawn(argv[0], [...argv.slice(1), '--input-format', 'stream-json'], { stdio: ['pipe', 'pipe', 'inherit'], env: { ...process.env, DEEPSEEK_SUPERVISOR_CONTROL_FILE: controlFile } })
+  const child = spawn(argv[0], [...argv.slice(1), '--input-format', 'stream-json'], { stdio: ['pipe', 'pipe', 'inherit'], env: { ...process.env, CODE_SUPERVISOR_CONTROL_FILE: controlFile } })
   const gate = new ReviewInputGate()
   const coverage = new ReviewResultCoverage()
   let results = 0, inputCount = 0, followUpCount = 0, lifecycle = null, offset = journalStart, journal = '', response = '', closed = false, inputDone = false, inputBusy = true, revision = 0

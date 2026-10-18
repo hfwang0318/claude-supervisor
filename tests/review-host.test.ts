@@ -7,7 +7,7 @@ const world = (on: Parameters<TestBody>[1]) => {
   const state = { workspaceWait: undefined as Promise<void> | undefined, workspaceRoot: null as string | null, factsCount: 1, failCwd: false, hostVersion: '2.1.295', versionWait: undefined as Promise<void> | undefined, outputTokens: 20, modelRequests: [] as { maxTokens?: number; effort?: string }[], throwFollowUp: false, dropFollowUp: false, controlPath: '', control: JSON.stringify({ version: 1, revision: 0 }), calls: 0, unanswered: false, unansweredReason: 'aborted', logLimit: Infinity, nextPromptWait: undefined as Promise<void> | undefined, cwd: '/p', submitted: [] as string[], echo: true, timeouts: [] as number[], prompts: [] as string[], logs: [] as string[], processActions: [] as string[], validateDelay: 0, wait: undefined as Promise<void> | undefined, outputs: [reply(), reply()], rows: [{ role: 'assistant', text: 'Plan: replace the public method.', toolUses: [{ tool: 'Read', input: { file_path: '/p/api.js' }, text: 'exports.old = () => 1' }] }] }
   on('session.version', async () => { if (state.versionWait) await state.versionWait; return { value: { version: state.hostVersion } } })
   on('session.id', () => ({ value: 'review-session' })); on('session.model', () => ({ value: 'fixture' })); on('session.cwd', () => { if (state.failCwd) throw Error('workspace metadata unavailable'); return { value: state.cwd } }); on('session.messages', () => ({ value: state.rows }) as never)
-  on('env.get', (_$, e) => ({ value: e.name === 'DEEPSEEK_SUPERVISOR_CONTROL_FILE' ? state.controlPath : 'on' })); on('fs.read', () => ({ value: state.control })); on('ui.status', () => ({ value: undefined })); on('ui.log', (_$, e) => { state.logs.push(e.text.slice(0, state.logLimit)); return { value: undefined } })
+  on('env.get', (_$, e) => ({ value: e.name === 'CODE_SUPERVISOR_CONTROL_FILE' ? state.controlPath : 'on' })); on('fs.read', () => ({ value: state.control })); on('ui.status', () => ({ value: undefined })); on('ui.log', (_$, e) => { state.logs.push(e.text.slice(0, state.logLimit)); return { value: undefined } })
   on('command.register', (_$, e) => ({ value: { command: e.name } })); on('session.start', () => ({ cwd: '/p' })); on('prompt.submit', async (_$, e) => { state.submitted.push(e.text); if (state.throwFollowUp && e.text.includes('Engineering review')) throw Error('session no longer bound'); if (state.dropFollowUp && e.text.includes('Engineering review')) return { text: e.text, drop: 'unavailable' } as never; if (e.text === 'New queued task.' && state.nextPromptWait) await state.nextPromptWait; return { text: e.text } as never })
   on('classic.PostToolBatch', () => ({ additionalContext: ['host context'] }) as never); on('classic.Stop', () => ({}) as never)
   on('turn.complete', (_$, e) => ({ text: e.answer })); on('session.end', (_$, e) => ({ sessionId: e.sessionId }))
@@ -62,7 +62,7 @@ for (const invalidate of ['prompt', 'off', 'cancel']) test(`late comprehensive r
   for (let i = 0; i < 12 && !state.calls; i++) await clock.advance(10)
   expect(state.calls).toBe(1)
   if (invalidate === 'prompt') await $.prompt.submit({ text: 'New task.', origin: { kind: 'composer' } } as never)
-  if (invalidate === 'off') await $.command.run({ command: 'deepseek-supervisor', args: 'off' } as never)
+  if (invalidate === 'off') await $.command.run({ command: 'code-supervisor', args: 'off' } as never)
   if (invalidate === 'cancel') await $.turn.complete({ answer: '', durationMs: 1, isAborted: true, turnId: 't', reason: 'aborted' } as never)
   release(); await flushBackground(clock); expect((await pending).additionalContext).toEqual(['host context'])
 })
@@ -122,9 +122,9 @@ test('off and on cannot replenish the shared active review budget', { options },
   const pending = observeBatch($, clock)
   for (let i = 0; i < 12 && !state.calls; i++) await clock.advance(10)
   await clock.advance(10000)
-  await $.command.run({ command: 'deepseek-supervisor', args: 'off' } as never)
+  await $.command.run({ command: 'code-supervisor', args: 'off' } as never)
   release(); await pending; await flushBackground(clock); state.wait = undefined
-  await $.command.run({ command: 'deepseek-supervisor', args: 'on' } as never)
+  await $.command.run({ command: 'code-supervisor', args: 'on' } as never)
   state.rows[0]!.text = 'Plan: preserve the public method with an adapter.'
   await observeBatch($, clock)
   expect(state.calls).toBe(1)
@@ -730,7 +730,7 @@ for (const invalidation of ['prompt', 'off', 'cancel']) test(`queued incremental
   expect(state.calls).toBe(1)
   await $.classic.Stop({ last_assistant_message: 'A later completion with new evidence.' } as never)
   if (invalidation === 'prompt') await $.prompt.submit({ text: 'New task.', origin: { kind: 'sdk' } } as never)
-  if (invalidation === 'off') await $.command.run({ command: 'deepseek-supervisor', args: 'off' } as never)
+  if (invalidation === 'off') await $.command.run({ command: 'code-supervisor', args: 'off' } as never)
   if (invalidation === 'cancel') await $.turn.complete({ answer: '', durationMs: 1, isAborted: true, turnId: 't', reason: 'aborted' } as never)
   release(); await flushBackground(clock)
   expect(state.calls).toBe(1)

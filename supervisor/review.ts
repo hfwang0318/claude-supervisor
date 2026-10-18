@@ -254,7 +254,7 @@ export const reviewEventLogs = (event: { id: string; binding: Binding } & Record
 export const reviewNote = (context: ReviewContext, reply: ReviewReply) => {
   const j = reply.judgment
   return [
-    '[deepseek-supervisor] Engineering review (advisory; main model decides).',
+    '[code-supervisor] Engineering review (advisory; main model decides).',
     ...(context.checkpoint ? [`Review ${context.checkpoint.reviewId}; checkpoint ${context.checkpoint.checkpointId}; task revision ${context.binding.taskRevision}; local observation sequence ${context.checkpoint.sequence} (not a host message ID); captured at ${context.checkpoint.observedAt}; phase ${context.phase}.`, `Last included tool: ${context.checkpoint.lastTool ? JSON.stringify(context.checkpoint.lastTool) : 'unavailable'}. Supplied source IDs: ${context.checkpoint.sourceIds.join(', ')}. Requirement signature: ${context.checkpoint.requirementSignature}; material signature: ${context.checkpoint.materialSignature}. Only these bounded records were reviewed; later execution is not covered. Current applicability is unknown; consider later fixes or counterevidence.`] : []),
     reply.report ? 'Report dimensions are not classified. Individual claims and citations are not independently checked; no dimension is inferred to have passed. Scope is the supplied records only.' : `Reviewed: ${reply.reviewed.join(', ') || 'none'}; not reviewed: ${REVIEW_DIMENSIONS.filter(d => !reply.reviewed.includes(d)).join(', ') || 'none'}. Scope is the supplied records only; repository-wide correctness is unknown.`,
     context.scope.omitted.length ? `Unavailable context: ${context.scope.omitted.join(', ')}.` : '',

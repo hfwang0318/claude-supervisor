@@ -8,10 +8,10 @@ import { weatherLine } from './weather'
 // What the watcher last noted, above the prompt: the person sees it as it lands, the
 // way "You should know" shows its cards. The model has already read the same items
 // as a note; the band is only the person's copy.
-const cards = atom({ plugin: 'deepseek-supervisor', key: 'cards' } as const, null)
-const isHidden = atom({ plugin: 'deepseek-supervisor', key: 'isHidden' } as const, false)
+const cards = atom({ plugin: 'code-supervisor', key: 'cards' } as const, null)
+const isHidden = atom({ plugin: 'code-supervisor', key: 'isHidden' } as const, false)
 // The context window's last readings, taken in register.ts.
-const readings = atom({ plugin: 'deepseek-supervisor', key: 'readings' } as const, [] as Reading[])
+const readings = atom({ plugin: 'code-supervisor', key: 'readings' } as const, [] as Reading[])
 
 const hhmm = (ms: number) => {
   const d = new Date(ms)
@@ -35,7 +35,7 @@ export const registerBand = (on: On) => {
       <Box flexDirection="column">
         <Box>
           <Text bold>
-            deepseek-supervisor · noted {shown.items.length} ({hhmm(shown.at)}){' '}
+            code-supervisor · noted {shown.items.length} ({hhmm(shown.at)}){' '}
           </Text>
           <Button key="hide" label="Hide" onPress={() => update($, isHidden, () => true)} />
         </Box>

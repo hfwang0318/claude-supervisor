@@ -27,6 +27,8 @@ const CHANGES_CHARS = 9000
 
 export const squash = (s: string) => s.replace(/\s+/g, ' ').trim()
 export const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s)
+// Notes written before the 0.10.0 rename keep their old tag in session history.
+export const isSupervisorNote = (text: string) => text.includes('[code-supervisor]') || text.includes('[deepseek-supervisor]')
 
 export const leaves = (x: unknown): string[] =>
   typeof x === 'string' ? [x] : Array.isArray(x) ? x.flatMap(leaves) : typeof x === 'object' && x !== null ? Object.values(x).flatMap(leaves) : []
@@ -454,9 +456,9 @@ export const noteText = (issues: readonly Issue[], o: { final?: boolean } = {}) 
   [
     ...(o.final === true
       ? [
-          `[deepseek-supervisor] Before you finish: a separate check (not the person) found ${issues.length} item(s). Handle them, then give the person your whole answer again: everything your last answer said that still holds, corrected, with these folded in. They may read only your last message.`,
+          `[code-supervisor] Before you finish: a separate check (not the person) found ${issues.length} item(s). Handle them, then give the person your whole answer again: everything your last answer said that still holds, corrected, with these folded in. They may read only your last message.`,
         ]
-      : [`[deepseek-supervisor] A separate check (not the person) found ${issues.length} item(s) to handle now:`]),
+      : [`[code-supervisor] A separate check (not the person) found ${issues.length} item(s) to handle now:`]),
     ...issues.map(itemText),
     '',
     'For each: fix it your own way, or tell the person plainly and write `[ysk#<id> told]` in that reply.',

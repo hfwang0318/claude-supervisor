@@ -1,15 +1,16 @@
 // These are observed review events, never inferred gains or correctness verdicts.
 const dimensions = ['requirement-plan', 'plan-implementation', 'architecture', 'direction', 'exploration', 'verification', 'recovery']
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value)
+const logPrefix = /(?:code-supervisor|deepseek-supervisor): /
 export const readReviewInputs = debug => {
   const heads = [], parts = [], inputs = [], alteredInputs = []
   let malformedEvents = 0, incompleteInputs = 0
   const key = e => `${e.id}\n${e.promptSignature}`
   const validPrivacy = e => e.representation === undefined && e.omittedBindingFields === undefined || e.representation === 'session-id-omitted' && Array.isArray(e.omittedBindingFields) && e.omittedBindingFields.length === 1 && e.omittedBindingFields[0] === 'sessionId' && object(e.context?.binding) && !Object.hasOwn(e.context.binding, 'sessionId')
   for (const line of debug.split('\n')) {
-    const at = line.indexOf('deepseek-supervisor: ')
-    if (at < 0) continue
-    const match = /^(REVIEW_INPUT|REVIEW_INPUT_PART) (.*)$/.exec(line.slice(at + 'deepseek-supervisor: '.length))
+    const at = logPrefix.exec(line)
+    if (!at) continue
+    const match = /^(REVIEW_INPUT|REVIEW_INPUT_PART) (.*)$/.exec(line.slice(at.index + at[0].length))
     if (!match) continue
     try {
       if (match[2].length > 131072) throw Error('input record limit')
@@ -44,9 +45,9 @@ export const readReviews = debug => {
   const key = e => `${e.id}\n${e.checksum}`
   const idValid = e => typeof e.id === 'string' && /^[^\r\n]{1,128}$/.test(e.id)
   for (const [lineIndex, line] of debug.split('\n').entries()) {
-    const at = line.indexOf('deepseek-supervisor: ')
-    if (at < 0) continue
-    const m = /^(REVIEW|REVIEW_PART) (.*)$/.exec(line.slice(at + 'deepseek-supervisor: '.length))
+    const at = logPrefix.exec(line)
+    if (!at) continue
+    const m = /^(REVIEW|REVIEW_PART) (.*)$/.exec(line.slice(at.index + at[0].length))
     if (!m) continue
     try {
       if (m[2].length > 262144) throw Error('review record limit')
@@ -77,7 +78,7 @@ export const readReviews = debug => {
   return { reviews: reviews.toSorted((a, b) => order.get(a) - order.get(b)), alteredReviews, incompleteRecords, malformedEvents, orphanPartGroups: new Set(parts.filter(p => !keys.has(key(p))).map(key)).size }
 }
 export const reviewMetrics = debug => {
-  const parse = marker => [...debug.matchAll(new RegExp(`deepseek-supervisor: ${marker} (\\{[^\\n]+\\})`, 'g'))].flatMap(m => { try { const v = JSON.parse(m[1]); return v && typeof v === 'object' && !Array.isArray(v) ? [v] : [] } catch { return [] } })
+  const parse = marker => [...debug.matchAll(new RegExp(`(?:code-supervisor|deepseek-supervisor): ${marker} (\\{[^\\n]+\\})`, 'g'))].flatMap(m => { try { const v = JSON.parse(m[1]); return v && typeof v === 'object' && !Array.isArray(v) ? [v] : [] } catch { return [] } })
   const records = readReviews(debug), reviews = records.reviews, deliveries = parse('REVIEW_DELIVERY')
   const inputs = readReviewInputs(debug)
   return {

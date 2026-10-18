@@ -51,7 +51,7 @@ try {
       availableSourceHashes++
     }
     const event = { ...fixture.event, binding: { ...fixture.event.binding, sessionId: 'private-replay-identity' } }
-    const lines = reviewEventLogs(event).map(line => `deepseek-supervisor: ${line}`)
+    const lines = reviewEventLogs(event).map(line => `code-supervisor: ${line}`)
     assert.ok(lines.every(line => line.length < 10000), 'serialized diagnostics must fit before the actual native logging boundary')
     const throughNativeLimit = lines.map(line => line.length > 10000 ? line.slice(0, 10000) + '…' : line).toReversed().join('\n')
     const reconstructed = readReviews(throughNativeLimit)
@@ -63,7 +63,7 @@ try {
     assert.equal(throughNativeLimit.includes('private-replay-identity'), false)
     const escaped = reviewEventLogs({ ...event, report: ('\n\t\"\\' + String.fromCharCode(1)).repeat(1800) })
     assert.ok(escaped.every(line => line.length < 10000), 'JSON escaping must not overflow a plain-text part')
-    const short = readReviews(reviewEventLogs({ id: 'short', binding, report: 'short public advice' }).map(line => `deepseek-supervisor: ${line}`).join('\n'))
+    const short = readReviews(reviewEventLogs({ id: 'short', binding, report: 'short public advice' }).map(line => `code-supervisor: ${line}`).join('\n'))
     assert.equal(short.reviews[0].report, 'short public advice')
     checked.push('historical-long-report-native-log-boundary')
   }
@@ -109,7 +109,8 @@ try {
     await c.deliver('recorded-queued-only', binding, async () => { submits++; return 'unknown' })
     await c.deliver('recorded-queued-only', binding, async () => { submits++; return 'delivered' })
     assert.equal(submits, 1); assert.equal(cases['queued-without-next-request'].mainRequestsWithFeedback, 0)
-    assert.equal(reviewMetrics('deepseek-supervisor: REVIEW_QUEUED {"id":"recorded-queued-only"}').deliveryCount, 0)
+    assert.equal(reviewMetrics('code-supervisor: REVIEW_QUEUED {"id":"recorded-queued-only"}').deliveryCount, 0)
+    assert.equal(reviewMetrics('deepseek-supervisor: REVIEW_QUEUED {"id":"legacy-queued-only"}').deliveryCount, 0, 'old review records remain readable')
   }
   checked.push('queued-without-next-request')
   {
@@ -142,13 +143,13 @@ try {
     const data = cases['acknowledgment-after-self-correction']
     assert.ok(Date.parse(data.compatibleSearchAt) < Date.parse(data.firstMainFeedback))
     assert.ok(data.persistentRequestHits > 1)
-    const metrics = reviewMetrics('deepseek-supervisor: REVIEW_DELIVERY {"id":"one-report","delivery":"context-returned","consumption":"unknown"}')
+    const metrics = reviewMetrics('code-supervisor: REVIEW_DELIVERY {"id":"one-report","delivery":"context-returned","consumption":"unknown"}')
     assert.equal(metrics.deliveryCount, 1); assert.equal(metrics.validatedBenefit, 'unknown'); assert.equal(metrics.mainActionChanged, 'unknown')
   }
   checked.push('acknowledgment-after-self-correction: timing/no-causal-certificate')
   {
     const c = context((() => { const r = new IncrementalReview(1); r.step('1', 'Keep PUBLIC source text unchanged.'); return r.take() })())
-    const logs = reviewInputLogs({ kind: 'engineering-review-input', id: 'framing-case', status: 'prepared', modelId: 'fixture', promptSignature: 'fixed', context: c }).map(l => 'deepseek-supervisor: ' + l)
+    const logs = reviewInputLogs({ kind: 'engineering-review-input', id: 'framing-case', status: 'prepared', modelId: 'fixture', promptSignature: 'fixed', context: c }).map(l => 'code-supervisor: ' + l)
     const clean = readReviewInputs(logs.join('\n'))
     assert.equal(clean.inputs.length, 1)
     const changed = readReviewInputs(logs.map(l => l.replace('PUBLIC', 'public')).join('\n'))

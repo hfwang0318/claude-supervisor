@@ -140,7 +140,7 @@ if (process.argv.includes('--rescore')) {
 
 // What the plugin did in a run, read from the debug log: passes, items, tokens.
 // 0.4.0 logged a `$.model.fork` per pass and `WATCH {fresh}`; 0.6.0 logs
-// `CHECK {claims, found}` per check (its token use is in /deepseek-supervisor log,
+// `CHECK {claims, found}` per check (its token use is in /code-supervisor log,
 // not the debug log, so the sums below stay 0 for it).
 const pluginStats = log => {
   const json = re =>
@@ -151,16 +151,16 @@ const pluginStats = log => {
         return []
       }
     })
-  const checks = json(/deepseek-supervisor: CHECK (\{.*\})/g)
+  const checks = json(/(?:code-supervisor|deepseek-supervisor): CHECK (\{.*\})/g)
   // 0.8.0 also counts a check that read the turn's change.
-  const passes = [...log.matchAll(/\$\.model\.fork \(deepseek-supervisor\)/g)].length + checks.filter(c => c.claims > 0 || (c.changes ?? 0) > 0 || (c.rules?.length ?? 0) > 0).length
-  const items = json(/deepseek-supervisor: WATCH (\{.*\})/g).reduce((n, w) => n + (w.fresh?.length ?? 0), 0) + checks.reduce((n, c) => n + (c.found?.length ?? 0), 0)
+  const passes = [...log.matchAll(/\$\.model\.fork \((?:code-supervisor|deepseek-supervisor)\)/g)].length + checks.filter(c => c.claims > 0 || (c.changes ?? 0) > 0 || (c.rules?.length ?? 0) > 0).length
+  const items = json(/(?:code-supervisor|deepseek-supervisor): WATCH (\{.*\})/g).reduce((n, w) => n + (w.fresh?.length ?? 0), 0) + checks.reduce((n, c) => n + (c.found?.length ?? 0), 0)
   // 0.7.0: the items its rules on the record raised, with no model call.
   const rules = checks.reduce((n, c) => n + (c.rules?.length ?? 0), 0)
   const forks = [...log.matchAll(/\[plugin_model_fork\] finished: .*?input=(\d+) output=(\d+) cacheRead=(\d+)/g)]
   const sum = k => forks.reduce((n, m) => n + Number(m[k]), 0)
-  const sideCalls = json(/deepseek-supervisor: SIDE_CALL (\{.*\})/g)
-  const assistance = json(/deepseek-supervisor: ASSIST (\{.*\})/g)
+  const sideCalls = json(/(?:code-supervisor|deepseek-supervisor): SIDE_CALL (\{.*\})/g)
+  const assistance = json(/(?:code-supervisor|deepseek-supervisor): ASSIST (\{.*\})/g)
   return { passes, items, rules, sideCalls, assistance, review: reviewMetrics(log), input: sum(1), output: sum(2), cached: sum(3) }
 }
 
@@ -180,7 +180,7 @@ const once = ({ task, arm, rep }) =>
     const frozenFlags = experiment ? ['--setting-sources', '', '--strict-mcp-config', '--mcp-config', '{"mcpServers":{}}', '--model', experiment.worker.id, ...effortFlags] : []
     const started = Date.now()
     const isolated = experiment ? mkdtempSync(join(tmpdir(), 'dss-eval-context-')) : null
-    const env = { ...process.env, DSS_PROMPT: task.prompt, DEEPSEEK_SUPERVISOR: arm === 'on' ? 'on' : 'off', ...(isolated ? { HOME: isolated, CLAUDE_CONFIG_DIR: join(isolated, '.claude') } : {}) }
+    const env = { ...process.env, DSS_PROMPT: task.prompt, CODE_SUPERVISOR: arm === 'on' ? 'on' : 'off', ...(isolated ? { HOME: isolated, CLAUDE_CONFIG_DIR: join(isolated, '.claude') } : {}) }
     const child = spawn(cmd, [...extraArgs, ...frozenFlags, ...pluginArgs, '--debug-file', debug, '--output-format', 'stream-json', '--verbose', '--allowedTools', TOOLS, '-p', task.prompt], { cwd: work, detached: true, env })
     let stdout = ''
     let outputTruncated = false

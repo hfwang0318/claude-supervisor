@@ -21,7 +21,7 @@ export const agentArgs = mode => {
 export const agentEnvironment = () => ({
   HOME: '/root', CLAUDE_CONFIG_DIR: '/root/.claude-eval', ANTHROPIC_API_KEY: 'isolated-eval', ANTHROPIC_BASE_URL: 'http://model-gateway:8080', ANTHROPIC_MODEL: MODEL,
   ANTHROPIC_DEFAULT_SONNET_MODEL: MODEL, ANTHROPIC_DEFAULT_OPUS_MODEL: MODEL, ANTHROPIC_DEFAULT_HAIKU_MODEL: MODEL, CLAUDE_CODE_SUBAGENT_MODEL: MODEL,
-  CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1', CLAUDE_CODE_DISABLE_AUTO_MEMORY: '1', DISABLE_AUTOUPDATER: '1', IS_SANDBOX: '1', DEEPSEEK_SUPERVISOR: 'on'
+  CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1', CLAUDE_CODE_DISABLE_AUTO_MEMORY: '1', DISABLE_AUTOUPDATER: '1', IS_SANDBOX: '1', CODE_SUPERVISOR: 'on'
 })
 const quote = text => `'${text.replaceAll("'", "'\\''")}'`
 export const patchArgs = baseCommit => ['diff', '--cached', '--binary', baseCommit]
@@ -110,7 +110,7 @@ export const runAgent = async (task, instruction, mode, runtime, network, out, {
     const historical = !preflight && modes[mode] === 'supervise'
     if (historical && (!identity.reviewSessionSHA256 || createHash('sha256').update(readFileSync(join(runtime, 'review-session.mjs'))).digest('hex') !== identity.reviewSessionSHA256)) throw Error('historical session driver identity mismatch; freeze a new runtime')
     receipt.headlessLifecycle = historical ? 'stream-open-review-terminal' : 'single-shot'
-    const nativeArgs = preflight ? ['/opt/eval/claude', '--plugin-dir', '/opt/eval/plugin-facts', '--setting-sources', '', '-p', '/deepseek-supervisor issues'] : agentArgs(mode)
+    const nativeArgs = preflight ? ['/opt/eval/claude', '--plugin-dir', '/opt/eval/plugin-facts', '--setting-sources', '', '-p', '/code-supervisor issues'] : agentArgs(mode)
     const args = historical ? ['/opt/eval/node', '/opt/eval/review-session.mjs', ...nativeArgs] : nativeArgs
     const ran = await command(['exec', '-i', ...env, name, 'bash', '-c', `cd /app 2>/dev/null || cd /testbed; export PATH="/opt/eval:$PATH"; ${args.map(quote).join(' ')}`], { input: preflight ? undefined : instruction, timeoutMs, signal, log: join(out, 'trajectory.jsonl') })
     receipt.status = ran.cancelled ? 'cancelled' : ran.timedOut ? 'timeout' : ran.exitCode === 0 ? 'completed' : 'agent-error'

@@ -1,5 +1,5 @@
 import type { AssistInput, AssistPacket, FactRequest, FactView } from './contracts'
-import { bytesOf, redact } from '../hooks/prompt'
+import { bytesOf, isSupervisorNote, redact } from '../hooks/prompt'
 
 const objectOf = (text: string): Record<string, unknown> | null => {
   if (bytesOf(text) > 32768) return null
@@ -72,7 +72,7 @@ export const buildLocalAssistPacket = (input: AssistInput, view: FactView, text:
   }))
 }
 export const assistNote = (packet: AssistPacket, view: FactView) => [
-  '[deepseek-supervisor] Read-only location facts (advisory; main model decides).',
+  '[code-supervisor] Read-only location facts (advisory; main model decides).',
   `Requirement: ${packet.requirementQuote}`,
   `Question: ${packet.question}`,
   ...(view.searchScope ? [`Literal search scope: ${view.searchScope.paths.join(', ')}; terms: ${view.searchScope.terms.join(', ')}. Explicitly selected files may also be included; anything outside this search scope remains unknown.`] : []),
@@ -93,7 +93,7 @@ const knownCall = (line: string, name: string) => {
 // Observe a candidate implementation missing call/import context, or a concrete API
 // error. No reading-count heuristic, guessed target or pre-edit interception.
 export const assistSignal = (asked: string, rows: readonly Row[], cwd: string): string | null => {
-  const lastPrompt = rows.findLastIndex(r => r.role === 'user' && r.text.trim() !== '' && !r.text.includes('[deepseek-supervisor]') && !/^\s*<(?:system-reminder|command-|local-command|teammate-message)|^\s*Another Claude session sent a message/.test(r.text))
+  const lastPrompt = rows.findLastIndex(r => r.role === 'user' && r.text.trim() !== '' && !isSupervisorNote(r.text) && !/^\s*<(?:system-reminder|command-|local-command|teammate-message)|^\s*Another Claude session sent a message/.test(r.text))
   const relevantRows = lastPrompt >= 0 ? rows.slice(lastPrompt + 1) : rows.filter(r => r.role === 'assistant').slice(-1)
   const uses = relevantRows.filter(r => r.role === 'assistant').flatMap(r => r.toolUses ?? [])
   for (const use of [...uses].reverse()) {

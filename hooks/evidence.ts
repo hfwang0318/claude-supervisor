@@ -1,4 +1,4 @@
-import { base, bytesOf, claimsOf, clip, leaves, redact, squash } from './prompt'
+import { base, bytesOf, claimsOf, clip, isSupervisorNote, leaves, redact, squash } from './prompt'
 
 // Rules, not a model. The session's own tool calls say what was run, in what order,
 // and how it ended; the model's words say what it believes. Where the two disagree,
@@ -217,7 +217,7 @@ const signatureOf = (out: string) =>
 // engine's own reminders.
 // Another session's message is not the person asking (2026-10-09: a teammate's "run the
 // checks" held the answer to it).
-const isPerson = (r: Row) => r.role === 'user' && r.text.trim() !== '' && !r.text.includes('[deepseek-supervisor]') && !/^\s*<(?:system-reminder|command-|local-command|teammate-message)|^\s*Another Claude session sent a message/.test(r.text)
+const isPerson = (r: Row) => r.role === 'user' && r.text.trim() !== '' && !isSupervisorNote(r.text) && !/^\s*<(?:system-reminder|command-|local-command|teammate-message)|^\s*Another Claude session sent a message/.test(r.text)
 
 // The session's main loop as a sequence of tool calls, each with its position; a
 // row's text is said before the row's own tool calls run.

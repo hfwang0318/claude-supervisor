@@ -128,7 +128,7 @@ for (const invalidation of ['prompt', 'off', 'cancel', 'workspace']) test(`late 
   for (let n = 0; n < 10 && state.calls < 2; n++) await clock.advance(10)
   expect(state.calls).toBe(2)
   if (invalidation === 'prompt') await $.prompt.submit({ text: 'New task.', origin: { kind: 'composer' } } as never)
-  if (invalidation === 'off') await $.command.run({ command: 'deepseek-supervisor', args: 'off' } as never)
+  if (invalidation === 'off') await $.command.run({ command: 'code-supervisor', args: 'off' } as never)
   if (invalidation === 'cancel') await $.turn.complete({ answer: '', durationMs: 1, isAborted: true, turnId: 't', reason: 'aborted' } as never)
   if (invalidation === 'workspace') { state.rows.push({ role: 'assistant', text: '', toolUses: [{ tool: 'Read', input: { file_path: '/p/utils.cjs' }, text: 'changed' }] }); await batch($) }
   release()
@@ -164,7 +164,7 @@ for (const invalidate of ['prompt', 'off', 'cancel']) test(`facts packet dropped
   for (let n = 0; n < 100 && !state.inStatus; n++) await clock.advance(10)
   expect(state.inStatus).toBe(true)
   if (invalidate === 'prompt') await $.prompt.submit({ text: 'New task.', origin: { kind: 'composer' } } as never)
-  if (invalidate === 'off') await $.command.run({ command: 'deepseek-supervisor', args: 'off' } as never)
+  if (invalidate === 'off') await $.command.run({ command: 'code-supervisor', args: 'off' } as never)
   if (invalidate === 'cancel') await $.turn.complete({ answer: '', durationMs: 1, isAborted: true, turnId: 't', reason: 'aborted' } as never)
   release()
   expect((await pending).additionalContext).toEqual(['host context'])

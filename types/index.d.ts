@@ -211,6 +211,6 @@ export type Reading = {
 
 declare module 'claude-code' {
   interface PluginState {
-    'deepseek-supervisor': { cards: Cards | null; isHidden: boolean; track: Track; readings: Reading[] }
+    'code-supervisor': { cards: Cards | null; isHidden: boolean; track: Track; readings: Reading[] }
   }
 }

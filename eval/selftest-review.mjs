@@ -39,15 +39,15 @@ try {
   const invalid = spawnSync(process.execPath, ['eval/swe-pro/run.mjs', '--experimental-mode', 'bogus', '--dry-run'], { encoding: 'utf8' })
   assert.notEqual(invalid.status, 0)
   const dims = ['requirement-plan', 'plan-implementation', 'architecture', 'direction', 'exploration', 'verification', 'recovery']
-  const log = dims.map(d => `deepseek-supervisor: REVIEW ${JSON.stringify({ phase: 'completion', mode: 'supervise', reviewed: [d], unreviewed: dims.filter(x => x !== d), dimension: d, recommendation: 'adjust', action: 'none', reason: 'prepared' })}`).join('\n')
+  const log = dims.map(d => `code-supervisor: REVIEW ${JSON.stringify({ phase: 'completion', mode: 'supervise', reviewed: [d], unreviewed: dims.filter(x => x !== d), dimension: d, recommendation: 'adjust', action: 'none', reason: 'prepared' })}`).join('\n')
   const metrics = reviewMetrics(log)
   assert.deepEqual(Object.keys(metrics.dimensions).sort(), dims.sort())
   assert.equal(metrics.reviews.length, 7)
   assert.equal(metrics.validatedBenefit, 'unknown', 'the presence of advice must not certify correctness or behavior improvement')
-  assert.equal(reviewMetrics('deepseek-supervisor: ASSIST {\"delivery\":\"context-returned\",\"packet\":{\"kind\":\"location\"}}').factsReturned, 1)
-  assert.equal(reviewMetrics('deepseek-supervisor: REVIEW_DELIVERY {\"delivery\":\"context-returned\",\"sourceFactCount\":2}').sourceFactCount, 2)
+  assert.equal(reviewMetrics('code-supervisor: ASSIST {\"delivery\":\"context-returned\",\"packet\":{\"kind\":\"location\"}}').factsReturned, 1)
+  assert.equal(reviewMetrics('code-supervisor: REVIEW_DELIVERY {\"delivery\":\"context-returned\",\"sourceFactCount\":2}').sourceFactCount, 2)
   assert.equal(metrics.mainActionChanged, 'unknown')
-  assert.equal(reviewMetrics('deepseek-supervisor: REVIEW_DELIVERY {\"delivery\":\"context-returned\"}').factsReturned, 0, 'architecture advice is not a source fact packet')
+  assert.equal(reviewMetrics('code-supervisor: REVIEW_DELIVERY {\"delivery\":\"context-returned\"}').factsReturned, 0, 'architecture advice is not a source fact packet')
   assert.equal(metrics.deliveryCount, 0, 'review completion alone cannot stand for delivery')
   assert.ok(readFileSync('eval/experiment.mjs', 'utf8').includes("'supervise'"))
   const reportEvent = { kind: 'engineering-review', id: 'long-report', report: 'all evidence survives', action: 'none' }
@@ -55,7 +55,7 @@ try {
   let reportHash = 2166136261
   for (let i = 0; i < serializedReport.length; i++) reportHash = Math.imul(reportHash ^ serializedReport.charCodeAt(i), 16777619)
   const reportChecksum = (reportHash >>> 0).toString(16)
-  const reviewLine = (marker, value) => `deepseek-supervisor: ${marker} ${JSON.stringify(value)}`
+  const reviewLine = (marker, value) => `code-supervisor: ${marker} ${JSON.stringify(value)}`
   const reportHead = reviewLine('REVIEW', { id: reportEvent.id, eventEncoding: 'json-parts', parts: 2, characters: serializedReport.length, checksum: reportChecksum })
   const reportParts = [serializedReport.slice(0, 40), serializedReport.slice(40)].map((text, index) => reviewLine('REVIEW_PART', { id: reportEvent.id, checksum: reportChecksum, index, total: 2, text }))
   assert.equal(reviewMetrics([reportHead, ...reportParts.toReversed()].join('\n')).reviews[0]?.report, 'all evidence survives', 'reassemble diagnostic framing rather than counting the header as a report')
@@ -75,7 +75,7 @@ try {
   assert.equal(altered.reviews.length, 0)
   assert.equal(altered.reportAudit.alteredRecords, 1, 'privacy-altered text must not be counted as exact')
   assert.equal(reviewMetrics(reportParts.join('\n')).reportAudit.orphanPartGroups, 1)
-  assert.equal(reviewMetrics('deepseek-supervisor: REVIEW {"id":"broken","report":"…').reportAudit.malformedEvents, 1)
+  assert.equal(reviewMetrics('code-supervisor: REVIEW {"id":"broken","report":"…').reportAudit.malformedEvents, 1)
   const interleaved = reviewMetrics([reportHead, ...reportParts, reviewLine('REVIEW', { id: 'other', report: 'separate short review', action: 'none' })].toReversed().join('\n'))
   assert.equal(interleaved.reviews.length, 2)
   const ordered = reviewMetrics([reportHead, ...reportParts, reviewLine('REVIEW', { id: 'other', report: 'later short review' })].join('\n'))
@@ -84,7 +84,7 @@ try {
   const prepared = { id: 'review-1', status: 'prepared', modelId: 'fixture', promptSignature: 'fixture-signature', context: { sources: [{ id: 'req', kind: 'requirement', text: 'Keep the public API.' }] } }
   const serializedInput = JSON.stringify(prepared), splitAt = 67
   const head = { id: prepared.id, status: 'prepared', modelId: 'fixture', promptSignature: prepared.promptSignature, contextEncoding: 'json-parts', parts: 2, characters: serializedInput.length }
-  const eventLine = (marker, value) => `deepseek-supervisor: ${marker} ${JSON.stringify(value)}`
+  const eventLine = (marker, value) => `code-supervisor: ${marker} ${JSON.stringify(value)}`
   const inputHead = eventLine('REVIEW_INPUT', head)
   const inputParts = [serializedInput.slice(0, splitAt), serializedInput.slice(splitAt)].map((text, index) => eventLine('REVIEW_INPUT_PART', { id: prepared.id, promptSignature: prepared.promptSignature, index, total: 2, text }))
   const reconstructed = reviewMetrics([inputHead, ...inputParts.toReversed()].join('\n'))
@@ -95,7 +95,7 @@ try {
     assert.equal(inputAudit.prepared, 0, 'missing, duplicated or mismatched parts must not fabricate a complete context')
     assert.equal(inputAudit.incompleteInputs, 1)
   }
-  const clippedAudit = reviewMetrics('deepseek-supervisor: REVIEW_INPUT {"context":{"sources":[…').inputAudit
+  const clippedAudit = reviewMetrics('code-supervisor: REVIEW_INPUT {"context":{"sources":[…').inputAudit
   assert.equal(clippedAudit.prepared, 0)
   assert.equal(clippedAudit.malformedEvents, 1, 'old clipped records stay explicitly unavailable')
   const { readReviewInputs } = await import('./swe-pro/review-metrics.mjs')

@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 
 import { changesOf, contradictions, evidenceOf, isCheckCommand, recordFindings, reviewChangesOf, settledBy, skipped, supports, unreported } from '../hooks/evidence'
-import { factsText, parseTurn, probeRefusal, redact, refusal, sanitize } from '../hooks/prompt'
+import { factsText, isSupervisorNote, parseTurn, probeRefusal, redact, refusal, sanitize } from '../hooks/prompt'
 
 type Use = { tool_use_id?: string; tool: string; input: Record<string, unknown>; text?: string; isError?: true }
 const say = (text: string, ...toolUses: Use[]) => ({ role: 'assistant', text, toolUses })
@@ -14,6 +14,12 @@ const judge = (rows: unknown[], claim: string) => {
   const ev = evidenceOf(rows as never)
   return contradictions(ev, [claim]).filter(f => settledBy(ev, { rule: f.kind, quote: f.quote, probe: f.probe, saw: f.saw }) === undefined)
 }
+
+test('notes from either plugin name are not the person speaking', () => {
+  expect(isSupervisorNote('[code-supervisor] a note')).toBe(true)
+  expect(isSupervisorNote('[deepseek-supervisor] a note')).toBe(true)
+  expect(isSupervisorNote('what the person said')).toBe(false)
+})
 
 test('a pass claimed after a run that failed is a failed check, whatever pipe hid the exit code', async () => {
   const rows = [ask, say('', bash('python3 -m unittest 2>&1 | tail -1', 'FAILED (failures=1)')), say('All tests pass.')]

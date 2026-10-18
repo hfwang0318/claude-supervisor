@@ -25,7 +25,7 @@ if (!flags.includes('--pure')) {
   run('manifest/hook contract', 'claude', ['plugin', 'validate', '.'])
   if (!existsSync(join(root, '.claude-plugin/types/tsconfig.json'))) {
     // A local plugin command handles this prompt; no model prompt is submitted.
-    run('host type generation (local command)', 'claude', ['--plugin-dir', root, '--setting-sources', '', '-p', '/deepseek-supervisor issues'])
+    run('host type generation (local command)', 'claude', ['--plugin-dir', root, '--setting-sources', '', '-p', '/code-supervisor issues'])
   }
   if (!existsSync(join(root, '.claude-plugin/types/tsconfig.json'))) { console.error('Host types missing: full engineering checks unavailable'); process.exit(1) }
   run('TypeScript', process.execPath, ['node_modules/typescript/bin/tsc', '-p', '.'])

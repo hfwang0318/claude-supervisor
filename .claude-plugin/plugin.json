@@ -1,6 +1,6 @@
 {
-  "name": "deepseek-supervisor",
-  "version": "0.9.0",
+  "name": "code-supervisor",
+  "version": "0.10.0",
   "description": "Evidence-based supervision for any side model: defaults to the current worker and validates observations without assuming superior model capability.",
   "author": {
     "name": "LACAN-1"
