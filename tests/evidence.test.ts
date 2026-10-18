@@ -103,6 +103,26 @@ test('a run of the tests is told by the command at the head of a piece, not by a
     expect(isCheckCommand(c)).toBe(false)
 })
 
+test('searching test source through quoted or escaped alternatives records no check run', () => {
+  // Actual pilot004 search consumed a verification milestone before any edit.
+  const actual = String.raw`grep -n "invalidate\|placeholder\|loading\|isLive\|page" applications/mail/src/app/containers/mailbox/tests/Mailbox.events.test.tsx | head -40`
+  for (const command of [actual, String.raw`grep -n invalidate\|placeholder\|loading tests/reload.test.tsx | head -40`, `timeout 5 grep -n 'loading|page' tests/reload.test.tsx | head -40`]) {
+    expect(evidenceOf([say('', bash(command, '78: const page = 2;'))]).runs).toEqual([])
+  }
+  const real = `${actual}; npm test`
+  expect(evidenceOf([say('', bash(real, 'Tests: 4 passed'))]).runs.length).toBe(1)
+})
+
+test('quoted shell separators cannot turn printed or searched text into a check command', () => {
+  for (const command of [`printf '%s' 'example | pytest -q'`, `grep -n "word; npm test" tests/example.ts`, String.raw`grep -n "escaped\"|pytest" tests/example.ts`]) {
+    expect(isCheckCommand(command)).toBe(false)
+    expect(evidenceOf([say('', bash(command, 'example text'))]).runs).toEqual([])
+  }
+  for (const command of [`printf '%s' 'example | pytest -q'; npm test`, `grep -n "a|b" file.ts && pytest -q`, `npm test -- --testNamePattern='a|b' 2>&1 | tail -4`]) {
+    expect(isCheckCommand(command)).toBe(true)
+  }
+})
+
 test('saying tests were written is not saying they pass', async () => {
   expect(judge([ask, say('Done: added 3 tests for total().')], 'Done: added 3 tests for total().')).toEqual([])
   expect(judge([ask, say('已完成，新增了 3 个测试用例。')], '已完成，新增了 3 个测试用例。')).toEqual([])

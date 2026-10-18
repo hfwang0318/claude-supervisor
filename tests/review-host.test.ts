@@ -694,6 +694,27 @@ test('incremental mode uses completed request steps, skips empty intervals and r
   expect(state.timeouts.every(t => t === 0)).toBe(true)
 })
 
+test('a quoted-alternation source search cannot spend the first-write review reservation', { options: { ...incrementalOptions, review_interval: '1' } }, async ($, on) => {
+  const { state, clock } = world(on); state.rows = []; state.outputs = Array(3).fill('A bounded advisory observation, not a correctness verdict.')
+  on('turn.step', async function* (_$, e) { return { turnId: e.turnId, index: e.index, answer: 'Explore the public API and its callers.', toolUses: [], stopReason: 'tool_use', usage: null } })
+  on('tool.call', () => ({ result: {}, text: 'written', ref: 1 }) as never)
+  await start($)
+  for await (const chunk of $.turn.step({ turnId: 't', index: 0, model: 'fixture', messageCount: 1 })) {}
+  await flushBackground(clock); await batch($)
+  expect(state.calls).toBe(1)
+  state.rows = [{ role: 'assistant', text: '', toolUses: [{ tool_use_id: 'source-search', tool: 'Bash', input: { command: String.raw`grep -n "invalidate\|placeholder\|loading\|isLive\|page" tests/Mailbox.events.test.tsx | head -40` }, text: '78: const page = 2;', result: { exitCode: 0 } }] }] as never
+  await observeBatch($, clock)
+  expect(state.calls).toBe(1)
+  await $.tool.call({ tool: 'Write', tool_use_id: 'first-write', file_path: '/p/api.js', content: 'exports.old = () => 2' } as never)
+  await flushBackground(clock)
+  expect(state.calls).toBe(2)
+  const context = JSON.parse(state.prompts[1]!.split('\n\n').at(-1)!)
+  expect(context.opportunity.reasons).toEqual(['first-write'])
+  expect(context.sources.some((s: { kind: string }) => s.kind === 'proposed-change')).toBe(true)
+  await batch($); await observeStop($, clock, 'Completed; actual API behavior remains to be verified.')
+  expect(state.calls).toBe(3)
+})
+
 for (const invalid of [{ review_schedule: 'typo' }, { review_interval: '0' }, { review_max_calls: 'Infinity' }, { review_output_budget: '-1' }]) test(`invalid incremental policy ${JSON.stringify(invalid)} makes no semantic call`, { options: { ...incrementalOptions, ...invalid } }, async ($, on) => {
   const { state, clock } = world(on); await start($)
   await observeStop($, clock, 'Completed.')

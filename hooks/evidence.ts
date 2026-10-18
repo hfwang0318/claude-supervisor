@@ -18,7 +18,26 @@ const PYTHON = String.raw`python3?(?:\.\d+)?(?:\s+-[A-Za-z]+|\s+-[XW]\s*\S+)*?`
 const RUNNER = new RegExp(String.raw`^(?:(?:sudo|time|nice|timeout\s+\S+|env\s+\S+=\S*|\w+=\S*|uv run|poetry run|pipenv run|hatch run|npx|pnpm exec|bunx|${PYTHON}\s+-m|py\s+-m|coverage\s+run(?:\s+--?[\w-]+(?:=\S+)?)*?\s+-m)\s+)*`)
 const CHECK =
   /^(?:pytest|py\.test|unittest|nose2|tox|nox|jest|vitest|mocha|ava|rspec|phpunit|ctest|tsc|mypy|pyright|ruff|flake8|pylint|eslint|go (?:test|build|vet)|cargo (?:test|build|check|clippy)|(?:npm|pnpm|yarn|bun) (?:run )?(?:test|build|lint|check|typecheck)|deno test|bun test|node --test|dotnet (?:test|build)|swift (?:test|build)|mvn|gradle|\.\/gradlew|make|bazel test|\S+ plugin (?:test|validate)|python3?(?:\.\d+)?(?:\s+-[A-Za-z]+)*\s+(?:[\w./-]*\/)?(?:test_[\w-]*|[\w-]*_test|tests?|[\w-]*selftest[\w-]*)\.py|(?:node|bun|deno run|tsx|ts-node)(?:\s+--?[\w-]+)*\s+(?:[\w./-]*\/)?[\w.-]*(?:test|spec)[\w.-]*\.[cm]?[jt]sx?|(?:(?:ba)?sh\s+|\.\/)[\w./-]*(?:run[_-]?)?tests?[\w-]*\.sh)(?=\s|$)/
-const pieces = (command: string) => command.split(/&&|\|\||[;|\n]/).map(p => p.trim().replace(RUNNER, ''))
+const pieces = (command: string) => {
+  const result: string[] = []
+  let start = 0, quote = '', escaped = false
+  // Split shell control operators, not quoted/escaped search patterns or printed
+  // examples. This only recognizes record scopes; it never authorizes execution.
+  for (let i = 0; i < command.length; i++) {
+    const char = command[i]!
+    if (escaped) { escaped = false; continue }
+    if (char === '\\' && quote !== "'") { escaped = true; continue }
+    if (quote) { if (char === quote) quote = ''; continue }
+    if (char === "'" || char === '"') { quote = char; continue }
+    if (char === ';' || char === '|' || char === '\n' || char === '&' && command[i + 1] === '&') {
+      result.push(command.slice(start, i))
+      if (command[i + 1] === char && (char === '|' || char === '&')) i++
+      start = i + 1
+    }
+  }
+  result.push(command.slice(start))
+  return result.map(p => p.trim().replace(RUNNER, ''))
+}
 export const isCheckCommand = (command: string) => pieces(command).some(p => CHECK.test(p))
 // What each piece of a command runs, by file name: the program and what it is given
 // (`manage.py test`, `npm run verify`), not the folders they sit in. A utility runs nothing

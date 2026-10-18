@@ -32,6 +32,19 @@ try {
   const context = opportunity => buildIncrementalContext(binding, 'Preserve the public API and verify the requested behavior.', opportunity, '', 'exploration')
   const checked = []
   {
+    const fixture = JSON.parse(readFileSync(join(root, 'eval/data/review-replay-v1/source-search.json')))
+    if (existsSync(join(root, fixture.source.artifact))) {
+      assert.equal(createHash('sha256').update(readFileSync(join(root, fixture.source.artifact))).digest('hex'), fixture.source.sha256)
+      availableSourceHashes++
+    }
+    const use = fixture.tool
+    const rows = [{ role: 'assistant', text: '', toolUses: [{ tool: use.tool, input: use.input, text: use.output, result: { exitCode: use.exitCode } }] }]
+    assert.equal(evidenceOf(rows).runs.length, 0, 'reading test source must not create a verification milestone')
+    const actualCheck = [{ role: 'assistant', text: '', toolUses: [{ tool: 'Bash', input: { command: use.input.command + '; npm test' }, text: 'Tests: 4 passed', result: { exitCode: 0 } }] }]
+    assert.equal(evidenceOf(actualCheck).runs.length, 1, 'a real check following the same search remains recognized')
+    checked.push('actual-source-search-not-a-verification-milestone')
+  }
+  {
     const fixture = JSON.parse(readFileSync(join(root, 'eval/data/review-replay-v1/long-report.json')))
     if (existsSync(join(root, fixture.source.artifact))) {
       assert.equal(createHash('sha256').update(readFileSync(join(root, fixture.source.artifact))).digest('hex'), fixture.source.sha256)

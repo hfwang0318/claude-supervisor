@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "source": {
+    "artifact": "eval/results/incremental-review-flash/pilot-004/actual-review-replies.json",
+    "sha256": "9279883c7869cb3387e6cf6ac26943e5420c18b5ef0b5b9b5c91959aa1bf94b8",
+    "reviewId": "review-50",
+    "sourceId": "event-37",
+    "requestId": "3a216567-deba-482e-a86e-f0c06375cff4",
+    "requestBodySHA256": "e76a9e5866ccc326da75ff2bb8f2394d7b39a16cb826e272a362eae8cc4277b6"
+  },
+  "tool": {
+    "tool": "Bash",
+    "input": {
+      "command": "grep -n \"invalidate\\|placeholder\\|loading\\|isLive\\|page\" applications/mail/src/app/containers/mailbox/tests/Mailbox.events.test.tsx | head -40",
+      "description": "Scan events test for invalidate/page scenarios"
+    },
+    "output": "78:        const page = 2;\n82:            page,\n",
+    "completed": true,
+    "exitCode": null,
+    "truncated": false,
+    "outputStatus": "recorded",
+    "toolUseId": "call_e3252c2d6e354a8d912cbc22"
+  },
+  "interpretation": "Actual public source search was scheduled as verification in pilot004. Output is a grep observation, not a test execution or phase classification."
+}
