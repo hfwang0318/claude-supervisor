@@ -50,6 +50,37 @@ try {
   assert.equal(reviewMetrics('deepseek-supervisor: REVIEW_DELIVERY {\"delivery\":\"context-returned\"}').factsReturned, 0, 'architecture advice is not a source fact packet')
   assert.equal(metrics.deliveryCount, 0, 'review completion alone cannot stand for delivery')
   assert.ok(readFileSync('eval/experiment.mjs', 'utf8').includes("'supervise'"))
+  const reportEvent = { kind: 'engineering-review', id: 'long-report', report: 'all evidence survives', action: 'none' }
+  const serializedReport = JSON.stringify(reportEvent)
+  let reportHash = 2166136261
+  for (let i = 0; i < serializedReport.length; i++) reportHash = Math.imul(reportHash ^ serializedReport.charCodeAt(i), 16777619)
+  const reportChecksum = (reportHash >>> 0).toString(16)
+  const reviewLine = (marker, value) => `deepseek-supervisor: ${marker} ${JSON.stringify(value)}`
+  const reportHead = reviewLine('REVIEW', { id: reportEvent.id, eventEncoding: 'json-parts', parts: 2, characters: serializedReport.length, checksum: reportChecksum })
+  const reportParts = [serializedReport.slice(0, 40), serializedReport.slice(40)].map((text, index) => reviewLine('REVIEW_PART', { id: reportEvent.id, checksum: reportChecksum, index, total: 2, text }))
+  assert.equal(reviewMetrics([reportHead, ...reportParts.toReversed()].join('\n')).reviews[0]?.report, 'all evidence survives', 'reassemble diagnostic framing rather than counting the header as a report')
+  for (const damaged of [
+    [reportHead, reportParts[0]],
+    [reportHead, ...reportParts, reportParts[0]],
+    [reportHead, reportParts[0], reportParts[1].replace('"index":1', '"index":-1')],
+    [reportHead, reportParts[0], reportParts[1].replace('"total":2', '"total":3')],
+    [reportHead, reportHead, ...reportParts],
+  ]) {
+    const result = reviewMetrics(damaged.join('\n'))
+    assert.equal(result.reviews.length, 0, 'damaged report parts are not a completed report')
+    assert.ok(result.reportAudit.incompleteRecords > 0)
+    assert.equal(result.deliveryCount, 0, 'diagnostic parts do not imply delivery')
+  }
+  const altered = reviewMetrics([reportHead, ...reportParts.map(l => l.replace('all evidence survives', 'all evidence altered!'))].join('\n'))
+  assert.equal(altered.reviews.length, 0)
+  assert.equal(altered.reportAudit.alteredRecords, 1, 'privacy-altered text must not be counted as exact')
+  assert.equal(reviewMetrics(reportParts.join('\n')).reportAudit.orphanPartGroups, 1)
+  assert.equal(reviewMetrics('deepseek-supervisor: REVIEW {"id":"broken","report":"…').reportAudit.malformedEvents, 1)
+  const interleaved = reviewMetrics([reportHead, ...reportParts, reviewLine('REVIEW', { id: 'other', report: 'separate short review', action: 'none' })].toReversed().join('\n'))
+  assert.equal(interleaved.reviews.length, 2)
+  const ordered = reviewMetrics([reportHead, ...reportParts, reviewLine('REVIEW', { id: 'other', report: 'later short review' })].join('\n'))
+  assert.deepEqual(ordered.reviews.map(v => v.id), ['long-report', 'other'], 'multipart reconstruction preserves original record order')
+  assert.equal(interleaved.validatedBenefit, 'unknown')
   const prepared = { id: 'review-1', status: 'prepared', modelId: 'fixture', promptSignature: 'fixture-signature', context: { sources: [{ id: 'req', kind: 'requirement', text: 'Keep the public API.' }] } }
   const serializedInput = JSON.stringify(prepared), splitAt = 67
   const head = { id: prepared.id, status: 'prepared', modelId: 'fixture', promptSignature: prepared.promptSignature, contextEncoding: 'json-parts', parts: 2, characters: serializedInput.length }

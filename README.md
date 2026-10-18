@@ -221,15 +221,19 @@ Native redaction remains enabled. The reader separates unaltered reconstructed
 inputs, complete-but-altered diagnostics (`alteredInputs`, never exact input), and
 missing/malformed parts. It does not decode around redaction or certify changed
 source text. Legacy diagnostic formats remain readable with their original limits.
+Long review-result records also use bounded plain-text parts so native logging
+does not silently drop a delivered report. `reportAudit` separately counts
+altered, incomplete and malformed records; reassembly preserves record order.
+This diagnostic integrity does not establish delivery, adoption or correctness.
 
 `review_schedule=legacy` preserves the old explicit-plan / two successful source
 reads / post-check admission and its old budget. Only this schedule applies
 `review_phase=auto|plan|exploration|implementation|failure|completion`. New runtime
 identities bind schedule, interval and budgets; old frozen identities stay
 readable with legacy semantics. `assistance_mode=existing` remains unchanged.
-Free real-record regression: `node eval/replay-review.mjs`. Nine curated cases
-retain public excerpts and source hashes from the 17-round archive and the first
-incremental pilot, with an additional diagnostic-framing regression. Semantic
+Free real-record regression: `node eval/replay-review.mjs`. Curated cases
+retain public excerpts and source hashes from the 17-round archive and subsequent
+incremental pilots, including real long-report diagnostic regressions. Semantic
 quality labels remain manual and are not converted into passing quality scores.
 
 `execution_mode=off` still permits advisory review and explicitly unexecuted

@@ -9,7 +9,7 @@ import { buildAssistPacket, buildLocalAssistPacket, parseFactRequest, assistSign
 import { IncrementalReview, observeStream } from '../supervisor/incremental'
 import type { ReviewOpportunity } from '../supervisor/incremental'
 import { Coordinator, sameBinding, sameTask } from '../supervisor/coordinator'
-import { buildReviewContext, buildIncrementalContext, incrementalLastTool, parseReview, reviewPrompt, reviewInputLogs, REVIEW_DIMENSIONS, hasExplorationEvidence, reviewPhaseMatches } from '../supervisor/review'
+import { buildReviewContext, buildIncrementalContext, incrementalLastTool, parseReview, reviewPrompt, reviewInputLogs, reviewEventLogs, REVIEW_DIMENSIONS, hasExplorationEvidence, reviewPhaseMatches } from '../supervisor/review'
 import { runHistoricalReviewFlow, historicalReviewOutcome } from '../supervisor/review-flow'
 import type { ReviewOutcome } from '../supervisor/review-flow'
 import type { ReviewContext, ReviewReply } from '../supervisor/contracts'
@@ -491,7 +491,7 @@ const engineeringReview = async ($: EngineInterface, list: Rows, final = false, 
     const event = { kind: 'engineering-review', id, binding, mode, phase, reviewSchedule: s.cfg.reviewSchedule, opportunity: context.opportunity, reviewPhase: s.cfg.reviewPhase, contextScope: context.scope, reviewed: decision.reviewed, unreviewed: REVIEW_DIMENSIONS.filter(d => !decision.reviewed.includes(d)), judgment: decision.judgment, report: decision.report ?? null, responseFormat: decision.report ? 'advisory-report' : 'structured-judgment', action: decision.action.kind, actionProtocol: outcome.actionProtocol, reason: outcome.reason, independentExecution: outcome.evidence !== null, sourceIds: context.sources.map(source => source.id), supplementalFacts: outcome.view?.facts.filter(f => outcome!.sourceFactIds.includes(f.id)).map(f => ({ id: f.id, path: f.path, line: f.startLine, fileHash: f.fileHash })) ?? [], observation: outcome.evidence ? { id: outcome.evidence.id, outcome: outcome.evidence.outcome, binding: outcome.evidence.binding, truncated: outcome.evidence.truncated } : null }
     await remember($, event)
     const metadata = event
-    say($, `REVIEW ${JSON.stringify({ ...metadata, dimension: decision.judgment?.dimension ?? null, recommendation: decision.judgment?.recommendation ?? null })}`)
+    for (const line of reviewEventLogs({ ...metadata, dimension: decision.judgment?.dimension ?? null, recommendation: decision.judgment?.recommendation ?? null })) say($, line)
     if (!await current() || !outcome.note || !decision.report && decision.judgment?.recommendation === 'continue' && decision.action.kind === 'none') return null
     retained = true
     return { id, binding, context, decision, outcome, deadlineMs }

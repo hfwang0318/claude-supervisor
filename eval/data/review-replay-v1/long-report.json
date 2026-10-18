@@ -1,0 +1,54 @@
+{
+  "provenance": "Exact normalized public provider report from pilot003; reconstructed allowlisted event metadata, not a recovered truncated host event.",
+  "source": {
+    "artifact": "eval/results/incremental-review-flash/pilot-003/actual-review-replies.json",
+    "sha256": "16f4b03663eedff81f29df7d78a881545ddcaeed93b562ea7e88148688157364"
+  },
+  "event": {
+    "kind": "engineering-review",
+    "id": "review-167",
+    "binding": {
+      "generationId": "input-2",
+      "turnId": "prompt-1",
+      "taskRevision": 1,
+      "workspaceRevision": "tool-record-127",
+      "snapshotId": "unknown"
+    },
+    "mode": "supervise",
+    "phase": "completion",
+    "reviewed": [],
+    "unreviewed": [
+      "requirement-plan",
+      "plan-implementation",
+      "architecture",
+      "direction",
+      "exploration",
+      "verification",
+      "recovery"
+    ],
+    "report": "## Advisory review — checkpoint-241-review-167\n\nScope note: the supplied change material is a bounded excerpt; several implementation pieces the summary describes (`backendActionStarted`/`backendActionFinished` dispatch sites in `useMoveToFolder`, the `holdRequest` reducer, the `load` thunk's stale/failure timer logic, `useElements`' `pendingActions` subscription and `shouldSendRequest`/`loading` gating) are not visible in the retained diffs. I flag those as \"not shown in the provided records,\" not as absent.\n\n### 1. `retryStale` reducer contradicts the \"stays in flight\" requirement as written (plan–implementation)\nThe requirement says a `Stale` response \"must leave the request marked as in flight until the 1-second delay elapses.\" The visible reducer (change, `elementsReducers.ts`) does the opposite: `state.pendingRequest = false; state.owedRequest = true;`. The summary (event-191) asserts the thunk \"stays in flight,\" which conflicts with the reducer text that explicitly stops treating the request as in flight.\n- Hypothesis (not established): the intended \"in flight\" semantics are reproduced behaviorally via `owedRequest` gating `shouldSendRequest`, so no fetch other than the delayed retry is issued. The test's 600 ms wait with `toHaveBeenCalledTimes(1)` supports that behavioral part only for that scenario.\n- Consequence: if any other consumer reads `pendingRequest` (spinners, `loadedEmpty`, hotkeys paths), a stale response now reads as settled-with-placeholder rather than in-flight, which may or may not match the intent of \"keeps presenting itself as loading.\"\n- Next step: locate readers of `pendingRequest` and confirm whether `owedRequest` compensates everywhere; or reconcile the wording with the reducer.\n- Counterevidence: `loadedEmpty` was extended to include `!owedRequest`, showing some consumers were consciously updated; the full reader set is not visible.\n\n### 2. Whether retry timers respect `pendingActions > 0` is not shown (requirement coverage)\n\"When an operation that modifies items is in progress, the mailbox list must not issue a new fetch\" — plausibly including the 1 s stale retry and 2 s failure retry. The records do not show the thunk's timer callbacks checking `pendingActions`. If they don't, a retry could fire mid-operation, violating the no-fetch-while-modifying rule and potentially double-fetching with the middleware's held fetch.\n- Next step: a focused question or read of the `load` thunk's timer callbacks: does issuing the delayed retry check `pendingActions`/re-hold the request?\n- Counterevidence: the summary says \"retries are dropped if the list parameters changed meanwhile,\" but parameter drift is a different gate than in-progress operations.\n\n### 3. Final verification claims rest on runs that precede the last edits (verification)\nSequence of recorded events: the failing-tsc result (event-170) was followed by a clean tsc+eslint run (event-183) — but that same run reported two ESLint `no-unused-vars` errors in `Mailbox.reload.test.tsx`, which were fixed afterwards by a `sed` edit (event-186). No lint or tsc run after event-186 appears in the records, and the jest passes (events 166/184) also precede event-186. Event-191 states \"ESLint on all touched files: clean,\" which the provided records do not establish for the final file state.\n- Consequence: likely low — removing an unused parameter with the `: any` return annotation retained should not reintroduce errors — but the \"verified clean\" claim is not backed by a recorded post-fix run.\n- Next step: one bounded lint+tsc run on the touched files after event-186.\n\n### 4. Held-request parameters may be stale at carry-out time (architecture, hypothesis)\n`useElements` dispatches `holdRequest({ ..., page, params })` at hold time; the middleware later dispatches `load(owedRequestParameters)` from state. If the user changes page/sort/filter between hold and settle, the carried-out fetch uses the captured parameters while the view expects the new ones. The `holdRequest` reducer is not visible; whether it refreshes parameters or the reset path clears `owedRequest` on parameter change is not shown. `reset` reportedly preserves `pendingActions` — its treatment of a pending `owedRequest` across folder switches is also not shown.\n- Next step: inspect `holdRequestReducer` and the `reset` reducer for `owedRequest`/`owedRequestParameters` handling; a distinguishing test would hold a request, change `labelID` (triggering reset), then finish the operation and assert which parameters the fetch uses.\n\n### 5. `useMoveToFolder` wiring is asserted but not visible (verification / source fidelity)\nThe change excerpt for `useApplyLabels.tsx` shows only the added `useDispatch` import; the actual `backendActionStarted`/`backendActionFinished` dispatch placement (issued vs. settled, including error paths) is not in the provided records. The requirement's exact timing semantics (\"from the moment its request is issued until that request settles\") and the overlap test depend on this placement. The passing reload tests are consistent with it but the provided records do not show the code.\n\n### 6. Minor: `retryStale` reducer writes `state.retry` via `newRetry`, ignoring the action's `queryParameters` for the owed-request path (`owedRequestParameters = undefined`)\nThis is deliberate (the summary notes the old retry bookkeeping is decoupled), and `newRetry` with `error: undefined` resets count to 1 for matching payloads. It means the legacy `MAX_ELEMENT_LIST_LOAD_RETRIES` counter no longer bounds stale retries either — with `Stale: 1` returned persistently, the list retries every 1 s indefinitely. That appears to match the spec (no retry cap specified for stale), so I note it as a consequence, not a defect. Dead code (`retry` action, `MAX_ELEMENT_LIST_LOAD_RETRIES`) remains exported; a style/cleanup matter only.\n\n### Counterevidence / resolved items\n- The earlier tsc failures (event-170) and eslint errors (event-183) have visible fixes; I do not reopen them beyond the post-fix verification gap in item 3.\n- The `Mailbox.hotkeys` timeout failure (event-172/174) passed in isolation (event-177) and in the full combined rerun (event-184); treating it as environment flakiness is reasonable, though only two runs support that.\n\n### Direction\nContinue. The core mechanism (hold via `holdRequest`, synchronous carry-out in `elementsMiddleware`, `Stale` handling with fixed delays) is coherent and matches the requirement structure as far as the records show. Priorities: confirm the reducer-vs-requirement \"in flight\" semantics (item 1), the retry-under-pendingActions gate (item 2), and one post-event-186 verification run (item 3).\n\nNo machine action is needed; advisory only.\n\n{\"reviewId\":\"review-167\",\"checkpointId\":\"checkpoint-241-review-167\",\"report\":\"Advisory review. (1) retryStale reducer sets state.pendingRequest = false while the requirement says a stale response must leave the request marked as in flight until the 1s delay elapses; hypothesis is owedRequest gating compensates behaviorally, but readers of pendingRequest are not visible — verify consumers or reconcile wording. (2) Not shown whether the 2s failure-retry and 1s stale-retry timers check pendingActions before issuing; if not, a retry could fire while modifying operations are in progress, violating the no-fetch-while-modifying rule. (3) The final test-file edit (event-186) came after the last recorded lint/tsc/jest runs, so event-191's clean lint/tsc claims are not backed for the final file state; one bounded post-edit lint+tsc run would close this. (4) holdRequest captures page/params at hold time and the middleware later dispatches load(owedRequestParameters); whether parameters are refreshed or reset clears owedRequest on folder change is not visible — possible stale-parameter fetch after settle. (5) The useMoveToFolder backendActionStarted/Finished dispatch placement (issued vs settled, error paths) is asserted in the summary but not visible in the retained change excerpt; the overlap and timing requirements depend on it. (6) Minor: stale retries repeat every 1s indefinitely with no cap (matches spec, no cap specified) and legacy MAX_ELEMENT_LIST_LOAD_RETRIES/retry bookkeeping is now dead on these paths — consequence note, not a defect. Resolved counterevidence: earlier tsc failures and eslint errors have visible fixes; hotkeys timeout passed in isolation and full rerun, consistent with environment flakiness. Direction: continue; verify items 1-3 first.\",\"action\":{\"kind\":\"none\"}}",
+    "responseFormat": "advisory-report",
+    "action": "none",
+    "actionProtocol": "not-requested",
+    "reason": "historical-advice",
+    "sourceIds": [
+      "req",
+      "change",
+      "event-191",
+      "event-166",
+      "event-168",
+      "event-170",
+      "event-172",
+      "event-174",
+      "event-176",
+      "event-177",
+      "event-179",
+      "event-183",
+      "event-184",
+      "event-186",
+      "event-167",
+      "event-169",
+      "event-173"
+    ]
+  }
+}

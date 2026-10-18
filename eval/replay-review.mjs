@@ -5,7 +5,7 @@ import { join, dirname, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { createHash } from 'node:crypto'
 import ts from 'typescript'
-import { readReviewInputs, reviewMetrics } from './swe-pro/review-metrics.mjs'
+import { readReviewInputs, readReviews, reviewMetrics } from './swe-pro/review-metrics.mjs'
 
 // Execute the actual pure production modules, without a host, network or model.
 // Transpilation is confined to a fresh temporary directory; source is untouched.
@@ -18,7 +18,7 @@ try {
     mkdirSync(dirname(join(temp, file)), { recursive: true }); writeFileSync(join(temp, file + '.mjs'), output)
   }
   const { IncrementalReview } = await import(pathToFileURL(join(temp, 'supervisor/incremental.mjs')))
-  const { buildIncrementalContext, incrementalLastTool, parseReview, reviewInputLogs, reviewPrompt } = await import(pathToFileURL(join(temp, 'supervisor/review.mjs')))
+  const { buildIncrementalContext, incrementalLastTool, parseReview, reviewInputLogs, reviewEventLogs, reviewPrompt } = await import(pathToFileURL(join(temp, 'supervisor/review.mjs')))
   const { evidenceOf, reviewChangesOf } = await import(pathToFileURL(join(temp, 'hooks/evidence.mjs')))
   const { Coordinator } = await import(pathToFileURL(join(temp, 'supervisor/coordinator.mjs')))
   const { redact } = await import(pathToFileURL(join(temp, 'hooks/prompt.mjs')))
@@ -31,6 +31,30 @@ try {
   }
   const context = opportunity => buildIncrementalContext(binding, 'Preserve the public API and verify the requested behavior.', opportunity, '', 'exploration')
   const checked = []
+  {
+    const fixture = JSON.parse(readFileSync(join(root, 'eval/data/review-replay-v1/long-report.json')))
+    if (existsSync(join(root, fixture.source.artifact))) {
+      assert.equal(createHash('sha256').update(readFileSync(join(root, fixture.source.artifact))).digest('hex'), fixture.source.sha256)
+      availableSourceHashes++
+    }
+    const event = { ...fixture.event, binding: { ...fixture.event.binding, sessionId: 'private-replay-identity' } }
+    const lines = reviewEventLogs(event).map(line => `deepseek-supervisor: ${line}`)
+    assert.ok(lines.every(line => line.length < 10000), 'serialized diagnostics must fit before the actual native logging boundary')
+    const throughNativeLimit = lines.map(line => line.length > 10000 ? line.slice(0, 10000) + '…' : line).toReversed().join('\n')
+    const reconstructed = readReviews(throughNativeLimit)
+    assert.equal(reconstructed.reviews.length, 1)
+    assert.equal(reconstructed.reviews[0].report, fixture.event.report)
+    assert.equal(reconstructed.reviews[0].binding.sessionId, undefined)
+    assert.equal(reconstructed.alteredReviews.length, 0)
+    assert.equal(reconstructed.incompleteRecords, 0)
+    assert.equal(throughNativeLimit.includes('private-replay-identity'), false)
+    const escaped = reviewEventLogs({ ...event, report: ('\n\t\"\\' + String.fromCharCode(1)).repeat(1800) })
+    assert.ok(escaped.every(line => line.length < 10000), 'JSON escaping must not overflow a plain-text part')
+    const short = readReviews(reviewEventLogs({ id: 'short', binding, report: 'short public advice' }).map(line => `deepseek-supervisor: ${line}`).join('\n'))
+    assert.equal(short.reviews[0].report, 'short public advice')
+    checked.push('historical-long-report-native-log-boundary')
+  }
+
   for (const row of cases['prefixed-real-technical-intents'].texts) {
     const r = new IncrementalReview(1); r.step(row.time, row.text)
     assert.ok(context(r.take()).sources.some(s => s.kind === 'narrative' && s.text === row.text))

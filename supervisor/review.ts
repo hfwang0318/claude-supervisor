@@ -237,6 +237,20 @@ export const reviewInputLogs = (input: { kind: string; id: string; status: strin
   ]
 }
 
+// Long advisory records can exceed the native logger's per-line limit even
+// when the report itself is within budget. Plain parts preserve redaction;
+// this checksum detects log alteration and grants no execution authority.
+export const reviewEventLogs = (event: { id: string; binding: Binding } & Record<string, unknown>): string[] => {
+  const short = JSON.stringify(event)
+  if (short.length <= 6000) return [`REVIEW ${short}`]
+  const diagnostic = { ...event, binding: { ...event.binding, sessionId: undefined }, representation: 'session-id-omitted', omittedBindingFields: ['sessionId'] }
+  const text = JSON.stringify(diagnostic), checksum = diagnosticChecksum(text), parts = Math.ceil(text.length / 1000)
+  return [
+    `REVIEW ${JSON.stringify({ id: event.id, eventEncoding: 'json-parts', parts, characters: text.length, checksum })}`,
+    ...Array.from({ length: parts }, (_, index) => `REVIEW_PART ${JSON.stringify({ id: event.id, checksum, index, total: parts, text: text.slice(index * 1000, (index + 1) * 1000) })}`),
+  ]
+}
+
 export const reviewNote = (context: ReviewContext, reply: ReviewReply) => {
   const j = reply.judgment
   return [

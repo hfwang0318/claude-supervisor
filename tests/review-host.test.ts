@@ -238,6 +238,20 @@ test('generic discovery plus a directory listing waits for source evidence witho
 })
 
 
+test('a long delivered report remains reconstructable after the native log limit', { options }, async ($, on) => {
+  const { state, clock } = world(on); await start($); state.logLimit = 10000
+  const report = 'Evidence and counterevidence: '.repeat(400) + 'final-report-boundary'
+  state.outputs = [report]
+  const delivered = await observeBatch($, clock)
+  expect(delivered.additionalContext?.join('\n')).toContain('final-report-boundary')
+  const headLine = state.logs.find(l => l.includes('REVIEW '))!
+  const head = JSON.parse(headLine.slice(headLine.indexOf('REVIEW ') + 7))
+  const parts = state.logs.filter(l => l.includes('REVIEW_PART ')).map(l => JSON.parse(l.slice(l.indexOf('REVIEW_PART ') + 12)))
+  const event = head.eventEncoding === 'json-parts' ? JSON.parse(parts.sort((a, b) => a.index - b.index).map(p => p.text).join('')) : head
+  expect(event.report).toBe(report)
+  expect(state.calls).toBe(1)
+})
+
 test('a large review input can be reconstructed after the real host log character limit', { options }, async ($, on) => {
   const { state, clock } = world(on); await start($); state.logLimit = 10000
   state.rows[0]!.toolUses[0]!.text = 'source'.repeat(1100) + 'first-source-end'
