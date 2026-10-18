@@ -1,11 +1,28 @@
 import { test, expect } from 'claude-code/testing'
-import { buildReviewContext, parseReview, reviewPrompt, reviewNote, REVIEW_DIMENSIONS, hasExplorationEvidence } from '../supervisor/review'
+import { buildReviewContext, incrementalLastTool, parseReview, reviewPrompt, reviewNote, REVIEW_DIMENSIONS, hasExplorationEvidence } from '../supervisor/review'
 
 const binding = { sessionId: 's', generationId: 'g', turnId: 't', taskRevision: 1, workspaceRevision: 'v1', snapshotId: 'unknown' }
 const asked = 'Keep one shared timer and preserve the public API.'
 const rows = [{ role: 'assistant', text: 'Plan: use separate timers for each operation.', toolUses: [] }]
 const context = () => buildReviewContext(binding, asked, rows, 'scheduler.ts\n- sharedTimer()\n+ timers.forEach(start)', 'implementation')!
 const reply = (dimension = 'requirement-plan') => ({ reviewed: [dimension], judgment: { dimension, question: 'Does this keep one timer?', requirementQuote: 'Keep one shared timer', sourceIds: ['req', 'plan-1'], reason: 'Separate timers conflict with the requested shared timer.', impact: 'Overlapping operations can schedule repeated refreshes.', recommendation: 'replan', uncertainty: 'The implementation still needs a behavior check.' }, action: { kind: 'none' } })
+
+test('incremental tool identity uses included event order and never invents IDs or unsafe paths', () => {
+  const c = context()
+  c.sources = [
+    { id: 'event-12', kind: 'tool', text: JSON.stringify({ tool: 'Read', input: { file_path: '/p/api.ts' }, toolUseId: 'real-read' }) },
+    { id: 'event-9', kind: 'observation', text: JSON.stringify({ tool: 'Bash', input: { command: 'node test.js' }, toolUseId: 'earlier-check' }) },
+    { id: 'event-13', kind: 'narrative', text: 'A later sentence is not a tool.' },
+    { id: 'tool-99', kind: 'tool', text: JSON.stringify({ tool: 'Write', input: {} }) }
+  ]
+  expect(incrementalLastTool(c, '/p')).toEqual({ tool: 'Read', toolUseId: 'real-read', path: 'api.ts' })
+  for (const path of ['/other/api.ts', '../api.ts', 'src/../api.ts']) {
+    c.sources = [{ id: 'event-14', kind: 'tool', text: JSON.stringify({ tool: 'Read', input: { file_path: path } }) }]
+    expect(incrementalLastTool(c, '/p')).toEqual({ tool: 'Read' })
+  }
+  c.sources = [{ id: 'event-15', kind: 'tool', text: '{incomplete' }]
+  expect(incrementalLastTool(c, '/p')).toBe(undefined)
+})
 
 test('a sourced requirement-plan conflict can advise replanning without a command', async () => {
   const c = context(), r = parseReview(c, JSON.stringify(reply()))

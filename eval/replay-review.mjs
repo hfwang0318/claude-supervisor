@@ -18,7 +18,7 @@ try {
     mkdirSync(dirname(join(temp, file)), { recursive: true }); writeFileSync(join(temp, file + '.mjs'), output)
   }
   const { IncrementalReview } = await import(pathToFileURL(join(temp, 'supervisor/incremental.mjs')))
-  const { buildIncrementalContext, parseReview, reviewInputLogs, reviewPrompt } = await import(pathToFileURL(join(temp, 'supervisor/review.mjs')))
+  const { buildIncrementalContext, incrementalLastTool, parseReview, reviewInputLogs, reviewPrompt } = await import(pathToFileURL(join(temp, 'supervisor/review.mjs')))
   const { evidenceOf, reviewChangesOf } = await import(pathToFileURL(join(temp, 'hooks/evidence.mjs')))
   const { Coordinator } = await import(pathToFileURL(join(temp, 'supervisor/coordinator.mjs')))
   const { redact } = await import(pathToFileURL(join(temp, 'hooks/prompt.mjs')))
@@ -128,6 +128,19 @@ try {
     assert.equal(parseReview(c, 'Coverage remains uncertain: test success alone is not an exact timing or intermediate-state oracle.', true).judgment, null)
     const prompt = reviewPrompt(c, 'supervise')
     assert.ok(prompt.endsWith(JSON.stringify(c)), 'all actual oracles/code/counterevidence reach the same reviewer input')
+    const latestTool = incrementalLastTool(c, '/app')
+    assert.equal(latestTool.toolUseId, 'call_3f170e44b280413097477c9a')
+    assert.equal(latestTool.tool, 'Bash')
+    // Synthetic budget pressure on original public file excerpts, not a claim
+    // that this sequence occurred in the historical model session.
+    const excerpts = safe.slice(0, 2).map((chunk, index) => ({ tool: 'Edit', input: { file_path: `/app/historical-${index}.tsx`, old_string: '', new_string: chunk.slice(0, 800) }, text: 'recorded' }))
+    const pressure = Array.from({ length: 6 }, () => ({ tool: 'Edit', input: { file_path: '/app/historical-0.tsx', old_string: '', new_string: safe[0].slice(0, 1000) }, text: 'recorded' }))
+    const selected = reviewChangesOf(evidenceOf([{ role: 'user', text: data.requirement }, { role: 'assistant', text: '', toolUses: [...pressure, ...excerpts] }]), 2000)
+    assert.ok(selected.text.includes('+ ' + excerpts[0].input.new_string.split('\n')[0]))
+    assert.ok(selected.text.includes('+ ' + excerpts[1].input.new_string.split('\n')[0]))
+    assert.equal(selected.text.split('--- /app/historical-0.tsx').length - 1, 1)
+    assert.ok(selected.omitted.includes('change-record-budget'))
+    assert.ok(Buffer.byteLength(selected.text) <= 2000)
     // Real legacy diagnostic parts stay frozen. The new reader can distinguish
     // their observed host alteration without authenticating changed source text.
     const debugPath = join(root, 'eval/results/incremental-review-flash/pilot-001/run/instance_protonmail__webclients-e65cc5f33719e02e1c378146fb981d27bc24bdf4/facts/agent/debug.log')
@@ -139,6 +152,7 @@ try {
     }
   }
   checked.push('completion-code-and-counterevidence: actual-inputs/semantic-oracle-labels-manual')
+  checked.push('historical-included-tool-identity', 'historical-excerpts-with-synthetic-budget-pressure')
   const traceFlag = process.argv.indexOf('--trace'), sweep = []
   if (traceFlag >= 0) {
     const trace = JSON.parse(readFileSync(process.argv[traceFlag + 1]))

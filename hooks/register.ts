@@ -9,7 +9,7 @@ import { buildAssistPacket, buildLocalAssistPacket, parseFactRequest, assistSign
 import { IncrementalReview, observeStream } from '../supervisor/incremental'
 import type { ReviewOpportunity } from '../supervisor/incremental'
 import { Coordinator, sameBinding, sameTask } from '../supervisor/coordinator'
-import { buildReviewContext, buildIncrementalContext, parseReview, reviewPrompt, reviewInputLogs, REVIEW_DIMENSIONS, hasExplorationEvidence, reviewPhaseMatches } from '../supervisor/review'
+import { buildReviewContext, buildIncrementalContext, incrementalLastTool, parseReview, reviewPrompt, reviewInputLogs, REVIEW_DIMENSIONS, hasExplorationEvidence, reviewPhaseMatches } from '../supervisor/review'
 import { runHistoricalReviewFlow, historicalReviewOutcome } from '../supervisor/review-flow'
 import type { ReviewOutcome } from '../supervisor/review-flow'
 import type { ReviewContext, ReviewReply } from '../supervisor/contracts'
@@ -450,7 +450,8 @@ const engineeringReview = async ($: EngineInterface, list: Rows, final = false, 
   const rawPath = input?.file_path ?? input?.path
   const path = typeof rawPath === 'string' ? rawPath.startsWith(captured.cwd + '/') ? rawPath.slice(captured.cwd.length + 1) : rawPath : ''
   const safePath = path && !path.startsWith('/') && !path.split('/').some(part => part === '..') && redact(path) === path ? path : undefined
-  context.checkpoint = { reviewId: id, checkpointId: `checkpoint-${captured.sequence}-${id}`, observedAt: captured.capturedAt, sequence: captured.sequence, requirementSignature: signatureOfChange(captured.asked), materialSignature: signatureOfChange(JSON.stringify(context.sources)), sourceIds: context.sources.map(source => source.id), ...(lastTool && use ? { lastTool: { tool: use.tool, ...(use.tool_use_id ? { toolUseId: use.tool_use_id } : {}), ...(safePath ? { path: safePath } : {}) } } : {}) }
+  const checkpointTool = incremental ? incrementalLastTool(context, captured.cwd) : lastTool && use ? { tool: use.tool, ...(use.tool_use_id ? { toolUseId: use.tool_use_id } : {}), ...(safePath ? { path: safePath } : {}) } : undefined
+  context.checkpoint = { reviewId: id, checkpointId: `checkpoint-${captured.sequence}-${id}`, observedAt: captured.capturedAt, sequence: captured.sequence, requirementSignature: signatureOfChange(captured.asked), materialSignature: signatureOfChange(JSON.stringify(context.sources)), sourceIds: context.sources.map(source => source.id), ...(checkpointTool ? { lastTool: checkpointTool } : {}) }
   let deadlineMs = Infinity
   const invalidReason = async () => {
     if (sessions.get(binding.sessionId) !== s) return 'cancelled'

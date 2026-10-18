@@ -111,6 +111,22 @@ export const buildIncrementalContext = (binding: Binding, asked: string, opportu
   return context.sources.length > 1 ? context : null
 }
 
+// Incremental sources are priority ordered and use event IDs, not legacy tool-N
+// offsets. Bind only to included public tool records; never infer a missing ID.
+export const incrementalLastTool = (context: ReviewContext, cwd: string): NonNullable<ReviewContext['checkpoint']>['lastTool'] => {
+  const sources = context.sources.filter(source => (source.kind === 'tool' || source.kind === 'observation') && /^event-[1-9]\d*$/.test(source.id)).toSorted((a, b) => Number(b.id.slice(6)) - Number(a.id.slice(6)))
+  for (const source of sources) {
+    let value: unknown
+    try { value = JSON.parse(source.text) } catch { continue }
+    if (!record(value) || !safeText(value.tool, 128)) continue
+    const rawPath = record(value.input) ? value.input.file_path ?? value.input.path : undefined
+    const path = typeof rawPath === 'string' ? rawPath.startsWith(cwd + '/') ? rawPath.slice(cwd.length + 1) : rawPath : ''
+    const safePath = safeText(path, 4096) && !path.startsWith('/') && !path.split('/').includes('..') ? path : undefined
+    return { tool: value.tool, ...(safeText(value.toolUseId, 128) ? { toolUseId: value.toolUseId } : {}), ...(safePath ? { path: safePath } : {}) }
+  }
+  return undefined
+}
+
 // A bounded early opportunity from actual evidence, even when no plan was spoken.
 // Directory listings alone and pending/failed reads cannot consume the review budget.
 export const hasExplorationEvidence = (context: ReviewContext): boolean => {

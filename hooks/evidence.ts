@@ -603,13 +603,20 @@ export const changesOf = (ev: Evidence, limit = 9000) => {
 export const reviewChangesOf = (ev: Evidence, limit = 24576) => {
   const since = ev.prompts.at(-1)?.at ?? 0
   const omitted = new Set<string>()
-  let text = ''
-  for (const change of ev.changes.filter(c => c.at >= since && isCode(c.path))) {
+  const changes = ev.changes.filter(c => c.at >= since && isCode(c.path))
+  const latest = new Map<string, number>()
+  changes.forEach((change, index) => latest.set(change.path, index))
+  // Prefer the latest excerpt per file before older repeated edits. Selection
+  // priority is not presentation order: retained original hunks stay chronological.
+  const order = changes.map((change, index) => ({ change, index })).sort((a, b) => Number(latest.get(b.change.path) === b.index) - Number(latest.get(a.change.path) === a.index) || b.index - a.index)
+  const selected: { index: number; hunk: string }[] = []
+  let bytes = 0
+  for (const { change, index } of order) {
     const hunk = changeHunk(change)
     if (redact(hunk) !== hunk) { omitted.add('privacy-affected-changes'); continue }
-    const next = text ? `${text}\n${hunk}` : hunk
-    if (bytesOf(next) > limit) { omitted.add('change-record-budget'); continue }
-    text = next
+    const size = bytesOf(hunk) + (selected.length ? 1 : 0)
+    if (bytes + size > limit) { omitted.add('change-record-budget'); continue }
+    selected.push({ index, hunk }); bytes += size
   }
-  return { text, omitted: [...omitted] }
+  return { text: selected.sort((a, b) => a.index - b.index).map(item => item.hunk).join('\n'), omitted: [...omitted] }
 }

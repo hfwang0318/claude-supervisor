@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { changesOf, contradictions, evidenceOf, isCheckCommand, recordFindings, settledBy, skipped, supports, unreported } from '../hooks/evidence'
+import { changesOf, contradictions, evidenceOf, isCheckCommand, recordFindings, reviewChangesOf, settledBy, skipped, supports, unreported } from '../hooks/evidence'
 import { factsText, parseTurn, probeRefusal, redact, refusal, sanitize } from '../hooks/prompt'
 
 type Use = { tool_use_id?: string; tool: string; input: Record<string, unknown>; text?: string; isError?: true }
@@ -563,4 +563,18 @@ test('ambiguous or mixed Go failures and mismatched diagnostics remain failed ch
     expect(evidenceOf(rows).runs.length).toBe(1)
     expect(judge(rows, 'The build passes.')[0]?.kind).toBe('failed-check')
   }
+})
+
+
+test('review change budget preserves recent repairs across files before repeated older edits', () => {
+  const uses: Use[] = Array.from({ length: 6 }, (_, i) => ({ tool: 'Edit', input: { file_path: '/p/timer.ts', old_string: `old-${i}`, new_string: `earlier-${i}-` + 'x'.repeat(1000) }, text: 'ok' }))
+  uses.push({ tool: 'Edit', input: { file_path: '/p/selector.ts', old_string: 'return false', new_string: 'return pendingActions === 0\n' + 's'.repeat(800) }, text: 'ok' })
+  uses.push({ tool: 'Edit', input: { file_path: '/p/timer.ts', old_string: 'schedule(2000)', new_string: 'schedule(1000)\n' + 't'.repeat(800) }, text: 'ok' })
+  const material = reviewChangesOf(evidenceOf([ask, say('', ...uses)]), 2200)
+  expect(material.text).toContain('+ schedule(1000)')
+  expect(material.text).toContain('+ return pendingActions === 0')
+  expect(material.text.indexOf('+ return pendingActions === 0') < material.text.indexOf('+ schedule(1000)')).toBe(true)
+  expect(new TextEncoder().encode(material.text).length <= 2200).toBe(true)
+  expect(material.omitted).toContain('change-record-budget')
+  expect(changesOf(evidenceOf([ask, say('', ...uses)]))).toContain('earlier-0-')
 })

@@ -813,3 +813,19 @@ test('native tool-result user rows do not hide completed checks or collapse dist
   expect(observations.length).toBe(3)
   expect(new Set(observations.map((s: { text: string }) => JSON.parse(s.text).toolUseId)).size).toBe(3)
 })
+
+
+test('incremental checkpoint identifies the latest actually included tool despite evidence priority ordering', { options: incrementalOptions }, async ($, on) => {
+  const { state, clock } = world(on)
+  state.outputs = ['The check and implementation need to be compared with the exact requirement.']
+  state.rows = [{ role: 'assistant', text: '', toolUses: [
+    { tool_use_id: 'read-earlier', tool: 'Read', input: { file_path: '/p/api.ts' }, text: 'export const value = 7' },
+    { tool_use_id: 'check-latest', tool: 'Bash', input: { command: 'node --test test.js' }, text: 'Tests: 1 passed', result: { exitCode: 0 } }
+  ] }] as never
+  await start($)
+  await observeBatch($, clock)
+  expect(state.calls).toBe(1)
+  const context = JSON.parse(state.prompts[0]!.split('\n\n').at(-1)!)
+  expect(context.checkpoint.lastTool?.toolUseId).toBe('check-latest')
+  expect(context.checkpoint.lastTool?.tool).toBe('Bash')
+})

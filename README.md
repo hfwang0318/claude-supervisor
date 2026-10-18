@@ -522,7 +522,7 @@ Grounded architecture trade-offs remain valid advice without a failing test.
 Advisory change material keeps independently privacy-safe recorded excerpts even
 when another change must be withheld. Privacy and byte-budget omissions are
 explicit in both the model input and feedback. Excerpts remain bounded historical
-records, not a complete diff or a certificate of the current implementation.
+records, not a complete diff or a certificate of the current implementation. Under byte pressure, the latest excerpt for each file is considered before older repeated edits; retained excerpts are still presented in original chronological order. Incremental checkpoints identify the latest included tool from its public event record and retain a real tool-use ID only when supplied.
 
 
 An exact Go modfile-filename rejection for a single check is retained as a failed command attempt, not evidence that project code failed. Genuine, mixed or ambiguous failures keep their existing check status; this does not certify a different scope as passed.
