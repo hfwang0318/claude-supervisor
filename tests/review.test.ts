@@ -236,6 +236,8 @@ test('multi-concern report triage keeps resolved history and hidden-grader guess
   expect(prompt).toContain('does not establish the behavior')
   expect(prompt).toContain("use the repository's own command shape")
   expect(prompt).toContain('a bare runner guess is not evidence')
+  expect(prompt).toContain('If an oracle expects a path, field or file')
+  expect(prompt).toContain('An expectation against a missing prerequisite is an invalid oracle')
   expect(prompt).toContain('all important, distinct concerns')
   expect(prompt.includes('Give at most one important grounded judgment')).toBe(false)
 })
