@@ -60,6 +60,9 @@ export type ProbeCandidate = {
   requirementIds: string[]
   question: string
   command: string
+  location?: string
+  current?: string
+  required?: string
   files: { path: string; content: string }[]
   oracle: 'existing-test' | 'spec-example' | 'invariant' | 'disagreement'
   oracleExplanation: string

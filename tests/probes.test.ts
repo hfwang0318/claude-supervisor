@@ -12,6 +12,19 @@ test('a probe binds an explicit requirement and preserves its hypothesis status'
   expect(probeNote(c, null)).toContain('not executed')
   expect(probeNote(c, null)).toContain('hypothesis')
 })
+test('a probe can carry a bounded location and current/required contract', async () => {
+  const withContract = { ...candidate, location: 'src/parser.ts:42', current: 'return 1', required: 'return 0' }
+  const c = parseProbeCandidate(context, withContract)!
+  expect(c.location).toBe('src/parser.ts:42')
+  expect(c.current).toBe('return 1')
+  expect(c.required).toBe('return 0')
+  const note = probeNote(c, null)
+  expect(note).toContain('Location: src/parser.ts:42')
+  expect(note).toContain('Current: return 1')
+  expect(note).toContain('Required: return 0')
+  expect(parseProbeCandidate(context, { ...candidate, location: 42 })).toBeNull()
+  expect(parseProbeCandidate(context, { ...candidate, required: 'x'.repeat(4097) })).toBeNull()
+})
 test('invented oracles, sources, expectations and unsafe commands cannot become probe candidates', async () => {
   for (const change of [{ oracle: 'certified' }, { sourceIds: ['missing'] }, { requirementQuote: 'Negative values must return zero' }, { command: 'rm -rf src' }, { files: [{ path: '../probe.js', content: 'x' }] }, { files: [{ path: '.env', content: 'x' }] }, { demonstrated: true }]) expect(parseProbeCandidate(context, { ...candidate, ...change })).toBeNull()
 })

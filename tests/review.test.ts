@@ -237,6 +237,8 @@ test('multi-concern report triage keeps resolved history and hidden-grader guess
   expect(prompt).toContain('turn that exact finding into the probe')
   expect(prompt).toContain('not a broad test file that may not cover it')
   expect(prompt).toContain('must state the concrete current versus required value')
+  expect(prompt).toContain('"location?":"file:line"')
+  expect(prompt).toContain('"required?":"required value/expression"')
   expect(prompt).toContain('without that concrete difference')
   expect(prompt).toContain("use the repository's own command shape")
   expect(prompt).toContain('a bare runner guess is not evidence')
