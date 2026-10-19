@@ -27,6 +27,13 @@ test('off mode offers an explicitly unexecuted probe without capturing or runnin
   expect(result.note).toContain('not executed')
   expect(counts.captures).toBe(0); expect(counts.runs).toBe(0)
 })
+test('a probe note carries its location and current/required contract', async () => {
+  const withContract = { ...probe, action: { kind: 'probe' as const, candidate: { ...probe.action.candidate, location: 'file.js:1', current: 'replacement()', required: 'public method' } } }
+  const { host } = world(), result = await runReviewFlow(context, withContract, ports(host))
+  expect(result.note).toContain('Location: file.js:1')
+  expect(result.note).toContain('Current: replacement()')
+  expect(result.note).toContain('Required: public method')
+})
 test('enabled execution uses a matching isolated snapshot and revalidates before delivery', async () => {
   const { host, counts } = world(), result = await runReviewFlow(context, probe, ports(host, 'enabled'))
   expect(counts.runs).toBe(1)
