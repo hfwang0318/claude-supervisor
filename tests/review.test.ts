@@ -234,6 +234,8 @@ test('multi-concern report triage keeps resolved history and hidden-grader guess
   expect(prompt).toContain('For every required function that returns a path or value')
   expect(prompt).toContain('Propose one narrow probe')
   expect(prompt).toContain('does not establish the behavior')
+  expect(prompt).toContain("use the repository's own command shape")
+  expect(prompt).toContain('a bare runner guess is not evidence')
   expect(prompt).toContain('all important, distinct concerns')
   expect(prompt.includes('Give at most one important grounded judgment')).toBe(false)
 })
