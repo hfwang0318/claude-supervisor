@@ -234,6 +234,8 @@ test('multi-concern report triage keeps resolved history and hidden-grader guess
   expect(prompt).toContain('For every required function that returns a path or value')
   expect(prompt).toContain('Propose one narrow probe')
   expect(prompt).toContain('does not establish the behavior')
+  expect(prompt).toContain('turn that exact finding into the probe')
+  expect(prompt).toContain('not a broad test file that may not cover it')
   expect(prompt).toContain("use the repository's own command shape")
   expect(prompt).toContain('a bare runner guess is not evidence')
   expect(prompt).toContain('If an oracle expects a path, field or file')
