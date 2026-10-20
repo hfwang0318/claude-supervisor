@@ -381,3 +381,12 @@ Same sizes as the first run. This is a reproducible reviewer-only semantic repai
 | generic | 240s | **passed 64/64** | 42,553 B |
 
 Identical patch. No reviewer-only gain. Semantic repair now has five samples: four where both arms pass and one (webclients) where only reviewed passes (reproduced twice).
+
+## Element semantic repair A/B
+
+| Arm | Budget | Result | Patch |
+|---|---:|---|---:|
+| reviewed | 240s | **passed 77/48** | 38,945 B |
+| generic | 240s | **passed 77/48** | 38,945 B |
+
+Identical patch; no reviewer-only gain. Semantic repair now has six samples: five where both arms pass and one (webclients) where only reviewed passes, reproduced twice.
