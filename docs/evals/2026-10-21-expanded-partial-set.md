@@ -361,3 +361,14 @@ Source-drop now covers **6 tasks, 15 findings, 15 verified, 0 invalid**, with co
 This is the first semantic repair sample where the reviewer arm passes and the generic arm fails. The patch sizes differ by one byte, consistent with fixing the mutated `showRemoteImages` assignment differently.
 
 Semantic repair now has four samples: three where both arms pass (ansible, tutanota, vuls) and one where only reviewed passes (webclients). Generic repair is not universally sufficient for semantic defects.
+
+## webclients A/B reproduced
+
+Second independent run (`wcmut2`) reproduced the exact result:
+
+| Arm | Result | Patch |
+|---|---|---:|
+| reviewed | **passed 4/4** | 23,392 B |
+| generic | **failed 3/4** | 23,393 B |
+
+Same sizes as the first run. This is a reproducible reviewer-only semantic repair gain: 2/2 pairs, reviewed passes and generic fails on the same 1-byte condition difference.
