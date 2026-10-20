@@ -9,6 +9,9 @@ const canRun = (binary, args) => { try { execFileSync(binary, args, { stdio: 'ig
 const bwrap = which('bwrap')
 const docker = which('docker')
 const podman = which('podman')
+const engine = docker || podman
+const image = process.env.CODE_SUPERVISOR_SANDBOX_IMAGE || ''
+const containerUsable = Boolean(engine && image && canRun(engine, ['image', 'inspect', image]))
 const bwrapUsable = bwrap ? canRun(bwrap, ['--ro-bind', '/', '/', '--unshare-all', '--', '/bin/true']) : false
 const report = {
   platform: process.platform,
@@ -20,7 +23,9 @@ const report = {
   maxUserNamespaces: read('/proc/sys/user/max_user_namespaces'),
   docker: docker || null,
   podman: podman || null,
-  backend: bwrapUsable ? 'bubblewrap' : 'read-only',
+  sandboxImage: image || null,
+  containerUsable,
+  backend: bwrapUsable ? 'bubblewrap' : containerUsable ? 'container' : 'read-only',
   fallbackAvailable: Boolean(docker || podman)
 }
 console.log(JSON.stringify(report, null, 2))

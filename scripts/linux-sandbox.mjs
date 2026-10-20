@@ -21,3 +21,26 @@ export const linuxBwrapArgv = (root, command, binary, path, systemPaths = ['/usr
   '--setenv', 'OPENSSL_CONF', '/dev/null',
   '--', '/bin/bash', '--noprofile', '--norc', '-c', command
 ]
+
+// Opt-in container fallback. The image must exist locally; the caller decides
+// whether invoking the container engine is acceptable.
+export const containerSandboxArgv = (root, command, engine, image, uid, gid) => [
+  engine,
+  'run', '--rm',
+  '--network', 'none',
+  '--read-only',
+  '--tmpfs', '/tmp:rw,noexec,nosuid,size=64m',
+  '--mount', `type=bind,src=${root},dst=/work`,
+  '--workdir', '/work',
+  '--user', `${uid}:${gid}`,
+  '--cap-drop', 'ALL',
+  '--security-opt', 'no-new-privileges',
+  '--pids-limit', '64',
+  '--memory', '512m',
+  '--env', 'HOME=/work',
+  '--env', 'TMPDIR=/work',
+  '--env', 'PATH=/usr/local/bin:/usr/bin:/bin',
+  '--entrypoint', '/bin/bash',
+  image,
+  '--noprofile', '--norc', '-c', command
+]
