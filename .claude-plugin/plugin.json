@@ -1,6 +1,6 @@
 {
   "name": "code-supervisor",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "description": "Evidence-based supervision for any side model: defaults to the current worker and validates observations without assuming superior model capability.",
   "author": {
     "name": "LACAN-1"
@@ -23,7 +23,7 @@
     "execution_mode": {
       "type": "string",
       "title": "Independent execution",
-      "description": "off by default. shadow runs isolated checks without feedback; enabled sends advisory findings. macOS only; unsupported workspaces remain read-only.",
+      "description": "off by default. shadow runs isolated checks without feedback; enabled sends advisory findings. Uses macOS sandbox-exec or Linux bubblewrap; an opt-in Docker/Podman fallback exists. Unsupported workspaces remain read-only.",
       "default": "off"
     },
     "assistance_mode": {
@@ -47,19 +47,19 @@
     "review_interval": {
       "type": "string",
       "title": "Incremental request interval",
-      "description": "Completed main requests between ordinary opportunities, 1–100. No new material skips the opportunity; key events bypass the interval. Starting value 5 is not an optimized claim.",
+      "description": "Completed main requests between ordinary opportunities, 1\u2013100. No new material skips the opportunity; key events bypass the interval. Starting value 5 is not an optimized claim.",
       "default": "5"
     },
     "review_max_calls": {
       "type": "string",
       "title": "Semantic calls per user prompt",
-      "description": "Finite incremental semantic-call ceiling, 1–100, including optional action followup calls. Default 3 reserves first-write and completion opportunities.",
+      "description": "Finite incremental semantic-call ceiling, 1\u2013100, including optional action followup calls. Default 3 reserves first-write and completion opportunities.",
       "default": "3"
     },
     "review_output_budget": {
       "type": "string",
       "title": "Semantic output reservation",
-      "description": "Finite incremental output-token reservation per user prompt, including host allowance, 1–1000000. Default 12000 covers three current Flash wire4000 reservations. No refund or hidden fallback.",
+      "description": "Finite incremental output-token reservation per user prompt, including host allowance, 1\u20131000000. Default 12000 covers three current Flash wire4000 reservations. No refund or hidden fallback.",
       "default": "12000"
     }
   },

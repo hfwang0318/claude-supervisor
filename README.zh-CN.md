@@ -73,7 +73,8 @@ existing／facts 保留旧请求上限，其 wire 上限仍未验证。实际超
 
 执行器将当前文件（含 dirty/untracked）复制到有所有权记录的临时目录，以 SHA-256 manifest
 核对源目录复制前后及副本的一致性。macOS 沙箱默认拒绝，限制真实目录写入、秘密读取和
-网络；仅继承列明的无秘密环境变量。命令总输出最多保留 1MiB，超时终止进程组。
+网络；仅继承列明的无秘密环境变量。Linux 使用 bubblewrap（`bwrap`），只读绑定系统目录、
+仅工作副本可写、无网络；两者都不可用时降级为只读，不执行旁路命令。命令总输出最多保留 1MiB，超时终止进程组。
 包含 symlink、秘密路径、特殊文件、超过 10k 条目或 50MiB 的目录目前不支持独立执行。
 无法取得可信副本时为只读诊断，不在真实项目运行旁路命令。清理仅删除身份匹配的副本。
 
@@ -289,7 +290,7 @@ DSS_CMD=claude-deepseek node eval/run.mjs --suite late --reps 3
 
 ## 需要什么
 
-- 支持插件函数钩子的 Claude Code（有 `claude plugin validate` 和 `claude plugin test` 命令）。在 **2.1.290** 上开发；0.6.0 在 **2.1.293** 上测试，0.7.0–0.10.0 在 **2.1.295** 上测试。需要 `bash` 和 `cp`。验证者要在副本里跑命令，需要 macOS（`sandbox-exec`）。
+- 支持插件函数钩子的 Claude Code（有 `claude plugin validate` 和 `claude plugin test` 命令）。在 **2.1.290** 上开发；0.6.0 在 **2.1.293** 上测试，0.7.0–0.11.0 在 **2.1.295** 上测试。需要 `bash` 和 `cp`。验证者要在副本里跑命令，需要 macOS（`sandbox-exec`）或 Linux（`bubblewrap`）；否则验证者保持只读。
 
 ## 安装
 
@@ -314,7 +315,7 @@ claude plugin marketplace remove deepseek-supervisor
 想固定这个版本：
 
 ```bash
-claude plugin marketplace add "hfwang0318/claude-supervisor#v0.10.0"
+claude plugin marketplace add "hfwang0318/claude-supervisor#v0.11.0"
 claude plugin install code-supervisor@code-supervisor
 ```
 
@@ -396,7 +397,7 @@ MIT
 
 ## 工程验证
 
-`npm ci --ignore-scripts` 后运行 `node scripts/check.mjs`，依次验证宿主清单、types、TypeScript、无模型测试、真实进程隔离、十组评分器自检和十组 SWE Pro 自检。缺少 types 时本地 `/code-supervisor issues` 命令负责生成，不提交模型提示。公共 CI 的 `--pure` 是部分检查；macOS/Claude Code 自托管完整检查状态单列。发布需完整支持环境结果。
+`npm ci --ignore-scripts` 后运行 `node scripts/check.mjs`，依次验证宿主清单、types、TypeScript、无模型测试、真实进程隔离、十组评分器自检和十组 SWE Pro 自检。缺少 types 时本地 `/code-supervisor issues` 命令负责生成，不提交模型提示。公共 CI 的 `--pure` 是部分检查；Linux/macOS/Claude Code 自托管完整检查状态单列。发布需完整支持环境结果。
 
 [当前实施结果与未通过门槛](docs/evals/2026-10-11-p0-implementation.md)。尚未完成付费 S=M/S<M pilot，未声明质量收益或 P0/E0 发布验收通过。
 
