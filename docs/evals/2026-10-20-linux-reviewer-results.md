@@ -184,3 +184,24 @@ if grep -q 'File:   ""' internal/cue/validate.go; then exit 1; else exit 0; fi
 This adds a second hidden-contract sample in a second language. Correct-patch run still had one invalid probe, so false-positive risk is not zero, but no verified false positive.
 
 Sample count: 2 hidden-contract + 2 test-only, across TS and Go.
+
+## Four-sample aggregate
+
+| Sample | Type | Reviewer findings | Verified | Gate | Reviewed repair | Generic repair |
+|---|---|---:|---:|---|---:|---:|
+| cba silent | hidden contract (TS) | 6 | 3 | block/pass | pass 3/3 | fail 2/3 |
+| Flipt silent | hidden contract (Go) | 2 | 1 | block/pass | pass 2/2 | fail 1/2 |
+| cba test-only | missing source (TS) | 4 | 4 | block/pass | pass 3/3 | fail 2/3 |
+| Flipt test-only | missing source (Go) | 4 | 4 | block/pass | pass 2/2 (two-pass) | fail 0/2 |
+
+- Gate: 4/4 partials blocked, 4/4 correct patches passed, 0 verified false positives.
+- Reviewed repair: 4/4 samples passed.
+- Generic repair: 0/4 samples passed.
+- Wilson 95% interval for 4/4 reviewed: approximately 0.51–1.00; for 0/4 generic: 0.00–0.49.
+
+Caveats:
+
+- findings are not independent; each sample has one root cause;
+- cba/Flipt silent mutants are constructed; test-only partials are truncated real patches;
+- repair budgets differ (60s for the original Flipt/cba silent runs, 240s for the Linux/test-only runs);
+- no live plugin side-call delivery was measured.
