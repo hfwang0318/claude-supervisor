@@ -158,3 +158,14 @@ The next requirement is a probe that locates the current line and asserts the re
 Tried a dynamic probe around `location` ±5 lines: if the current literal appears in the region, assert the required literal on a line there; otherwise assert the required literal exists in the file.
 
 Result remained 3/8 verified. Some findings point at a different call site than the mutated condition, and the current literal is not always inside the region. Semantic verification needs the reviewer to provide a stable anchor (function/symbol plus exact condition), not only a line number.
+
+## Semantic repair A/B (ansible-d624)
+
+| Arm | Budget | Result | Patch | Elapsed |
+|---|---:|---|---:|---:|
+| reviewed | 240s | **passed 129/114** | 5,289 B | 49s |
+| generic | 240s | **passed 129/114** | 5,271 B | 247s |
+
+Both arms repaired the inverted condition. There is no reviewer-only gain on this semantic sample, but the reviewed arm reached the fix much faster (49s vs 247s).
+
+So semantic repair difficulty is task-dependent: ansible's explicit condition is easy for both arms, while the semantic verified-gate recall stays 3/8.
