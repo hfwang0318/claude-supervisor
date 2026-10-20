@@ -327,3 +327,18 @@ Two new official failures from the second batch (qutebrowser-c09e, webclients-19
 | webclients-1917 | 2 | 0 | 0 | 2 |
 
 Source-drop totals: **4/5 tasks verified**, **12/14 findings verified**, 2 invalid probes. qutebrowser verifies the absent-source fallback in another repo; webclients needs investigation because its findings did not produce discriminating probes.
+
+## Prose `required` filter fixes webclients invalid probes
+
+webclients findings supplied `required` as natural-language instructions ("must pass", "verify ..."), not source text. Deterministic probes treated that prose as code and failed control.
+
+Added a code-like filter (`must`, `should`, `verify`, `e.g.`, `mirror`, `the parent`, `if not`) so prose fields fall back to missing-source/compiler probes.
+
+Result:
+
+| Task | Findings | Verified | Refuted | Invalid |
+|---|---:|---:|---:|---:|
+| qutebrowser-c09e | 1 | 1 | 0 | 0 |
+| webclients-1917 | 2 | **2** | 0 | **0** |
+
+Source-drop now: **5/5 tasks, 14/14 findings verified, 0 invalid**. Correct-patch run: 0 verified (1 ungrounded).
