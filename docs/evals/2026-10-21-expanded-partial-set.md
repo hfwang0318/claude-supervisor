@@ -419,3 +419,9 @@ Three multi-condition samples reviewed and verified:
 | **total** | **8** | **6** | **0** | **2** | **0 verified** |
 
 Each multi-condition task has two mutated conditions; both were verified in each task. Task-level recall 3/3, finding-level verified 6/8, correct-patch false positives 0/8 (one invalid probe).
+
+## Remaining multi-condition sample
+
+element-web-ecfd: reviewer produced 1 finding; verification returned **0 verified, 1 invalid**. The task has two mutated conditions, so reviewer recall on this sample is incomplete.
+
+Multi-condition totals now: **3/4 tasks, 6/9 findings verified, 3 invalid, 0 correct-patch verified false positives**. The missed task is a reviewer/probe gap, not a gate false positive.
