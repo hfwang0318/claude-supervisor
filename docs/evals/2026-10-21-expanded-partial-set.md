@@ -111,3 +111,11 @@ A final fix forced the absent-source probe whenever the control patch contains a
 The NodeBB failure shows the repair two-pass target selection is still imperfect: with a findings array, the source hint can choose the wrong named file. A later fix aggregated finding text, but the continued session still did not add the absent source before the 240s budget expired.
 
 So source-drop verified gate is strong (11/11) but repair generalization is not established.
+
+## Control-targeted repair retry (NodeBB)
+
+Added `REPAIR_CONTROL`: the second pass now chooses a production source file present in the control patch but absent from the first repair patch.
+
+NodeBB result: `secondPass: true`, but the final patch still contained only `src/controllers/admin/settings.js` and `src/middleware/index.js`; `src/api/utils.js` was not added. Official 2/12, same failure.
+
+So target selection is now correct in principle, but the continued model session ignored the explicit source target within the 240s budget. Repair for this class remains unsolved.
