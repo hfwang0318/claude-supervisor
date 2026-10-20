@@ -222,3 +222,16 @@ With `assistance_mode=supervise` and `verifier_model=zhipu/glm-5.3-flash`, a per
 This is the first end-to-end note submission observed. Consumption by the next main request is still unverified. In this sample the reviewer reported no concern, so it also missed the hidden field-stripping bug; delivery works, judgment is not guaranteed.
 
 `/code-supervisor health` now reports `model.outputProfile`, `model.hostVersion`, and `warnings: ["side-model-output-cap-unverified"]` when semantic review is enabled but the selected model has no transport profile.
+
+## Note consumption verified
+
+With `assistance_mode=supervise` and `verifier_model=zhipu/glm-5.3-flash`, a persistent two-turn session produced:
+
+- side call 1 answered in 25.8s (input 2,259 / output 857);
+- `REVIEW_QUEUED` → `REVIEW_DELIVERY` `"delivery":"submitted"`;
+- second side call answered in 35.4s;
+- the next main-model answer explicitly discussed the reviewer checkpoint and its `Concern 2/3`, proving the note entered the next main request.
+
+The main model also refused the false sum claim, so this run proves delivery/consumption, not reviewer judgment quality. The previous sample with the same prompt shape showed the reviewer can still miss a hidden field bug.
+
+This closes the side-call loop for a persistent session when the side model has a supported transport profile. One-shot `claude -p` still ends before the side call can complete.
