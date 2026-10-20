@@ -1399,6 +1399,37 @@ export const register: Register = (on, options) => {
                 .join('\n'),
       }
     }
+    if (arg === 'health') {
+      const setting = await settingOf($)
+      const selection = await selectionOf($)
+      const history = await $.store.get('history').catch(() => [])
+      const entries = Array.isArray(history) ? history : []
+      const lastSideCall = entries.filter(e => e && typeof e === 'object' && e.kind === 'side-call').at(-1) as Record<string, unknown> | undefined
+      const openIssues = s.stateUsable ? (await read($, track)).issues.filter(i => i.status === 'open').length : null
+      const health = {
+        schemaVersion: 1,
+        plugin: 'code-supervisor',
+        mode: setting,
+        active: await isOn($),
+        assistanceMode: s.cfg.assistanceMode,
+        executionMode: s.cfg.executionMode,
+        stateUsable: s.stateUsable,
+        model: { id: selection.modelId, disabled: s.modelDisabled },
+        budget: { remainingCalls: s.coordinator.remainingModelCalls, remainingOutputTokens: s.coordinator.remainingOutputTokens },
+        openIssues,
+        reviewBusy: s.reviewControl?.busy === true,
+        lastSideCall: lastSideCall === undefined ? null : {
+          result: lastSideCall.result ?? null,
+          reason: lastSideCall.reason ?? null,
+          hostReason: lastSideCall.hostReason ?? null,
+          hostStatus: lastSideCall.hostStatus ?? null,
+          modelId: lastSideCall.modelId ?? null,
+          elapsedMs: lastSideCall.elapsedMs ?? null,
+          timeoutMs: lastSideCall.timeoutMs ?? null
+        }
+      }
+      return { text: JSON.stringify(health, null, 2) }
+    }
     if (arg === 'on' || arg === 'off' || arg === 'auto') {
       if (arg === 'auto') await $.store.delete('mode')
       else await $.store.set('mode', arg)
@@ -1411,6 +1442,6 @@ export const register: Register = (on, options) => {
       return { text: `code-supervisor is ${arg}${arg === 'auto' ? ` (${(await isOn($)) ? 'checking' : "idle on Anthropic's endpoint"})` : ''}.` }
     }
     const setting = await settingOf($)
-    return { text: `code-supervisor is ${setting}${setting === 'auto' ? ` (${(await isOn($)) ? 'checking' : "idle on Anthropic's endpoint"})` : ''}. Usage: /code-supervisor [on|off|auto|log|issues]` }
+    return { text: `code-supervisor is ${setting}${setting === 'auto' ? ` (${(await isOn($)) ? 'checking' : "idle on Anthropic's endpoint"})` : ''}. Usage: /code-supervisor [on|off|auto|log|issues|health]` }
   })
 }

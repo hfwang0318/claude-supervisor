@@ -430,6 +430,20 @@ test('on Anthropic\'s own endpoint it stays idle unless switched on', async ($, 
   expect(w.asked.length).toBe(1)
 })
 
+test('health reports mode, model and side-call diagnostics without message content', async ($, on) => {
+  const w = world(on)
+  await start($)
+  await steps($, 3)
+  await $.command.run({ command: 'code-supervisor', args: 'on' } as never)
+  const health = JSON.parse((await $.command.run({ command: 'code-supervisor', args: 'health' } as never) as { text: string }).text)
+  expect(health.schemaVersion).toBe(1)
+  expect(health.mode).toBe('on')
+  expect(health.active).toBe(true)
+  expect(health.model).toHaveProperty('id')
+  expect(health.lastSideCall).toBeNull()
+  expect(JSON.stringify(health)).not.toContain('All tests pass')
+})
+
 test('a note the session refuses is still in the band, and the person is told', async ($, on) => {
   const w = world(on)
   w.state.refuse = true
