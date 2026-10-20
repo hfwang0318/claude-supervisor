@@ -76,3 +76,16 @@ Test-only cba partial (official 2/3 fail):
 | generic | 240s | failed 2/3 | 4,347 B |
 
 At 120s both arms timed out with the unchanged 4,347 B test-only patch. The reviewed 240s arm added the missing production source change. First natural-ish partial fail→pass differential, one task only.
+
+## Second test-only partial: Flipt (Go)
+
+Flipt passing patch with the source hunk removed (fixture + test only). Official verifier reports 0/2 required tests passed (grade wrapper classified environment-error, but verifier log shows FAILED and reward 0).
+
+Reviewer produced 4 missing-source findings. Verification:
+
+| Candidate | Findings | Verified | Invalid |
+|---|---:|---:|---:|
+| test-only partial | 4 | **1 contract** | 1 |
+| correct patch | 4 | **0** | 0 |
+
+Gate still separates partial from correct, but verifier recall is only 1/4, unlike cba's 4/4. The test-only fallback is not yet general across repositories; the compiler still chooses fixture/test literals for most Flipt findings.
