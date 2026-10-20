@@ -65,3 +65,14 @@ Reviewer produced 4 missing-source findings. With a deterministic fallback for t
 Gate: partial blocked, correct patch passed. Reviewer recall 4/4; verifier precision 4/4 on this sample.
 
 Caveat: the partial is a truncated real agent patch, not a fully natural failure; sample size is one task. The fallback is specific to "test-only patch, source missing" and does not generalize to arbitrary hidden-contract bugs.
+
+## Natural partial repair A/B
+
+Test-only cba partial (official 2/3 fail):
+
+| Arm | Budget | Result | Patch |
+|---|---:|---|---:|
+| reviewed | 240s | **passed 3/3** | 6,915 B |
+| generic | 240s | failed 2/3 | 4,347 B |
+
+At 120s both arms timed out with the unchanged 4,347 B test-only patch. The reviewed 240s arm added the missing production source change. First natural-ish partial fail→pass differential, one task only.
