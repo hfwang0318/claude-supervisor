@@ -44,3 +44,9 @@ node scripts/check.mjs
 ```
 
 Local experiment artifacts remain under `.superpowers/sdd/phase0-rebuild/` and are not committed (1.4 GiB).
+
+## Multi-turn side-call evidence
+
+A persistent stream-json session (`claude -p --input-format stream-json --output-format stream-json --verbose`) with a real code change and a completion claim produced an **answered** reviewer side call: 21,773 ms, 901 input / 1,224 output tokens. A follow-up side call also answered (11,153 ms, 782 / 566 tokens) when the session stayed alive.
+
+The same plugin under one-shot `claude -p` produced `provider-unanswered` / `aborted` with 0 tokens. The 30s model limit is therefore not the root cause; the one-shot turn-end lifecycle aborts the side call. Product reviewer measurements must use a persistent/interactive session.
