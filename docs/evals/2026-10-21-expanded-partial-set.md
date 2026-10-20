@@ -229,3 +229,21 @@ No verified false positives. Each of the three semantic mutants produced exactly
 Attempted six more semantic mutants. One verifier stayed in `dss-grade` for >14 minutes and was killed; the batch produced no results. This is an environment/verifier-timeout limitation, not a model result.
 
 Next attempt must bound each grade with an AbortSignal (for example 5 minutes) and record `timeout` rather than blocking the whole batch.
+
+## Second semantic batch (with per-grade timeout)
+
+Generated six more condition mutants with a 5-minute AbortSignal per grade:
+
+- 3 official failures (element-web-4fec, webclients-1917, vuls-e049);
+- 2 cancelled by timeout;
+- 1 still passed.
+
+Reviewer produced findings on two of the three failures:
+
+| Task | Findings | Verified | Refuted | Invalid |
+|---|---:|---:|---:|---:|
+| element-web-4fec | 1 | **1** | 0 | 0 |
+| vuls-e049 | 1 | **1** | 0 | 0 |
+| webclients-1917 | 0 | 0 | 0 | 0 |
+
+Combined semantic task-level recall is now **5/6** (webclients missed); finding-level verified is **5/8**. The per-grade timeout successfully prevented one verifier from blocking the batch.
