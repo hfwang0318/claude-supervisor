@@ -350,3 +350,14 @@ Four candidates: one official failure (qutebrowser-a84), one pass, two cancelled
 Reviewer finding: 1; verified: **1/1**, 0 invalid.
 
 Source-drop now covers **6 tasks, 15 findings, 15 verified, 0 invalid**, with correct-patch runs producing no verified false positives.
+
+## First reviewer-only semantic repair win (webclients-1917)
+
+| Arm | Budget | Result | Patch | Elapsed |
+|---|---:|---|---:|---:|
+| reviewed | 240s | **passed 4/4** | 23,392 B | 230s |
+| generic | 240s | **failed 3/4** | 23,393 B | 247s |
+
+This is the first semantic repair sample where the reviewer arm passes and the generic arm fails. The patch sizes differ by one byte, consistent with fixing the mutated `showRemoteImages` assignment differently.
+
+Semantic repair now has four samples: three where both arms pass (ansible, tutanota, vuls) and one where only reviewed passes (webclients). Generic repair is not universally sufficient for semantic defects.
