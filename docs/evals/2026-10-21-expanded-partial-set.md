@@ -342,3 +342,11 @@ Result:
 | webclients-1917 | 2 | **2** | 0 | **0** |
 
 Source-drop now: **5/5 tasks, 14/14 findings verified, 0 invalid**. Correct-patch run: 0 verified (1 ungrounded).
+
+## Third source-drop batch
+
+Four candidates: one official failure (qutebrowser-a84), one pass, two cancelled by the 5-minute grade timeout.
+
+Reviewer finding: 1; verified: **1/1**, 0 invalid.
+
+Source-drop now covers **6 tasks, 15 findings, 15 verified, 0 invalid**, with correct-patch runs producing no verified false positives.
