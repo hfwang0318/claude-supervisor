@@ -125,3 +125,24 @@ So target selection is now correct in principle, but the continued model session
 At 600s the continued repair finally added `src/api/utils.js` (plus the two call-site files), but the official grade still failed 2/12: the added implementation did not satisfy the token API tests.
 
 So for NodeBB the blocker is not only budget or target selection. Once the model reaches the file, it still produces an incomplete token implementation. Repair for this source-drop class remains unsolved, while the verified gate is strong.
+
+## Semantic-mutant failure class
+
+Kept all source files and changed one added boolean/comparison condition in a passing patch. Official failures:
+
+- openlibrary-b671 (`t == tag` → `t != tag`);
+- tutanota-f3ffe17 (`length > 0` → `length >= 0`);
+- ansible-d624 (`unit != ...` → `unit == ...`).
+
+Reviewer was changed to emit `location`, `current`, and `required`; 8 findings were produced, 7 with both exact fields.
+
+| Metric | Result |
+|---|---:|
+| findings | 8 |
+| with current+required | 7 |
+| verified | **4** |
+| refuted | 3 |
+| invalid-control | 1 |
+| ungrounded | 2 |
+
+So adding explicit current/required did not yet solve the semantic class: verified recall is 4/10 findings. The compiler still chooses non-discriminating literals or probes the wrong call site. This is the next concrete bottleneck.
