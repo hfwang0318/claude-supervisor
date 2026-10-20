@@ -84,7 +84,7 @@ export const openModelNetwork = async (runtime, auditPath) => {
   const close = async () => { await command(['logs', name], { log: auditPath + '.proxy.log' }); await command(['rm', '-f', name]); await command(['network', 'rm', network]); server.closeAllConnections(); await new Promise(ok => server.close(ok)) }
   try {
     await checked(['network', 'create', '--internal', network])
-    await checked(['run', '-d', '--name', name, '--platform', 'linux/amd64', '--memory', '128m', '--cpus', '0.25', '--pids-limit', '64', '--cap-drop', 'ALL', '--mount', `type=bind,source=${runtime},target=/opt/eval,readonly`, '-e', `EVAL_FORWARD_URL=http://host.docker.internal:${server.address().port}`, '-e', `EVAL_RELAY_TOKEN=${relayToken}`, '-e', 'EVAL_PORT=8080', NODE_IMAGE, 'node', '/opt/eval/gateway.mjs'])
+    await checked(['run', '-d', '--name', name, '--platform', 'linux/amd64', '--memory', '128m', '--cpus', '0.25', '--pids-limit', '64', '--cap-drop', 'ALL', ...(process.platform === 'linux' ? ['--add-host', 'host.docker.internal:host-gateway'] : []), '--mount', `type=bind,source=${runtime},target=/opt/eval,readonly`, '-e', `EVAL_FORWARD_URL=http://host.docker.internal:${server.address().port}`, '-e', `EVAL_RELAY_TOKEN=${relayToken}`, '-e', 'EVAL_PORT=8080', NODE_IMAGE, 'node', '/opt/eval/gateway.mjs'])
     await checked(['network', 'connect', '--alias', 'model-gateway', network, name])
     await checked(['exec', name, 'node', '-e', "for(let n=0;n<100;n++){try{const r=await fetch('http://127.0.0.1:8080/health');if(r.status===200)process.exit(0)}catch{}await new Promise(r=>setTimeout(r,100))}process.exit(1)"])
     return { network, gateway: name, close }
