@@ -195,3 +195,18 @@ Results:
 | **total** | **4/8** | 2 | 2 |
 
 This improved ansible and one tutanota finding, but openlibrary/tutanota findings that point at unrelated call sites still fail. Semantic verified recall is 4/8.
+
+### Scope-restricted reviewer + patch-diff probe
+
+Reviewer is now instructed to report only defects introduced/left in the candidate patch's changed code, not unrelated pre-existing call sites. Added a deterministic out-of-scope filter for semantic findings.
+
+Latest semantic run:
+
+| Task | Findings | Verified | Refuted | Invalid |
+|---|---:|---:|---:|---:|
+| ansible-d624 | 1 | 1 | 0 | 0 |
+| openlibrary-b671 | 2 | 1 | 1 | 0 |
+| tutanota-f3ffe17 | 3 | 1 | 2 | 0 |
+| **total** | **6** | **3** | **3** | **0** |
+
+Verified precision on executed findings is 3/3, but recall is 3/6. Scope restriction removed the invalid probes and unrelated-call-site findings, at the cost of fewer verified concerns. Handling range locations (`path:107-111`) was also fixed.
