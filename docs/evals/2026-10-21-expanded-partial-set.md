@@ -372,3 +372,12 @@ Second independent run (`wcmut2`) reproduced the exact result:
 | generic | **failed 3/4** | 23,393 B |
 
 Same sizes as the first run. This is a reproducible reviewer-only semantic repair gain: 2/2 pairs, reviewed passes and generic fails on the same 1-byte condition difference.
+
+## Openlibrary semantic repair A/B
+
+| Arm | Budget | Result | Patch |
+|---|---:|---|---:|
+| reviewed | 240s | **passed 64/64** | 42,553 B |
+| generic | 240s | **passed 64/64** | 42,553 B |
+
+Identical patch. No reviewer-only gain. Semantic repair now has five samples: four where both arms pass and one (webclients) where only reviewed passes (reproduced twice).
