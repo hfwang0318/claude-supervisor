@@ -119,3 +119,9 @@ Added `REPAIR_CONTROL`: the second pass now chooses a production source file pre
 NodeBB result: `secondPass: true`, but the final patch still contained only `src/controllers/admin/settings.js` and `src/middleware/index.js`; `src/api/utils.js` was not added. Official 2/12, same failure.
 
 So target selection is now correct in principle, but the continued model session ignored the explicit source target within the 240s budget. Repair for this class remains unsolved.
+
+## NodeBB reviewed 600s
+
+At 600s the continued repair finally added `src/api/utils.js` (plus the two call-site files), but the official grade still failed 2/12: the added implementation did not satisfy the token API tests.
+
+So for NodeBB the blocker is not only budget or target selection. Once the model reaches the file, it still produces an incomplete token implementation. Repair for this source-drop class remains unsolved, while the verified gate is strong.
