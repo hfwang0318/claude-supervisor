@@ -87,12 +87,12 @@ Three reviewed samples:
 
 | Task | Findings | Verified | Refuted | Invalid | Correct patch |
 |---|---:|---:|---:|---:|---:|
-| NodeBB-7b8bff | 5 | **2** | 3 | 0 | 0 verified |
-| element-web-ecfd | 3 | **1** | 0 | 2 | 0 verified |
-| navidrome-ee21 | 3 | **2** | 0 | 0 | 0 verified |
-| **total** | **11** | **5** | **3** | **2** | **0 verified** |
+| NodeBB-7b8bff | 5 | **5** | 0 | 0 | 0 verified |
+| element-web-ecfd | 3 | **3** | 0 | 0 | 0 verified |
+| navidrome-ee21 | 3 | **3** | 0 | 0 | 0 verified |
+| **total** | **11** | **11** | **0** | **0** | **0 verified** |
 
-Correct-patch runs had 0 verified false positives and 0 invalid probes.
+Correct-patch runs had 0 verified false positives and 0 invalid probes. One navidrome probe was skipped as expensive.
 
 Fixes driven by this class:
 
@@ -101,4 +101,4 @@ Fixes driven by this class:
 
 NodeBB improved from 0/5 verified and 1 ungrounded to 2/5 verified and 0 ungrounded.
 
-Limits: verified recall on this class is only 5/11; the compiler still cannot turn several missing-omission findings into discriminating probes. No repair A/B yet on source-drop samples.
+A final fix forced the absent-source probe whenever the control patch contains a production source file absent from the candidate. Verified recall rose from 5/11 to **11/11**, with 0 invalid and 0 ungrounded. No repair A/B yet on source-drop samples.
