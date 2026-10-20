@@ -114,3 +114,23 @@ Strengthened the reviewed prompt: test-only/fixture-only edits are a failed repa
 | 600s | no (added `scratch_pos_test.go`) | failed 0/2 | 3,742 B |
 
 The hard prompt is not deterministic: 400s produced a partial source implementation; 600s regressed to test-only again. Flipt repair remains unreliable, unlike cba. This is a repair-model/policy issue, not a verifier failure.
+
+## Flipt two-stage repair: pass
+
+Added a reviewed-only second pass: after capturing the first patch, if it touches only tests/fixtures, continue the **same session** with `--continue` and an explicit instruction to edit the production source; do not edit tests.
+
+| Arm | Budget | Result | Patch | Second pass |
+|---|---:|---|---:|---|
+| reviewed | 240s | **passed 2/2** | 4,330 B | yes |
+| generic | 240s | failed 0/2 | 2,527 B | no |
+
+The first reviewed patch was test/fixture-only; the continued session then changed `internal/cue/validate.go` and passed both hidden tests. This closes the Flipt repair gap without weakening the verifier.
+
+Across the two natural test-only partials:
+
+| Repo | reviewed | generic |
+|---|---|---|
+| cba (TS) | pass 3/3 | fail 2/3 |
+| Flipt (Go) | pass 2/2 (second pass) | fail 0/2 |
+
+Caveat: one sample per repo, 240s in a nested/emulated environment, and the second pass adds latency. The two-pass policy is an eval/repair harness result, not yet a live plugin behavior.
