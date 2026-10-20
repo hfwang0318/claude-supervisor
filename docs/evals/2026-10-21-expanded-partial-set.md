@@ -247,3 +247,15 @@ Reviewer produced findings on two of the three failures:
 | webclients-1917 | 0 | 0 | 0 | 0 |
 
 Combined semantic task-level recall is now **5/6** (webclients missed); finding-level verified is **5/8**. The per-grade timeout successfully prevented one verifier from blocking the batch.
+
+## webclients semantic retry
+
+First reviewer sample: 0 findings. Independent retry found:
+
+- location: `applications/mail/src/app/logic/messages/images/messagesImagesReducers.ts:126`
+- current: `messageState.messageImages.showRemoteImages = false;`
+- required: `messageState.messageImages.showRemoteImages = true;`
+
+Verified: 1/1, 0 invalid.
+
+So webclients is a **reviewer sampling miss**, not a stable capability gap. With one retry, semantic task-level recall is **6/6**; finding-level verified is **6/9**. Reviewer variance is now a measured limitation.
