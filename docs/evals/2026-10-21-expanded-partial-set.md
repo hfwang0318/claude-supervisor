@@ -223,3 +223,9 @@ Ran the same 6 scope-restricted semantic findings against the correct patches:
 | **total** | **6** | **0** | **5** | **1** |
 
 No verified false positives. Each of the three semantic mutants produced exactly one verified condition finding on the candidate, so **task-level mutation recall is 3/3**; the remaining three findings are unrelated/noise, giving 3/6 finding-level precision. Correct-patch false-positive rate is 0/6 verified (one invalid probe).
+
+## Second semantic batch: aborted
+
+Attempted six more semantic mutants. One verifier stayed in `dss-grade` for >14 minutes and was killed; the batch produced no results. This is an environment/verifier-timeout limitation, not a model result.
+
+Next attempt must bound each grade with an AbortSignal (for example 5 minutes) and record `timeout` rather than blocking the whole batch.
