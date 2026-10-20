@@ -61,3 +61,14 @@ Combined with the first three samples:
 Not reviewed: navidrome (environment-error) and one element sample whose review file collided on a truncated filename; cba is already covered.
 
 Limits remain: all new samples are test-only/missing-source partials, one per task, and findings share a root cause per task.
+
+## Repair A/B on ansible-d624
+
+| Arm | Budget | Result | Patch | Second pass |
+|---|---:|---|---:|---|
+| reviewed | 240s | **passed 129/114** | 4,638 B | yes |
+| generic | 240s | failed | 2,778 B | no |
+
+The first reviewed patch still changed only `test/.../test_human_to_bytes.py`; the repair harness did not recognize `test/` as a test path, so the two-pass retry did not run. After adding `(^|/)tests?/` detection, the same session retry edited the production formatter and the official verifier passed.
+
+This is a new fail→pass on the expanded test-only set, driven by a case-derived fix.
