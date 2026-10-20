@@ -152,3 +152,9 @@ So adding explicit current/required did not solve the semantic class: after corr
 Tried `sed -n '<line>p' | grep -Fqx '<required>'` and a required-only `grep -Fq` fallback for semantic mutants. Result stayed 3/8 verified: reviewer line numbers sometimes point at a different line after patch application, and a required literal can occur elsewhere in the same file.
 
 The next requirement is a probe that locates the current line and asserts the required replacement at that exact location, not another fixed line number.
+
+### Region-based probe attempt
+
+Tried a dynamic probe around `location` ±5 lines: if the current literal appears in the region, assert the required literal on a line there; otherwise assert the required literal exists in the file.
+
+Result remained 3/8 verified. Some findings point at a different call site than the mutated condition, and the current literal is not always inside the region. Semantic verification needs the reviewer to provide a stable anchor (function/symbol plus exact condition), not only a line number.
