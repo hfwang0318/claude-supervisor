@@ -259,3 +259,13 @@ First reviewer sample: 0 findings. Independent retry found:
 Verified: 1/1, 0 invalid.
 
 So webclients is a **reviewer sampling miss**, not a stable capability gap. With one retry, semantic task-level recall is **6/6**; finding-level verified is **6/9**. Reviewer variance is now a measured limitation.
+
+## Second semantic batch correct-patch gate
+
+| Task | Findings | Verified | Refuted | Invalid |
+|---|---:|---:|---:|---:|
+| element-web-4fec | 1 | 0 | 1 | 0 |
+| vuls-e049 | 1 | 0 | 1 | 0 |
+| webclients-1917 | 1 | 0 | 1 | 0 |
+
+Combined semantic correct-patch precision: **0 verified false positives across 9 findings** (one invalid probe in the first batch). Semantic task-level recall is 6/6 after webclients retry; finding-level verified is 6/9.
