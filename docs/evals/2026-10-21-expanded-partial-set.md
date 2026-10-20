@@ -146,3 +146,9 @@ Reviewer was changed to emit `location`, `current`, and `required`; 8 findings w
 | ungrounded | 0 |
 
 So adding explicit current/required did not solve the semantic class: after correcting the control-patch mapping, verified recall is **3/8**. A deterministic current/required probe was attempted, but duplicate literals and line offsets still make it unstable; the compiler remains the next bottleneck.
+
+### Line-specific probe attempt
+
+Tried `sed -n '<line>p' | grep -Fqx '<required>'` and a required-only `grep -Fq` fallback for semantic mutants. Result stayed 3/8 verified: reviewer line numbers sometimes point at a different line after patch application, and a required literal can occur elsewhere in the same file.
+
+The next requirement is a probe that locates the current line and asserts the required replacement at that exact location, not another fixed line number.
