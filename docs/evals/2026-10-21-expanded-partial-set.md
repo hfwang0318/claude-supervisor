@@ -210,3 +210,16 @@ Latest semantic run:
 | **total** | **6** | **3** | **3** | **0** |
 
 Verified precision on executed findings is 3/3, but recall is 3/6. Scope restriction removed the invalid probes and unrelated-call-site findings, at the cost of fewer verified concerns. Handling range locations (`path:107-111`) was also fixed.
+
+## Semantic correct-patch gate
+
+Ran the same 6 scope-restricted semantic findings against the correct patches:
+
+| Task | Findings | Verified | Refuted | Invalid |
+|---|---:|---:|---:|---:|
+| ansible-d624 | 1 | 0 | 0 | 1 |
+| openlibrary-b671 | 2 | 0 | 2 | 0 |
+| tutanota-f3ffe17 | 3 | 0 | 3 | 0 |
+| **total** | **6** | **0** | **5** | **1** |
+
+No verified false positives. Each of the three semantic mutants produced exactly one verified condition finding on the candidate, so **task-level mutation recall is 3/3**; the remaining three findings are unrelated/noise, giving 3/6 finding-level precision. Correct-patch false-positive rate is 0/6 verified (one invalid probe).
