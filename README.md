@@ -421,7 +421,8 @@ It read `shop.py`, fixed the slice, and reran the tests: `OK`, `exit=0`. That ch
 - Claude Code with plugin function hooks (`claude plugin validate` / `claude plugin test` exist). Developed on **2.1.290**; 0.6.0 tested on **2.1.293**, 0.7.0–0.10.0 on **2.1.295**. Needs `bash` and `cp`. Running the verifier's commands in a copy needs macOS (`sandbox-exec`) or Linux
 (`bubblewrap`); otherwise the verifier stays read-only. On Linux, run
 `node scripts/linux-preflight.mjs` to check whether bwrap can create namespaces
-(an unprivileged user namespace or setuid bwrap is required). If bwrap is not
+(an unprivileged user namespace or setuid bwrap is required), and
+`node scripts/linux-selftest.mjs` to run a real capture/execute isolation probe. If bwrap is not
 usable, an opt-in container fallback is available:
 
 ```sh
