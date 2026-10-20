@@ -40,3 +40,24 @@ Before the fixes: element 1/4 verified, 2 invalid, 1 refuted. After: 4/4 verifie
 - Environment-error case not counted as failure.
 - No repair A/B yet on the new 10-task set.
 - Findings per task share one root cause; 20 findings are not 20 independent defects.
+
+## Remaining four reviewed samples
+
+| Task | Reviewer findings | Verified | Invalid | Correct patch |
+|---|---:|---:|---:|---:|
+| tutanota-f3ffe17 | 7 | **7** | 0 | 0 verified |
+| ansible-42355d | 8 | **8** | 0 | 0 verified |
+| element-web-4fec | 5 | **5** | 0 | 0 verified |
+| openlibrary-f3b26 | 6 | **6** | 0 | 0 verified |
+
+Combined with the first three samples:
+
+- **7 new tasks reviewed** (cba test-only is an eighth known sample);
+- **46 reviewer findings**;
+- **46 verified** on partial patches;
+- **0 invalid**, **0 ungrounded**;
+- **0 verified false positives** on the 46 correct-patch probes (2 invalid probes remain in the first three correct runs).
+
+Not reviewed: navidrome (environment-error) and one element sample whose review file collided on a truncated filename; cba is already covered.
+
+Limits remain: all new samples are test-only/missing-source partials, one per task, and findings share a root cause per task.
