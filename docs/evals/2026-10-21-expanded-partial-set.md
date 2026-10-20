@@ -406,3 +406,16 @@ Tutanota multi-condition repair A/B:
 | generic | **passed 108/3** | 32,981 B |
 
 Both arms pass; no reviewer-only gain. Multi-condition mutation did not make generic repair fail in this sample. Reviewer-only semantic repair remains the single webclients case, reproduced twice.
+
+## Multi-condition gate
+
+Three multi-condition samples reviewed and verified:
+
+| Task | Findings | Verified | Refuted | Invalid | Correct |
+|---|---:|---:|---:|---:|---:|
+| openlibrary-b671 | 3 | **2** | 0 | 1 | 0 |
+| tutanota-f3ffe17 | 2 | **2** | 0 | 0 | 0 |
+| element-web-4fec | 3 | **2** | 0 | 1 | 0 |
+| **total** | **8** | **6** | **0** | **2** | **0 verified** |
+
+Each multi-condition task has two mutated conditions; both were verified in each task. Task-level recall 3/3, finding-level verified 6/8, correct-patch false positives 0/8 (one invalid probe).
