@@ -1406,6 +1406,11 @@ export const register: Register = (on, options) => {
       const entries = Array.isArray(history) ? history : []
       const lastSideCall = entries.filter(e => e && typeof e === 'object' && e.kind === 'side-call').at(-1) as Record<string, unknown> | undefined
       const openIssues = s.stateUsable ? (await read($, track)).issues.filter(i => i.status === 'open').length : null
+      const hostVersion = await $.session.version().then(v => v.version).catch(() => '')
+      const profile = reviewCompletionProfile(hostVersion, selection.modelId ?? '')
+      const warnings: string[] = []
+      if (semanticMode(s) && selection.modelId !== null && !s.modelDisabled && profile === null) warnings.push('side-model-output-cap-unverified')
+      if (s.modelDisabled) warnings.push('side-model-disabled')
       const health = {
         schemaVersion: 1,
         plugin: 'code-supervisor',
@@ -1414,7 +1419,8 @@ export const register: Register = (on, options) => {
         assistanceMode: s.cfg.assistanceMode,
         executionMode: s.cfg.executionMode,
         stateUsable: s.stateUsable,
-        model: { id: selection.modelId, disabled: s.modelDisabled },
+        model: { id: selection.modelId, disabled: s.modelDisabled, hostVersion: hostVersion || null, outputProfile: profile?.id ?? null },
+        warnings,
         budget: { remainingCalls: s.coordinator.remainingModelCalls, remainingOutputTokens: s.coordinator.remainingOutputTokens },
         openIssues,
         reviewBusy: s.reviewControl?.busy === true,

@@ -205,3 +205,20 @@ Caveats:
 - cba/Flipt silent mutants are constructed; test-only partials are truncated real patches;
 - repair budgets differ (60s for the original Flipt/cba silent runs, 240s for the Linux/test-only runs);
 - no live plugin side-call delivery was measured.
+
+## Side-call delivery finally observed
+
+Two configuration prerequisites were missing:
+
+1. default `assistance_mode=existing` is record-rules only; semantic review requires `supervise`/`probe`/`recovery`;
+2. the worker model `zhipu/glm-5.3[1m]` has no `reviewCompletionProfile` on host 2.1.295, so the reviewer skipped with `SIDE_BUDGET {"reason":"unverified-output-cap"}` before making a call.
+
+With `assistance_mode=supervise` and `verifier_model=zhipu/glm-5.3-flash`, a persistent session produced:
+
+- `SIDE_CALL` answered in 10.5s, input 2,509 / output 576;
+- `REVIEW_QUEUED`;
+- `REVIEW_DELIVERY` with `"delivery":"submitted"`.
+
+This is the first end-to-end note submission observed. Consumption by the next main request is still unverified. In this sample the reviewer reported no concern, so it also missed the hidden field-stripping bug; delivery works, judgment is not guaranteed.
+
+`/code-supervisor health` now reports `model.outputProfile`, `model.hostVersion`, and `warnings: ["side-model-output-cap-unverified"]` when semantic review is enabled but the selected model has no transport profile.
