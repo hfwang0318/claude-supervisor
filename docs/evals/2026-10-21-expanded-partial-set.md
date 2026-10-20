@@ -72,3 +72,33 @@ Limits remain: all new samples are test-only/missing-source partials, one per ta
 The first reviewed patch still changed only `test/.../test_human_to_bytes.py`; the repair harness did not recognize `test/` as a test path, so the two-pass retry did not run. After adding `(^|/)tests?/` detection, the same session retry edited the production formatter and the official verifier passed.
 
 This is a new fail→pass on the expanded test-only set, driven by a case-derived fix.
+
+## Source-drop failure class
+
+To move beyond test-only partials, kept the tests and most production changes but dropped one production-source hunk from passing patches.
+
+Yield from six candidates:
+
+- 5 official failures (NodeBB, element, navidrome, tutanota, openlibrary);
+- 1 still passed (ansible-42355);
+- 1 environment-error (openlibrary-b671).
+
+Three reviewed samples:
+
+| Task | Findings | Verified | Refuted | Invalid | Correct patch |
+|---|---:|---:|---:|---:|---:|
+| NodeBB-7b8bff | 5 | **2** | 3 | 0 | 0 verified |
+| element-web-ecfd | 3 | **1** | 0 | 2 | 0 verified |
+| navidrome-ee21 | 3 | **2** | 0 | 0 | 0 verified |
+| **total** | **11** | **5** | **3** | **2** | **0 verified** |
+
+Correct-patch runs had 0 verified false positives and 0 invalid probes.
+
+Fixes driven by this class:
+
+1. missing-source phrases now include "no diff hunk touches", "never changed", "not modified/updated";
+2. for such findings, prefer a control source file that is **absent from the candidate patch**, rather than the first source file named in prose.
+
+NodeBB improved from 0/5 verified and 1 ungrounded to 2/5 verified and 0 ungrounded.
+
+Limits: verified recall on this class is only 5/11; the compiler still cannot turn several missing-omission findings into discriminating probes. No repair A/B yet on source-drop samples.
