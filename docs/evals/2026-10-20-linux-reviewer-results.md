@@ -235,3 +235,23 @@ With `assistance_mode=supervise` and `verifier_model=zhipu/glm-5.3-flash`, a per
 The main model also refused the false sum claim, so this run proves delivery/consumption, not reviewer judgment quality. The previous sample with the same prompt shape showed the reviewer can still miss a hidden field bug.
 
 This closes the side-call loop for a persistent session when the side model has a supported transport profile. One-shot `claude -p` still ends before the side call can complete.
+
+## Live cba task with supervise + flash
+
+Ran the real cba silent-mutant task in a Linux container with `supervise` and `verifier_model=zhipu/glm-5.3-flash`, persistent stream-json, 900s keepalive.
+
+Review activity:
+
+- side call 1 answered in 77.6s (8,359 input / 2,436 output);
+- `REVIEW_QUEUED` → `REVIEW_DELIVERY` **context-returned**;
+- side call 2 answered in 76.2s (9,215 / 2,365);
+- side call 3 answered in 56.5s (9,068 / 1,906);
+- two review deliveries returned to context.
+
+After review, the main model explicitly reasoned:
+
+> Remove the `haveLegacyName: undefined` noise → `setState(devices)` after resolving names.
+
+That line is exactly the hidden mutant defect. The task ended on `end_turn`; no official grade was captured because the container was removed. This is the first live real-task evidence that the reviewer note reached the main model and changed its plan.
+
+Caveat: one task, no grade, and the main model may have found the same line independently. It establishes live delivery/influence, not a measured fail→pass.
