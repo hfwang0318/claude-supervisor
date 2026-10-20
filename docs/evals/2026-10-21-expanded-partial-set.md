@@ -140,9 +140,9 @@ Reviewer was changed to emit `location`, `current`, and `required`; 8 findings w
 |---|---:|
 | findings | 8 |
 | with current+required | 7 |
-| verified | **4** |
-| refuted | 3 |
+| verified | **3** |
+| refuted | 4 |
 | invalid-control | 1 |
-| ungrounded | 2 |
+| ungrounded | 0 |
 
-So adding explicit current/required did not yet solve the semantic class: verified recall is 4/10 findings. The compiler still chooses non-discriminating literals or probes the wrong call site. This is the next concrete bottleneck.
+So adding explicit current/required did not solve the semantic class: after correcting the control-patch mapping, verified recall is **3/8**. A deterministic current/required probe was attempted, but duplicate literals and line offsets still make it unstable; the compiler remains the next bottleneck.
