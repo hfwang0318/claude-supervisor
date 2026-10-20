@@ -1,0 +1,42 @@
+# Expanded failure set from passing patches (2026-10-21)
+
+## Method
+
+From the 30 passing SWE-bench Pro agent patches, keep only the test/fixture hunks and drop the production-source hunks. Grade the resulting patch with the official verifier.
+
+This is a real near-failure class: the agent changed tests but not the implementation.
+
+## Yield
+
+- 10 test-only partials generated;
+- 9 official failures (`failed`, reward 0);
+- 1 environment-error (navidrome, verifier did not produce a valid reward).
+
+Tasks included element-web, openlibrary, webclients, tutanota, ansible, navidrome. All use already-materialized Linux/amd64 images; no new image pull.
+
+## Reviewer / gate on three new samples
+
+Three diverse cases were reviewed and verified:
+
+| Task | Language | Reviewer findings | Verified | Invalid | Ungrounded | Correct patch |
+|---|---|---:|---:|---:|---:|---:|
+| ansible-d624 | Python | 6 | **6** | 0 | 0 | 0 verified |
+| element-web-ecfd | TypeScript | 4 | **4** | 0 | 0 | 0 verified |
+| openlibrary-b671 | Python | 10 | **10** | 0 | 0 | 0 verified |
+| **total** | | **20** | **20** | **0** | **0** | **0 verified** |
+
+Correct-patch runs had 0 false positives; two invalid probes (one ansible, one openlibrary).
+
+## Fixes driven by the new set
+
+1. `test/` directory paths were not classified as tests, so the test-only fallback did not trigger; added `(^|/)tests?/`.
+2. The missing-source probe cites the control source file, which is absent from the candidate patch; grounding now checks `git diff --name-only` literals against the control patch, not the candidate.
+
+Before the fixes: element 1/4 verified, 2 invalid, 1 refuted. After: 4/4 verified, 0 invalid.
+
+## Limits
+
+- One failure class (test-only / missing source), one partial per task.
+- Environment-error case not counted as failure.
+- No repair A/B yet on the new 10-task set.
+- Findings per task share one root cause; 20 findings are not 20 independent defects.
