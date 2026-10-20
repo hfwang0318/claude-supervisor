@@ -162,3 +162,25 @@ Combined sample picture:
 | Flipt test-only | missing source | 4/4 | 4/4 | block/pass | 2/2 | 0/2 fail |
 
 Limits: two repositories, three samples, constructed/truncated; no live plugin side-call delivery.
+
+## Second hidden-contract sample: Flipt `Location.File`
+
+Flipt silent mutant clears `Location.File`; visible tests stay green, official grade 1/2.
+
+| Stage | Result |
+|---|---|
+| reviewer findings | 2 |
+| verified | **1 regression** |
+| invalid-control | 0 |
+| correct patch | 0 verified (1 invalid) |
+| gate | silent blocked, correct passed |
+
+The verified probe was exact:
+
+```sh
+if grep -q 'File:   ""' internal/cue/validate.go; then exit 1; else exit 0; fi
+```
+
+This adds a second hidden-contract sample in a second language. Correct-patch run still had one invalid probe, so false-positive risk is not zero, but no verified false positive.
+
+Sample count: 2 hidden-contract + 2 test-only, across TS and Go.
