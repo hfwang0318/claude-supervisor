@@ -255,3 +255,20 @@ After review, the main model explicitly reasoned:
 That line is exactly the hidden mutant defect. The task ended on `end_turn`; no official grade was captured because the container was removed. This is the first live real-task evidence that the reviewer note reached the main model and changed its plan.
 
 Caveat: one task, no grade, and the main model may have found the same line independently. It establishes live delivery/influence, not a measured fail→pass.
+
+## Live cba reviewer-enabled fail→pass
+
+Reran the real cba silent-mutant task in a Linux container with `supervise` + `verifier_model=zhipu/glm-5.3-flash`, persistent stream-json, 900s keepalive, and saved the final patch.
+
+- side calls: 2 answered (77.6s and 76.2s in the first run; 2 review deliveries `context-returned` in this run);
+- final patch: 6,400 B, both test and source files;
+- official grade: **passed, reward 1, 3/3 required tests**.
+
+The same silent mutant baseline grades 0/3. So this is a live reviewer-enabled fail→pass with the official runner.
+
+Caveats:
+
+- no same-session off arm was run; the comparison is against the known mutant baseline 0/3;
+- one task, one run;
+- live review deliveries were `context-returned`, not `submitted`;
+- the main model may have found the field-stripping line independently; the review note and plan change were observed, but causal attribution is not isolated.
