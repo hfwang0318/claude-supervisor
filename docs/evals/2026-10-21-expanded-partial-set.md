@@ -316,3 +316,14 @@ Two reviewer samples per task plus patch-match fallback gives 6/6 recall at 6/7 
 Identical patch size; no reviewer-only gain. This is the third semantic repair sample where both arms pass (ansible, tutanota, vuls). For this class, the current reviewer value is localization/speed, not unique repair capability.
 
 Semantic verified gate remains stronger: 6/6 task-level recall, 6/7 finding precision, 0 invalid, 0 verified false positives.
+
+## Second source-drop batch
+
+Two new official failures from the second batch (qutebrowser-c09e, webclients-1917); two candidates passed and one was environment-error.
+
+| Task | Findings | Verified | Refuted | Invalid |
+|---|---:|---:|---:|---:|
+| qutebrowser-c09e | 1 | **1** | 0 | 0 |
+| webclients-1917 | 2 | 0 | 0 | 2 |
+
+Source-drop totals: **4/5 tasks verified**, **12/14 findings verified**, 2 invalid probes. qutebrowser verifies the absent-source fallback in another repo; webclients needs investigation because its findings did not produce discriminating probes.
