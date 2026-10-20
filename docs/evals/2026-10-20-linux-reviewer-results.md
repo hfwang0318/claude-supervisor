@@ -103,3 +103,14 @@ Flipt test-only partial, official 0/2:
 A strip-test-only strategy (start from base without the test/fixture hunks) produced an empty patch and patch-error at 400s. Reverted.
 
 So the reviewer finding and 4/4 verified gate work on Flipt, but the repair model does not convert the Go finding into a production source change. This is a repair-policy/model limitation, not a verifier-recall failure.
+
+## Flipt hard-prompt repair retry
+
+Strengthened the reviewed prompt: test-only/fixture-only edits are a failed repair; the finding's production file is named and the first Edit must be there.
+
+| Budget | Source changed | Result | Patch |
+|---:|---|---|---:|
+| 400s | yes (`validate.go`) | failed 1/2 | 4,524 B |
+| 600s | no (added `scratch_pos_test.go`) | failed 0/2 | 3,742 B |
+
+The hard prompt is not deterministic: 400s produced a partial source implementation; 600s regressed to test-only again. Flipt repair remains unreliable, unlike cba. This is a repair-model/policy issue, not a verifier failure.
