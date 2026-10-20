@@ -390,3 +390,19 @@ Identical patch. No reviewer-only gain. Semantic repair now has five samples: fo
 | generic | 240s | **passed 77/48** | 38,945 B |
 
 Identical patch; no reviewer-only gain. Semantic repair now has six samples: five where both arms pass and one (webclients) where only reviewed passes, reproduced twice.
+
+## Multi-condition semantic mutants
+
+Applied two condition mutations per passing patch:
+
+- 4 new official failures (element-ecfd, openlibrary, tutanota, element-4fec);
+- 1 still passed (element-404).
+
+Tutanota multi-condition repair A/B:
+
+| Arm | Result | Patch |
+|---|---|---:|
+| reviewed | **passed 108/3** | 32,979 B |
+| generic | **passed 108/3** | 32,981 B |
+
+Both arms pass; no reviewer-only gain. Multi-condition mutation did not make generic repair fail in this sample. Reviewer-only semantic repair remains the single webclients case, reproduced twice.
