@@ -305,3 +305,14 @@ Combined semantic consensus with fallback:
 | invalid | 0 |
 
 Two reviewer samples per task plus patch-match fallback gives 6/6 recall at 6/7 finding precision, with no invalid probes and no verified false positives.
+
+## Semantic repair A/B (vuls-e049)
+
+| Arm | Budget | Result | Patch |
+|---|---:|---|---:|
+| reviewed | 240s | **passed 135/2** | 5,777 B |
+| generic | 240s | **passed 135/2** | 5,777 B |
+
+Identical patch size; no reviewer-only gain. This is the third semantic repair sample where both arms pass (ansible, tutanota, vuls). For this class, the current reviewer value is localization/speed, not unique repair capability.
+
+Semantic verified gate remains stronger: 6/6 task-level recall, 6/7 finding precision, 0 invalid, 0 verified false positives.
