@@ -79,7 +79,9 @@ export const freezeRuntime = (root, runtime, { experimentalMode = 'facts', revie
 export const openModelNetwork = async (runtime, auditPath) => {
   const id = randomUUID(), name = `dss-model-${id}`, network = `dss-internal-${id}`
   const relayToken = randomUUID()
-  const server = await startGateway({ ...currentRoute(), relayToken, auditPath, requireRelayToken: true })
+  const relayPort = Number(process.env.EVAL_RELAY_PORT ?? 0)
+  const relayBind = process.env.EVAL_RELAY_BIND ?? '127.0.0.1'
+  const server = await startGateway({ ...currentRoute(), relayToken, auditPath, requireRelayToken: true, port: Number.isInteger(relayPort) ? relayPort : 0, bind: relayBind })
   const checked = async args => { const r = await command(args); if (r.exitCode !== 0) throw Error(r.stderr.slice(-1000)); return r }
   const close = async () => { await command(['logs', name], { log: auditPath + '.proxy.log' }); await command(['rm', '-f', name]); await command(['network', 'rm', network]); server.closeAllConnections(); await new Promise(ok => server.close(ok)) }
   try {
