@@ -169,3 +169,14 @@ Result remained 3/8 verified. Some findings point at a different call site than 
 Both arms repaired the inverted condition. There is no reviewer-only gain on this semantic sample, but the reviewed arm reached the fix much faster (49s vs 247s).
 
 So semantic repair difficulty is task-dependent: ansible's explicit condition is easy for both arms, while the semantic verified-gate recall stays 3/8.
+
+## Semantic repair A/B (tutanota-f3ffe17)
+
+| Arm | Budget | Result | Patch |
+|---|---:|---|---:|
+| reviewed | 240s | **passed 108/3** | 32,995 B |
+| generic | 240s | **passed 108/3** | 32,980 B |
+
+Both arms repaired the `length >= 0` → `length > 0` condition. Again no reviewer-only success gain.
+
+Semantic repair now has two samples where both arms pass (ansible, tutanota). The reviewer's measured value on this class is speed/guidance, not unique repair capability. The semantic verified gate remains the weak link at 3/8.
