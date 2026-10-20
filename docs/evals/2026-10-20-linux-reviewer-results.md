@@ -134,3 +134,31 @@ Across the two natural test-only partials:
 | Flipt (Go) | pass 2/2 (second pass) | fail 0/2 |
 
 Caveat: one sample per repo, 240s in a nested/emulated environment, and the second pass adds latency. The two-pass policy is an eval/repair harness result, not yet a live plugin behavior.
+
+## Hidden-contract sample: cba silent mutant
+
+The cba silent mutant changes `haveLegacyName` handling while visible tests stay green; official grade is 0/3.
+
+Linux evidence already collected:
+
+| Stage | Result |
+|---|---|
+| reviewer findings | 6 |
+| verified | **3 regression** |
+| invalid-control | 0 |
+| correct patch | 0 verified |
+| gate | silent blocked, correct passed |
+| repair reviewed 240s | **passed 3/3** |
+| repair generic 240s | **failed 2/3** |
+
+Unlike the test-only samples, this is a real source-contract defect: candidate fails, correct control passes, base passes. It is still a constructed silent mutant, not a fully natural agent failure.
+
+Combined sample picture:
+
+| Sample | Type | Reviewer | Verified | Gate | Reviewed repair | Generic repair |
+|---|---|---|---:|---|---:|---:|
+| cba silent | hidden source contract | 6 findings | 3/3 | block/pass | 3/3 | 2/3 fail |
+| cba test-only | missing source | 4/4 | 4/4 | block/pass | 3/3 | 2/3 fail |
+| Flipt test-only | missing source | 4/4 | 4/4 | block/pass | 2/2 | 0/2 fail |
+
+Limits: two repositories, three samples, constructed/truncated; no live plugin side-call delivery.
