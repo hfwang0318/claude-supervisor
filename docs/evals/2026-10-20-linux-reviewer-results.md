@@ -85,7 +85,7 @@ Reviewer produced 4 missing-source findings. Verification:
 
 | Candidate | Findings | Verified | Invalid |
 |---|---:|---:|---:|
-| test-only partial | 4 | **1 contract** | 1 |
+| test-only partial | 4 | **4 contract** | **0** |
 | correct patch | 4 | **0** | 0 |
 
-Gate still separates partial from correct, but verifier recall is only 1/4, unlike cba's 4/4. The test-only fallback is not yet general across repositories; the compiler still chooses fixture/test literals for most Flipt findings.
+After fixing Go `_test.go` detection and forcing the control source file for test-only patches, Flipt also reaches 4/4 verified with 0 invalid. Across cba and Flipt: 8/8 verified, 0 invalid, 0 false positives on the correct patch.
