@@ -89,3 +89,17 @@ Reviewer produced 4 missing-source findings. Verification:
 | correct patch | 4 | **0** | 0 |
 
 After fixing Go `_test.go` detection and forcing the control source file for test-only patches, Flipt also reaches 4/4 verified with 0 invalid. Across cba and Flipt: 8/8 verified, 0 invalid, 0 false positives on the correct patch.
+
+## Flipt repair A/B (negative)
+
+Flipt test-only partial, official 0/2:
+
+| Arm | Budget | Result | Patch |
+|---|---:|---|---:|
+| reviewed | 240s | failed 0/2 | 2,527 B, fixture/test only |
+| generic | 240s | failed 0/2 | 2,527 B, fixture/test only |
+| reviewed | 400s | failed 0/2 | 3,943 B, added `scratch_test.go`, still no source |
+
+A strip-test-only strategy (start from base without the test/fixture hunks) produced an empty patch and patch-error at 400s. Reverted.
+
+So the reviewer finding and 4/4 verified gate work on Flipt, but the repair model does not convert the Go finding into a production source change. This is a repair-policy/model limitation, not a verifier-recall failure.
