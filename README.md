@@ -93,6 +93,9 @@ The executor copies current files, including dirty/untracked files, into an owne
 temporary directory. SHA-256 manifests compare the source before/after copying and
 the copy. macOS sandboxing denies by default, limits real-directory writes, secret
 reads and network, and supplies only an explicit environment without secrets.
+On Linux the executor uses bubblewrap (`bwrap`) with explicit read-only system
+binds, a writable owned copy, no network and an explicit environment. If neither
+backend is usable it stays read-only and executes no side commands.
 Combined command output retention is 1MiB; timeouts terminate the process group.
 Symlinks, secret paths, special files and workspaces over 10k entries or 50MiB are
 currently unsupported. Without a trustworthy copy the plugin provides read-only
@@ -415,7 +418,8 @@ It read `shop.py`, fixed the slice, and reran the tests: `OK`, `exit=0`. That ch
 
 ## Requirements
 
-- Claude Code with plugin function hooks (`claude plugin validate` / `claude plugin test` exist). Developed on **2.1.290**; 0.6.0 tested on **2.1.293**, 0.7.0–0.10.0 on **2.1.295**. Needs `bash` and `cp`. Running the verifier's commands in a copy needs macOS (`sandbox-exec`).
+- Claude Code with plugin function hooks (`claude plugin validate` / `claude plugin test` exist). Developed on **2.1.290**; 0.6.0 tested on **2.1.293**, 0.7.0–0.10.0 on **2.1.295**. Needs `bash` and `cp`. Running the verifier's commands in a copy needs macOS (`sandbox-exec`) or Linux
+(`bubblewrap`); otherwise the verifier stays read-only.
 
 ## Install
 
@@ -493,7 +497,7 @@ Interactive completion review runs after the turn; eligible tool-batch review wa
 
 - **Judgment can be wrong or incomplete.** `supervise` can question requirements, plans, architecture and direction from bounded context, but a plausible opinion is not proof. Missing plans, omitted files and untested branches remain unknown; real-model benefit is not established by local tests.
 - **The rules read regexes, not meaning.** A project's own test runner under a name they do not know is no run. One whose name says test, check, lint, build, ci or verify (`./scripts/check-all`, `npm run verify`, `manage.py test`) keeps "no run at all" quiet; one that says none of these (`cargo nextest run`, `./go`) does not, so a pass claimed after it is held as unchecked, and the model can answer `[ysk#N refuted: …]`. An edit made through Bash (`sed -i`, a script) is not seen as an edit, which makes the rules miss rather than misfire.
-- **Without a sandbox the verifier mostly reads.** On Linux it cannot run the project's code; a defect it finds is a hypothesis the model's own run settles.
+- **Without a sandbox the verifier mostly reads.** On Linux without bubblewrap it cannot run the project's code; a defect it finds is a hypothesis the model's own run settles.
 - **A turn held at its end costs a step.** When the check is wrong, that step is wasted; the model can say so with `refuted`. Live runs found such misfires, and each became a test (below).
 - **The clone is not your machine.** A claim that depends on something outside the workspace can be judged false in the copy.
 

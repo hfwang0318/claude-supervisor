@@ -6,11 +6,26 @@ import { homedir, tmpdir } from 'node:os'
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { spawn, execFileSync } from 'node:child_process'
 import { pathToFileURL } from 'node:url'
+import { linuxBwrapArgv } from './linux-sandbox.mjs'
 
 const MAX_BYTES = 50 * 1024 * 1024
 const MAX_FILES = 10000
 const OUTPUT_BYTES = 1024 * 1024
 const secret = /^(?:\.env(?:\..*)?|\.ssh|\.aws|\.gnupg|id_rsa|credentials(?:\..*)?)$|\.(?:pem|key)$/i
+const bwrapPath = () => ['/usr/bin/bwrap', '/bin/bwrap', '/usr/local/bin/bwrap'].find(existsSync) ?? ''
+let bwrapChecked = false
+let bwrapOK = false
+const bwrapWorks = () => {
+  if (bwrapChecked) return bwrapOK
+  bwrapChecked = true
+  const binary = bwrapPath()
+  if (!binary) return bwrapOK = false
+  try {
+    execFileSync(binary, ['--ro-bind', '/', '/', '--unshare-all', '--', '/bin/true'], { stdio: 'ignore', timeout: 1500 })
+    return bwrapOK = true
+  } catch { return bwrapOK = false }
+}
+const isolationBackend = () => process.platform === 'darwin' && existsSync('/usr/bin/sandbox-exec') ? 'sandbox-exec' : process.platform === 'linux' && bwrapWorks() ? 'bwrap' : null
 const ignored = name => name === '.git' || name === '.superpowers'
 const inside = (root, path) => path === root || (!isAbsolute(relative(root, path)) && !relative(root, path).startsWith('..'))
 const alive = deadline => { if (!Number.isFinite(deadline) || Date.now() >= deadline) throw Error('deadline exhausted') }
@@ -85,7 +100,7 @@ export const capture = (binding, source, deadlineMs) => {
     if (before.hash !== after.hash || before.hash !== copied.hash) throw Error('workspace changed during capture')
     const id = randomUUID()
     const bound = { ...binding, workspaceRevision: before.hash, snapshotId: id }
-    const snapshot = { id, binding: bound, root: copy, sourceManifestHash: before.hash, isolation: process.platform === 'darwin' && existsSync('/usr/bin/sandbox-exec') ? 'boxed-copy' : 'read-only' }
+    const snapshot = { id, binding: bound, root: copy, sourceManifestHash: before.hash, isolation: isolationBackend() === null ? 'read-only' : 'boxed-copy' }
     writeFileSync(join(parent, 'owner.json'), JSON.stringify({ schemaVersion: 1, ...snapshot, source: root, entries: before.entries }), { mode: 0o600, flag: 'wx' })
     return snapshot
   } catch (err) { rmSync(parent, { recursive: true, force: true }); throw err }
@@ -133,7 +148,9 @@ export const sandboxProfile = root => [
 export const execute = async (snapshot, command, files, deadlineMs) => {
   const { owner } = ownerOf(snapshot)
   alive(deadlineMs)
-  if (snapshot.isolation !== 'boxed-copy' || process.platform !== 'darwin') throw Error('execution isolation unavailable')
+  if (snapshot.isolation !== 'boxed-copy') throw Error('execution isolation unavailable')
+  const backend = isolationBackend()
+  if (backend === null) throw Error('execution isolation unavailable')
   if (typeof command !== 'string' || Buffer.byteLength(command) > 4096 || !command.trim()) throw Error('command protocol limit')
   if (!Array.isArray(files) || files.length > 3 || files.reduce((n, f) => n + Buffer.byteLength(f.content ?? ''), 0) > 65536) throw Error('probe files protocol limit')
   if (manifest(owner.source, deadlineMs).hash !== owner.sourceManifestHash || manifest(snapshot.root, deadlineMs).hash !== owner.sourceManifestHash) throw Error('stale workspace before execution')
@@ -146,7 +163,8 @@ export const execute = async (snapshot, command, files, deadlineMs) => {
   }
   const startedAt = Date.now()
   const env = { PATH: `/usr/bin:/bin:/usr/sbin:/sbin:${dirname(realpathSync(process.execPath))}`, HOME: snapshot.root, TMPDIR: snapshot.root, LANG: 'en_US.UTF-8', OPENSSL_CONF: '/dev/null' }
-  const child = spawn('/usr/bin/sandbox-exec', ['-p', sandboxProfile(snapshot.root), '/bin/bash', '--noprofile', '--norc', '-c', command], { cwd: snapshot.root, env, detached: true, stdio: ['ignore', 'pipe', 'pipe'] })
+  const [binary, ...args] = backend === 'sandbox-exec' ? ['/usr/bin/sandbox-exec', '-p', sandboxProfile(snapshot.root), '/bin/bash', '--noprofile', '--norc', '-c', command] : linuxBwrapArgv(snapshot.root, command, bwrapPath(), env.PATH, ['/usr', '/bin', '/sbin', '/lib', '/lib64', '/etc'].filter(existsSync))
+  const child = spawn(binary, args, { cwd: snapshot.root, env, detached: true, stdio: ['ignore', 'pipe', 'pipe'] })
   let bytes = 0
   let truncated = false
   let stdout = ''
