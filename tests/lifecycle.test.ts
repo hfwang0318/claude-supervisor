@@ -13,6 +13,14 @@ test('new task invalidates in-flight work and prevents old results committing', 
   expect(job?.signal.aborted).toBe(true)
 })
 
+test('a detached review job survives main invalidation but cannot commit stale evidence', async () => {
+  const c = new Coordinator(binding)
+  const job = c.start('review', 0, { detached: true })
+  c.invalidate({ ...binding, taskRevision: 2, turnId: 't2' })
+  expect(job?.signal.aborted).toBe(false)
+  expect(c.finish('review', binding, 'succeeded')).toBe(false)
+})
+
 test('a terminal job cannot restart and an expensive job is single flight', async () => {
   const c = new Coordinator(binding)
   expect(c.start('j', 0) !== null).toBe(true)

@@ -445,7 +445,7 @@ const engineeringReview = async ($: EngineInterface, list: Rows, final = false, 
   if (s.reviewSignatures.has(key)) return skipped('already-considered-context')
   const launchAt = await $.clock.now()
   if (!sameTask(binding, s.coordinator.binding)) return null
-  const id = `review-${++s.jobNumber}`, job = s.coordinator.start(id, launchAt)
+  const id = `review-${++s.jobNumber}`, job = s.coordinator.start(id, launchAt, { detached: final })
   if (!job) return skipped('review-in-flight-or-budget-unavailable')
   s.reviewSignatures.add(key); s.reviewAttempts++
   const lastTool = context.sources.filter(source => source.kind === 'tool' || source.kind === 'observation').at(-1)

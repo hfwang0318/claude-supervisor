@@ -7,7 +7,7 @@ export const sameTask = (a: Binding, b: Binding) =>
   a.sessionId === b.sessionId && a.generationId === b.generationId && a.turnId === b.turnId && a.taskRevision === b.taskRevision
 
 export class Coordinator {
-  private jobs = new Map<string, { status: JobStatus; binding: Binding; controller: AbortController }>()
+  private jobs = new Map<string, { status: JobStatus; binding: Binding; controller: AbortController; detached?: boolean }>()
   private deliveries = new Map<string, DeliveryStatus>()
   private calls = 2
   private tokens = 4000
@@ -27,14 +27,14 @@ export class Coordinator {
   get modelBudgetAvailable() { return this.calls > 0 && this.tokens > 0 && this.failures < 2 }
   matches(binding: Binding) { return this.historical ? sameTask(binding, this.binding) : sameBinding(binding, this.binding) }
 
-  start(id: string, now: number) {
+  start(id: string, now: number, options: { detached?: boolean } = {}) {
     if (this.jobs.has(id) || [...this.jobs.values()].some(j => j.status === 'running') || !this.historical && this.activeMs <= 0) return null
     const controller = new AbortController()
     if (this.jobs.size >= 200) {
       const first = [...this.jobs].find(([, job]) => job.status !== 'running')?.[0]
       if (first) this.jobs.delete(first)
     }
-    this.jobs.set(id, { status: 'running', binding: { ...this.binding }, controller })
+    this.jobs.set(id, { status: 'running', binding: { ...this.binding }, controller, detached: options.detached === true })
     this.startedAt = now
     return { signal: controller.signal }
   }
@@ -51,8 +51,8 @@ export class Coordinator {
 
   invalidate(binding: Binding, options: { preserveBudget?: boolean; now?: number; reason?: 'cancelled' | 'disabled' } = {}) {
     if (options.preserveBudget && this.startedAt !== null && options.now !== undefined) this.activeMs = Math.max(0, this.activeMs - Math.max(0, options.now - this.startedAt))
-    for (const job of this.jobs.values()) if (job.status === 'running') { job.status = 'cancelled'; job.controller.abort(options.reason ?? 'stale-binding') }
-    this.jobs.clear()
+    for (const job of this.jobs.values()) if (job.status === 'running' && !job.detached) { job.status = 'cancelled'; job.controller.abort(options.reason ?? 'stale-binding') }
+    for (const [id, job] of this.jobs) if (!job.detached || job.status !== 'running') this.jobs.delete(id)
     this.deliveries.clear()
     this.binding = { ...binding }
     if (!options.preserveBudget) {
@@ -85,7 +85,7 @@ export class Coordinator {
     if (this.historical) { this.binding = { ...this.binding, workspaceRevision: revision }; return }
     if (this.startedAt !== null) this.activeMs = Math.max(0, this.activeMs - Math.max(0, now - this.startedAt))
     this.startedAt = null
-    for (const job of this.jobs.values()) if (job.status === 'running') { job.status = 'stale'; job.controller.abort('stale-binding') }
+    for (const job of this.jobs.values()) if (job.status === 'running' && !job.detached) { job.status = 'stale'; job.controller.abort('stale-binding') }
     this.binding = { ...this.binding, workspaceRevision: revision }
   }
 
