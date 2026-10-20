@@ -269,3 +269,21 @@ So webclients is a **reviewer sampling miss**, not a stable capability gap. With
 | webclients-1917 | 1 | 0 | 1 | 0 |
 
 Combined semantic correct-patch precision: **0 verified false positives across 9 findings** (one invalid probe in the first batch). Semantic task-level recall is 6/6 after webclients retry; finding-level verified is 6/9.
+
+## Semantic two-sample consensus
+
+For each semantic task, kept findings whose file location appeared in both reviewer samples (webclients used the retry sample).
+
+| Task | Consensus findings | Verified | Refuted | Invalid |
+|---|---:|---:|---:|---:|
+| ansible-d624 | 1 | 1 | 0 | 0 |
+| element-web-4fec | 1 | 1 | 0 | 0 |
+| tutanota-f3ffe17 | 1 | 1 | 0 | 0 |
+| vuls-e049 | 1 | 1 | 0 | 0 |
+| webclients-1917 | 1 | 1 | 0 | 0 |
+| openlibrary-b671 | 0 | 0 | 0 | 0 |
+| **total** | **5** | **5** | **0** | **0** |
+
+Consensus removes finding-level noise: **5/5 verified, 0 invalid**. It also drops openlibrary because the two samples pointed at different locations; task-level recall falls from 6/6 to 5/6.
+
+Tradeoff: single-sample recall 6/6 with 6/9 precision; consensus recall 5/6 with 5/5 precision. A fallback for empty consensus (e.g., use the sample whose condition matches the patch diff) is the next step.
