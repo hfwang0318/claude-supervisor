@@ -102,3 +102,12 @@ Fixes driven by this class:
 NodeBB improved from 0/5 verified and 1 ungrounded to 2/5 verified and 0 ungrounded.
 
 A final fix forced the absent-source probe whenever the control patch contains a production source file absent from the candidate. Verified recall rose from 5/11 to **11/11**, with 0 invalid and 0 ungrounded. No repair A/B yet on source-drop samples.
+
+## Source-drop repair A/B
+
+- navidrome source-drop: a generic-prompt repair at 240s **passed 15/15** by adding the missing `core/agents/lastfm/agent.go`; not a reviewer gain.
+- NodeBB source-drop: reviewed 240s **failed 2/12**. A second pass was triggered (`secondPass: true`) but the patch still contained only the two call-site files and still omitted `src/api/utils.js`.
+
+The NodeBB failure shows the repair two-pass target selection is still imperfect: with a findings array, the source hint can choose the wrong named file. A later fix aggregated finding text, but the continued session still did not add the absent source before the 240s budget expired.
+
+So source-drop verified gate is strong (11/11) but repair generalization is not established.
