@@ -50,3 +50,18 @@ Local experiment artifacts remain under `.superpowers/sdd/phase0-rebuild/` and a
 A persistent stream-json session (`claude -p --input-format stream-json --output-format stream-json --verbose`) with a real code change and a completion claim produced an **answered** reviewer side call: 21,773 ms, 901 input / 1,224 output tokens. A follow-up side call also answered (11,153 ms, 782 / 566 tokens) when the session stayed alive.
 
 The same plugin under one-shot `claude -p` produced `provider-unanswered` / `aborted` with 0 tokens. The 30s model limit is therefore not the root cause; the one-shot turn-end lifecycle aborts the side call. Product reviewer measurements must use a persistent/interactive session.
+
+## Natural partial patch gate (test-only cba)
+
+A partial patch was made by keeping only the test-file hunk of the passing cba agent patch. Official grade: failed, 2/3 required tests.
+
+Reviewer produced 4 missing-source findings. With a deterministic fallback for test-only patches (`git diff --name-only | grep -q '<source file>'`):
+
+| Candidate | Findings | Verified | Invalid |
+|---|---:|---:|---:|
+| test-only partial | 4 | **4 contract** | **0** |
+| correct patch | 4 | **0** | **0** |
+
+Gate: partial blocked, correct patch passed. Reviewer recall 4/4; verifier precision 4/4 on this sample.
+
+Caveat: the partial is a truncated real agent patch, not a fully natural failure; sample size is one task. The fallback is specific to "test-only patch, source missing" and does not generalize to arbitrary hidden-contract bugs.
