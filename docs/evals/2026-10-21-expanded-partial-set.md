@@ -287,3 +287,21 @@ For each semantic task, kept findings whose file location appeared in both revie
 Consensus removes finding-level noise: **5/5 verified, 0 invalid**. It also drops openlibrary because the two samples pointed at different locations; task-level recall falls from 6/6 to 5/6.
 
 Tradeoff: single-sample recall 6/6 with 6/9 precision; consensus recall 5/6 with 5/5 precision. A fallback for empty consensus (e.g., use the sample whose condition matches the patch diff) is the next step.
+
+## Empty-consensus fallback
+
+For openlibrary, two reviewer samples had no shared location. Fallback: rank union findings by whether `current` and `required` appear in the patch text; keep only the maximum-score findings.
+
+- 4 union findings → 2 max-score candidates;
+- verified 1, refuted 1, invalid 0.
+
+Combined semantic consensus with fallback:
+
+| Metric | Result |
+|---|---:|
+| task-level recall | **6/6** |
+| findings verified | **6/7** |
+| refuted | 1 |
+| invalid | 0 |
+
+Two reviewer samples per task plus patch-match fallback gives 6/6 recall at 6/7 finding precision, with no invalid probes and no verified false positives.
