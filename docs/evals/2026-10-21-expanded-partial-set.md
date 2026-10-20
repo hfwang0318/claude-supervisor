@@ -180,3 +180,18 @@ So semantic repair difficulty is task-dependent: ansible's explicit condition is
 Both arms repaired the `length >= 0` → `length > 0` condition. Again no reviewer-only success gain.
 
 Semantic repair now has two samples where both arms pass (ansible, tutanota). The reviewer's measured value on this class is speed/guidance, not unique repair capability. The semantic verified gate remains the weak link at 3/8.
+
+### Patch-diff probe attempt
+
+Added a deterministic probe that parses added source lines from candidate/control patches and asserts a control-only line replaces a candidate-only line, restricted to findings whose text mentions one of those lines.
+
+Results:
+
+| Task | Verified | Refuted | Invalid |
+|---|---:|---:|---:|
+| ansible-d624 | 2/2 | 0 | 0 |
+| openlibrary-b671 | 1/3 | 1 | 1 |
+| tutanota-f3ffe17 | 1/3 | 1 | 1 |
+| **total** | **4/8** | 2 | 2 |
+
+This improved ansible and one tutanota finding, but openlibrary/tutanota findings that point at unrelated call sites still fail. Semantic verified recall is 4/8.
