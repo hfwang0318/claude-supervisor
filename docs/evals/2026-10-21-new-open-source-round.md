@@ -267,3 +267,18 @@ reviewed 有修改但仍有 1 个测试失败；generic 完全没改。
 | NodeBB-8168 | 1 | 1/1 | fail | fail |
 
 当前：reviewer task-level **3/3**，verified **4/5**，reviewed repair **2/3**，generic **0/3**。
+
+## NodeBB repair 显式文件 hint
+
+对比 reviewed 补丁与 gold：reviewed 已有 `uploadedpicture` 清理，但缺少 gold 的 `src/user/delete.js` 修改。
+
+加 `REPAIR_HINT=src/user/delete.js` 后重跑 reviewed：
+
+| Arm | 结果 | Patch |
+|---|---|---:|
+| reviewed + hint | **failed** | 22,876 B（未修改） |
+| reviewed（无 hint） | failed | 23,418 B |
+
+显式文件目标也没有诱导编辑；NodeBB 的修复仍未落地。
+
+自然样本 repair 维持 **2/3**。限制：repair prompt 即使给出文件名，模型也可能只思考不编辑；需要更强制的编辑协议或更小的上下文。
