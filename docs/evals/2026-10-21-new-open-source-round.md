@@ -163,3 +163,22 @@ reviewer 定位到 `read_author_person` 的 tag 传递；control-only probe 选�
 - `required` 缺失且没有可执行 probe 时，代码访问 `compiled.command` 崩溃。
 
 自然源码失败现在有 **2 个**：ansible-c1f2、openlibrary-0dc5b。
+
+## openlibrary 自然失败 repair
+
+| Arm | 结果 | Patch | 耗时 |
+|---|---|---:|---:|
+| reviewed | **failed** | 3,667 B（未修改） | 245s |
+| generic | **failed** | 3,667 B（未修改） | 246s |
+| reviewed + 失败摘要 | **failed** | 3,667 B（未修改） | 247s |
+
+失败摘要没有诱导模型编辑；trajectory 里主要是 thinking token，未产生 source edit。
+
+自然样本总表：
+
+| 任务 | 失败摘要 reviewer | verified | reviewed repair | generic repair |
+|---|---|---:|---|---|
+| ansible-c1f2 | 0 → 2 | 1/1 | **pass 6/6** | fail |
+| openlibrary-0dc5b | 0 → 1 | 1/1 | fail | fail |
+
+结论：失败摘要能稳定提升 reviewer recall（2/2 自然样本），但 repair 仍依赖任务是否给出足够可执行的局部修复；openlibrary 的跨函数 tag 修复没有被模型落地。
