@@ -134,3 +134,12 @@ generic patch 与原始模型补丁同为 26,473 B，说明它没有产生有效
 7. generic repair：仍 fail。
 
 这是目前最强的自然失败证据：失败反馈既提升了 reviewer recall，也带来了 reviewer-only 的 fail→pass。
+
+## 追加 hard51 任务
+
+| 任务 | 结果 |
+|---|---|
+| ansible-d33bed | facts 臂 10 分钟超时，补丁 0 字节，官方 failed；不是“有源码改动”的可用样本 |
+| navidrome-bf2bcb | facts 臂 passed，主模型能解决 |
+
+因此当前唯一可用的自然源码失败仍是 ansible-c1f2。它已经完成 reviewer 0→1、verified gate、reviewed repair fail→pass 的完整链路；下一步应优先寻找更多“有补丁但失败”的任务，而不是继续增加 0 字节超时样本。
