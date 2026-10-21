@@ -446,3 +446,23 @@ Results:
 | element-web-4fec | 2/3 | 0 | **0** |
 
 Multi-condition totals: **3/4 tasks, 6/9 findings verified, 0 invalid, 3 out-of-scope**, and 0 verified false positives on correct patches. Element-ecfd remains the one reviewer gap.
+
+## element-ecfd retry
+
+Retry reviewer found a second condition:
+
+- `ourEventIndex > 0` → `>= 0` in `RoomSearchView.tsx`;
+- verified 1/1.
+
+Union with the first sample: 3 findings, 1 verified, 1 refuted, 1 out-of-scope. The earlier `mergedTimeline` finding's required text is absent from the control patch, so it is not verifiable.
+
+Updated multi-condition accounting:
+
+| Metric | Result |
+|---|---:|
+| Tasks with ≥1 verified condition | **4/4** |
+| Conditions verified | **7/10** |
+| Invalid | 0 |
+| Correct-patch verified false positives | 0 |
+
+Element-ecfd now has one of two mutated conditions verified; full two-condition recall is still incomplete.
