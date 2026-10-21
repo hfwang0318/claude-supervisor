@@ -235,3 +235,35 @@ reviewer 随即定位到 `name_from_list` 缺少 `strip_foc`。
 - 保留 ansible-c1f2、openlibrary-0dc5b。
 
 结果：根分区可用从 15 GB 回到 **20 GB**，Docker 镜像 **25 个 / 110.7 GB**。
+
+## 第三个自然源码失败：NodeBB-8168
+
+| 项目 | 结果 |
+|---|---|
+| 模型补丁 | 22,876 B，4 个源码文件 |
+| 官方 | failed，310/311 |
+| 缺失测试 | `user.uploadCroppedPicture should remove uploaded picture` |
+| reviewer | 1 finding |
+| verified | **1/1** |
+| 正确补丁 | **0 verified** |
+
+reviewer 定位到 `deleteProfileImages` 的扩展名处理；control-only probe 选中 gold 中的 `await deletePicture(uid, 'uploadedpicture')`。
+
+repair A/B：
+
+| Arm | 结果 | Patch |
+|---|---|---:|
+| reviewed | **failed** | 23,418 B |
+| generic | **failed** | 22,876 B（未改） |
+
+reviewed 有修改但仍有 1 个测试失败；generic 完全没改。
+
+自然样本总表：
+
+| 任务 | reviewer | verified | reviewed repair | generic |
+|---|---|---|---:|---|
+| ansible-c1f2 | 2 | 1/1 | pass 6/6 | fail |
+| openlibrary-0dc5b | 2 | 2/2 | pass 65/61 | fail |
+| NodeBB-8168 | 1 | 1/1 | fail | fail |
+
+当前：reviewer task-level **3/3**，verified **4/5**，reviewed repair **2/3**，generic **0/3**。
