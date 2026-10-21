@@ -50,3 +50,18 @@ Correct-patch gates were run on every class; no verified false positives. Some p
 - `.superpowers/sdd/phase0-rebuild/expanded/` (cases, reviews, verify results)
 - `docs/evals/2026-10-21-expanded-partial-set.md` (detailed log)
 - 360 plugin tests pass at the time of this summary.
+
+## Final totals
+
+| Metric | Result |
+|---|---:|
+| Failure cases | 26 |
+| Findings | 78 |
+| Verified | 74 |
+| Invalid-control | 0 |
+| Correct-patch verified false positives | 0 |
+| Product tests | 360 pass |
+
+Task-level coverage: test-only 7/7 reviewed, source-drop 6/6, semantic 6/6, multi-condition 4/4 with at least one verified condition. Full two-condition recall for multi is 3/4; condition-level recall is 7/10.
+
+Reviewer-only repair is proven on one semantic task (webclients), reproduced twice; test-only repair also shows reviewed-only gains on ansible/cba/flipt, while complex source-drop NodeBB remains unresolved.
