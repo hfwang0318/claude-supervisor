@@ -66,3 +66,24 @@ hash.SetSeed(maphash.MakeSeed())
 - hard51 flipt 卡在官方 verifier 准备阶段；
 - 新失败样本仍是构造的，不是自然发生；
 - 需要继续挑选主模型实际会失败的上游任务，而不是只靠条件变异。
+
+## 自然失败：ansible hard51
+
+从 hard51 拉取两个 ansible 任务，官方 baseline：
+
+| 任务 | facts 结果 | 说明 |
+|---|---|---|
+| ansible-40ade | failed | 模型补丁 0 字节，没有实际修改 |
+| ansible-c1f2 | failed | 模型补丁 26,473 B，新增 F5 message routing 模块 |
+
+ansible-c1f2 是真正的“有源码改动但官方失败”：
+
+- 模型新增了 `bigip_message_routing_route.py`、fixture 和测试；
+- gold patch 只新增 `bigip_message_routing_route.py`；
+- 官方测试仍失败（6 个 fail-to-pass）。
+
+reviewer 对 26 KB 补丁连续两次采样均为 **0 findings**。这是目前最重要的 reviewer 盲点：
+
+> 没有失败测试输出时，reviewer 难以从一个 531 行的新模块中定位实现错误；它只能读 patch 和需求，不能执行 hidden tests。
+
+因此该样本暂时不能形成 verified finding；下一步应把“官方失败测试名/输出”作为 reviewer 的受限输入，或增加针对模块结构的 probe。
