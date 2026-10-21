@@ -211,3 +211,16 @@ reviewer 随即定位到 `name_from_list` 缺少 `strip_foc`。
 关键教训：
 
 > 失败摘要只有测试名时会误导 reviewer；必须提供 expected/actual 或关键 traceback，才能定位根因并让 repair 真正落地。
+
+## 第三个 openlibrary hard51
+
+`openlibrary-6e889` facts 臂 **passed**，补丁 4,680 B。主模型能解决，因此不作为失败样本。
+
+自然失败仍为 2 个（ansible-c1f2、openlibrary-0dc5b），两个都已完成：
+
+- 失败摘要 reviewer：2/2 task-level；
+- verified finding：3/4；
+- reviewed repair：2/2 fail→pass；
+- generic repair：0/2。
+
+当前主要问题从“找不到自然失败”转为“失败摘要来源与 probe 精度”：测试名会误定位，必须带 assertion；control-only probe 也只能证明差异，不能证明根因。
