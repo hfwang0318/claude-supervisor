@@ -435,3 +435,28 @@ reviewed repair：
 - 当前 reviewer 还不能替代 control-guided plan。
 
 这是本轮的重要负结果：自然样本的 plan-guided 3/3 依赖 gold/control，不是纯 reviewer 能力。
+
+## 正确补丁 + 失败摘要的误报测试
+
+给 reviewer 正确补丁（gold/control）再附上真实失败摘要：
+
+| 任务 | reviewer findings | gate verified | refuted | invalid |
+|---|---:|---:|---:|---:|
+| NodeBB-8168 | 2 | **0** | 0 | 1 |
+| openlibrary-0dc5b | 1 | **0** | 1 | 0 |
+
+结论：
+
+- reviewer 在正确补丁上仍会因失败摘要产生误报（共 3 条）；
+- verified gate 全部拦截：**0 verified 误报**；
+- NodeBB 有 1 个 invalid-control，而不是 refuted，仍需改进；
+- 这验证了“reviewer 只提议，gate 决定是否可信”的分层是必要的。
+
+自然样本指标补充：
+
+| 指标 | 结果 |
+|---|---:|
+| 正确补丁 reviewer 误报 | 3 |
+| 被 gate 拦截 | 3/3 |
+| verified 误报 | **0** |
+| invalid-control | 1 |
