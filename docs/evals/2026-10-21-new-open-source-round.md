@@ -303,3 +303,28 @@ NodeBB 结果：
 - 下一层瓶颈是 reviewed 补丁缺少 `src/user/delete.js` 或对应清理逻辑。
 
 自然 repair 仍为 **2/3**。
+
+## NodeBB 失败 assertion
+
+手动应用 reviewed 补丁 + 官方测试后，真实失败：
+
+```text
+test/user.js:1248
+AssertionError: Expected "actual" to be strictly unequal to: false
+const avatarPath = await User.getLocalAvatarPath(uid);
+assert.notStrictEqual(avatarPath, false);
+```
+
+即 `User.getLocalAvatarPath(uid)` 返回 `false`，测试无法继续清理 uploaded picture。
+
+gold 的实现是：
+
+```js
+User.getLocalAvatarPath = async function (uid) {
+    return getPicturePath(uid, 'uploadedpicture');
+};
+```
+
+reviewed 补丁仍走 `getLocalImagePath`，没有使用 gold 的直接路径解析，所以即使第二轮编辑了 `src/user/delete.js`，这个断言仍失败。
+
+这进一步说明：强制编辑解决了“没改”，但 reviewed 的定位仍不完整；需要把真实 assertion 与 gold 行一起作为 edit plan。
