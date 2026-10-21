@@ -143,3 +143,23 @@ generic patch 与原始模型补丁同为 26,473 B，说明它没有产生有效
 | navidrome-bf2bcb | facts 臂 passed，主模型能解决 |
 
 因此当前唯一可用的自然源码失败仍是 ansible-c1f2。它已经完成 reviewer 0→1、verified gate、reviewed repair fail→pass 的完整链路；下一步应优先寻找更多“有补丁但失败”的任务，而不是继续增加 0 字节超时样本。
+
+## 第二个自然源码失败：openlibrary-0dc5b
+
+| 项目 | 结果 |
+|---|---|
+| 模型补丁 | 3,667 B |
+| 官方 | failed，59/61 必需测试通过 |
+| 缺失测试 | `test_xml[onquietcomedyint00brid]`、`test_binary[onquietcomedyint00brid_meta.mrc]` |
+| 失败摘要 reviewer | 1 finding |
+| verified | **1/1** |
+| 正确补丁 | **0 verified** |
+
+reviewer 定位到 `read_author_person` 的 tag 传递；control-only probe 选中 gold 中的 `read_author_person(f, tag='100')` 行并成功区分。
+
+同时修复了两个 pipeline 问题：
+
+- `location` 形如 `parse.py:read_authors` 时，scope filter 未剥离符号名；
+- `required` 缺失且没有可执行 probe 时，代码访问 `compiled.command` 崩溃。
+
+自然源码失败现在有 **2 个**：ansible-c1f2、openlibrary-0dc5b。
