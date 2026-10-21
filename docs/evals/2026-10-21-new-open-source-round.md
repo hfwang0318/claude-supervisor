@@ -328,3 +328,30 @@ User.getLocalAvatarPath = async function (uid) {
 reviewed 补丁仍走 `getLocalImagePath`，没有使用 gold 的直接路径解析，所以即使第二轮编辑了 `src/user/delete.js`，这个断言仍失败。
 
 这进一步说明：强制编辑解决了“没改”，但 reviewed 的定位仍不完整；需要把真实 assertion 与 gold 行一起作为 edit plan。
+
+## NodeBB plan-guided repair
+
+手动给出一条明确 finding：
+
+- location: `src/user/picture.js:getLocalAvatarPath`
+- current: `getLocalImagePath(...)`
+- required: `return getPicturePath(uid, 'uploadedpicture');`
+- check/expectedFailure: 真实 `test/user.js:1248` assertion
+
+加 `REPAIR_HINT=src/user/picture.js` 后：
+
+| 指标 | 结果 |
+|---|---|
+| reviewed repair | **passed 311/311** |
+| Patch | 24,432 B |
+| 第二轮强制编辑 | 是 |
+| 耗时 | 246s |
+
+这是 plan-guided 的上限：只要给出正确的 current/required 和 assertion，模型能在 NodeBB 上修好；但这条 finding 是人工从 gold/测试构造的，不是 reviewer 自主产生。
+
+自然样本修复：
+
+| 设置 | reviewed fail→pass |
+|---|---:|
+| reviewer finding + 失败摘要 | **2/3** |
+| 加人工 gold edit plan | **3/3** |
