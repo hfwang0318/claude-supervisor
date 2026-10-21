@@ -282,3 +282,24 @@ reviewed 有修改但仍有 1 个测试失败；generic 完全没改。
 显式文件目标也没有诱导编辑；NodeBB 的修复仍未落地。
 
 自然样本 repair 维持 **2/3**。限制：repair prompt 即使给出文件名，模型也可能只思考不编辑；需要更强制的编辑协议或更小的上下文。
+
+## 强制编辑协议
+
+给 repair 增加第二轮：若指定的 `REPAIR_HINT` 文件仍未出现在补丁中，追加：
+
+> Do not analyze further. Your next action must be an Edit on `<target>`.
+
+NodeBB 结果：
+
+| Run | Patch | 第二轮 | 官方 |
+|---|---:|---|---|
+| hint only | 22,876 B | 否 | failed |
+| **hint + 强制编辑** | **23,418 B** | **是** | **failed** |
+
+强制协议成功让模型发起编辑，把“完全不改”变成“改了但没修对”。这说明：
+
+- 编辑合规问题可以靠协议解决；
+- 修复正确性仍是独立问题；
+- 下一层瓶颈是 reviewed 补丁缺少 `src/user/delete.js` 或对应清理逻辑。
+
+自然 repair 仍为 **2/3**。
