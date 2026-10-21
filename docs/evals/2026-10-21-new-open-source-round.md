@@ -182,3 +182,32 @@ reviewer 定位到 `read_author_person` 的 tag 传递；control-only probe 选�
 | openlibrary-0dc5b | 0 → 1 | 1/1 | fail | fail |
 
 结论：失败摘要能稳定提升 reviewer recall（2/2 自然样本），但 repair 仍依赖任务是否给出足够可执行的局部修复；openlibrary 的跨函数 tag 修复没有被模型落地。
+
+## openlibrary fail→pass：失败摘要必须含 assertion
+
+只给失败测试名时，reviewer 误定位到 tag 传递，control-only probe 虽然 verified，但不是根因；repair 也没有修改补丁。
+
+加入真实 assertion：
+
+- expected `name: 'Bridgham, Gladys Ruth'`；
+- actual `name: 'Bridgham, Gladys Ruth. [from old catalog'`；
+
+reviewer 随即定位到 `name_from_list` 缺少 `strip_foc`。
+
+结果：
+
+| 输入 | reviewer | verified | repair |
+|---|---|---:|---|
+| 只有测试名 | 1（tag，错误） | 1/1（非根因） | failed，未修改 |
+| 加 assertion | 2（含 `strip_foc`） | **2/2** | **passed 65/61，306s** |
+
+自然样本 repair 现在 **2/2**：
+
+| 任务 | reviewed repair | generic repair |
+|---|---|---|
+| ansible-c1f2 | pass 6/6 | fail |
+| openlibrary-0dc5b | pass 65/61 | fail |
+
+关键教训：
+
+> 失败摘要只有测试名时会误导 reviewer；必须提供 expected/actual 或关键 traceback，才能定位根因并让 repair 真正落地。
