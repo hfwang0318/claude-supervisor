@@ -65,3 +65,41 @@ Correct-patch gates were run on every class; no verified false positives. Some p
 Task-level coverage: test-only 7/7 reviewed, source-drop 6/6, semantic 6/6, multi-condition 4/4 with at least one verified condition. Full two-condition recall for multi is 3/4; condition-level recall is 7/10.
 
 Reviewer-only repair is proven on one semantic task (webclients), reproduced twice; test-only repair also shows reviewed-only gains on ansible/cba/flipt, while complex source-drop NodeBB remains unresolved.
+
+## Natural-source follow-up (2026-10-21)
+
+Added natural SWE-bench Pro failures from upstream hard51:
+
+| Task | Patch | Official | reviewer verified | reviewer-only repair |
+|---|---:|---|---:|---|
+| ansible-c1f2 | 26,473 B | failed 6 tests | 1/1 | **pass 6/6** |
+| openlibrary-0dc5b | 3,667 B | failed 2 tests | 2/2 | **pass 65/61** |
+| NodeBB-8168 | 22,876 B | failed 1/311 | 1/1 | fail |
+| NodeBB-8168 + control-guided function plan | — | — | — | pass 311/311 |
+
+Natural metrics:
+
+| Metric | Result |
+|---|---:|
+| Reviewer task-level recall | 3/3 |
+| Verified findings | 4/5 |
+| reviewer-only fail→pass | 2/3 |
+| control-guided plan fail→pass | 3/3 |
+| generic fail→pass | 0/3 |
+| Correct-patch reviewed findings | 3 false findings, gate verified 0 |
+| Correct-patch invalid-control | 0 |
+
+Key limitations:
+
+- failure excerpts were manually captured; test names alone mislocalized openlibrary, expected/actual was required;
+- reviewer cannot reliably produce an exact function-body plan;
+- control-guided plan is an upper bound, not a product capability;
+- one hard51 verifier ran >7 minutes and was stopped.
+
+Storage after cleanup:
+
+- repository 856 MB;
+- Docker images 110.7 GB / 25 images;
+- root free space 26 GB.
+
+Product checks at close: 360 tests pass, all local engineering checks pass.
