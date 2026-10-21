@@ -433,3 +433,16 @@ element-ecfd's `required` string was not present anywhere in the control patch, 
 Result on element-ecfd: 0 verified, 0 invalid, 1 out-of-scope.
 
 Multi-condition totals update: 3/4 tasks, 6/9 verified, **2 invalid** (one per openlibrary/element-4fec), 1 out-of-scope, 0 correct-patch verified false positives.
+
+## Region-to-file fallback removes multi invalid probes
+
+The region probe failed control when `required` existed outside the `location` region. Added a fallback: inside the current region, try line-exact required; if that fails, search the whole file; if current is absent, search the file.
+
+Results:
+
+| Task | Verified | Refuted | Invalid |
+|---|---:|---:|---:|
+| openlibrary-b671 | 2/3 | 0 | **0** |
+| element-web-4fec | 2/3 | 0 | **0** |
+
+Multi-condition totals: **3/4 tasks, 6/9 findings verified, 0 invalid, 3 out-of-scope**, and 0 verified false positives on correct patches. Element-ecfd remains the one reviewer gap.
