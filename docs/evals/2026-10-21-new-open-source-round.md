@@ -111,3 +111,26 @@ ansible-c1f2 的 reviewer 在只有 patch/需求时连续两次 **0 findings**�
 - 失败摘要目前是人工截取的，不是产品自动输入；
 - control-only probe 可能选到无关差异，需要按 finding 文本打分和更多样本验证；
 - 该策略尚未进入产品代码，只是在评测 pipeline 中验证。
+
+## 自然失败 repair：reviewer-only fail→pass
+
+ansible-c1f2 自然失败上跑 repair A/B（240s）：
+
+| Arm | 结果 | Patch |
+|---|---|---:|
+| reviewed（带失败摘要 + finding） | **passed 6/6** | 26,750 B |
+| generic | **failed** | 26,473 B |
+
+generic patch 与原始模型补丁同为 26,473 B，说明它没有产生有效修复。
+
+完整链路：
+
+1. 原始模型补丁官方失败；
+2. reviewer 无失败信息：0 findings；
+3. 加入精简失败摘要：2 findings；
+4. control-only probe 定位 gold 的 `return manager.exec_module()`；
+5. verified：1/1，正确补丁 0 verified；
+6. reviewed repair：**fail → pass 6/6**；
+7. generic repair：仍 fail。
+
+这是目前最强的自然失败证据：失败反馈既提升了 reviewer recall，也带来了 reviewer-only 的 fail→pass。
