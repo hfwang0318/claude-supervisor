@@ -460,3 +460,21 @@ reviewed repair：
 | 被 gate 拦截 | 3/3 |
 | verified 误报 | **0** |
 | invalid-control | 1 |
+
+## 同补丁 probe：invalid → refuted
+
+当 candidate 与 control 是同一补丁，且 probe 两边都失败时，原逻辑记为 invalid-control。现在改为 `refuted-identical-patch`：
+
+- 正确补丁上本来就不应存在 candidate/control 差异；
+- 同补丁 probe 失败不能算环境 invalid。
+
+NodeBB 正确补丁复测：
+
+| 指标 | 结果 |
+|---|---:|
+| findings | 2 |
+| verified | **0** |
+| refuted | 1 |
+| invalid | **0** |
+
+正确补丁误报测试现在：3 条 reviewer findings，gate 0 verified、3 blocked、0 invalid。
