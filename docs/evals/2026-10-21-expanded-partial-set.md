@@ -425,3 +425,11 @@ Each multi-condition task has two mutated conditions; both were verified in each
 element-web-ecfd: reviewer produced 1 finding; verification returned **0 verified, 1 invalid**. The task has two mutated conditions, so reviewer recall on this sample is incomplete.
 
 Multi-condition totals now: **3/4 tasks, 6/9 findings verified, 3 invalid, 0 correct-patch verified false positives**. The missed task is a reviewer/probe gap, not a gate false positive.
+
+## Required-absent-from-control filter
+
+element-ecfd's `required` string was not present anywhere in the control patch, yet the compiler emitted a grep for it and the control failed (`invalid`). Added a deterministic prefilter: a code-like `required` absent from the control patch is **out-of-scope**, not a verifiable probe.
+
+Result on element-ecfd: 0 verified, 0 invalid, 1 out-of-scope.
+
+Multi-condition totals update: 3/4 tasks, 6/9 verified, **2 invalid** (one per openlibrary/element-4fec), 1 out-of-scope, 0 correct-patch verified false positives.
