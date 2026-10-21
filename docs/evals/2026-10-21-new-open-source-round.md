@@ -224,3 +224,14 @@ reviewer 随即定位到 `name_from_list` 缺少 `strip_foc`。
 - generic repair：0/2。
 
 当前主要问题从“找不到自然失败”转为“失败摘要来源与 probe 精度”：测试名会误定位，必须带 assertion；control-only probe 也只能证明差异，不能证明根因。
+
+## 第四个 ansible hard51 与再次清理
+
+`ansible-e9e600` facts 臂 **passed**，补丁 15,645 B，不是失败样本。
+
+随后删除本轮新增的纯成功/0 补丁任务镜像，只保留自然失败任务：
+
+- 删除 flipt-518、navidrome-3977/69e0/bf2b、ansible-d33/e9e600/40ade、openlibrary-6e889；
+- 保留 ansible-c1f2、openlibrary-0dc5b。
+
+结果：根分区可用从 15 GB 回到 **20 GB**，Docker 镜像 **25 个 / 110.7 GB**。
