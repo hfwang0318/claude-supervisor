@@ -374,3 +374,36 @@ reviewed 补丁仍走 `getLocalImagePath`，没有使用 gold 的直接路径解
 > 对 NodeBB，reviewer 目前不能稳定从 assertion 生成 exact edit plan；人工 gold plan 能 pass，但这只是上限。
 
 需要一个确定性的 failure→plan 编译器：从 assertion 提取函数名，在 candidate/control 同函数中找 control-only 行，生成 current/required，而不是继续调 reviewer prompt。
+
+## 确定性 failure→plan 编译器
+
+实现：从失败 assertion 提取函数名（`getLocalAvatarPath`），在 candidate/control 中抽取该函数的**完整函数体**，生成 current/required。
+
+第一版只选 control-only 单行，repair 仍 failed（23,899 B）。
+
+改成函数体级后：
+
+| 指标 | 结果 |
+|---|---|
+| reviewed repair | **passed 311/311** |
+| Patch | 23,181 B |
+| 第二轮强制编辑 | 是 |
+| 耗时 | 246s |
+
+这说明修复失败不是模型能力问题，而是 **plan 粒度** 问题：
+
+- 单行 diff 不足以指导；
+- 完整 current/required 函数体可以。
+
+限制：
+
+- 编译器使用了 gold/control 来提取 required；
+- 这不是产品可用的 reviewer 自主 plan；
+- 但证明 exact plan 能让 NodeBB fail→pass。
+
+自然 repair 汇总：
+
+| 设置 | reviewed fail→pass |
+|---|---:|
+| reviewer finding + 失败摘要 | 2/3 |
+| 函数体级 control-guided plan | **3/3** |
