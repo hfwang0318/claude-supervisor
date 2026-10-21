@@ -478,3 +478,11 @@ NodeBB 正确补丁复测：
 | invalid | **0** |
 
 正确补丁误报测试现在：3 条 reviewer findings，gate 0 verified、3 blocked、0 invalid。
+
+## 第五个 ansible hard51：verifier 卡住
+
+`ansible-d72025` facts 臂完成 agent 后，官方 verifier 运行超过 7 分钟仍未产出结果，手动终止并删除该任务镜像。
+
+没有新增样本；自然源码失败仍为 3 个。
+
+这也说明 hard51 的另一类限制：不是模型不修，而是官方 verifier 对部分任务过慢，必须设置 per-task timeout 或改用已有失败样本分析。
