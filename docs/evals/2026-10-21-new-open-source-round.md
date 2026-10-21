@@ -355,3 +355,22 @@ reviewed 补丁仍走 `getLocalImagePath`，没有使用 gold 的直接路径解
 |---|---:|
 | reviewer finding + 失败摘要 | **2/3** |
 | 加人工 gold edit plan | **3/3** |
+
+## NodeBB reviewer 仍不能自动产出 edit plan
+
+给真实 assertion 后：
+
+- 2 findings；
+- 两条都在 `getAllowedProfileImageExtensions` / 硬编码扩展名；
+- 不是失败的 `getLocalAvatarPath` 根因。
+
+再把“从 `User.getLocalAvatarPath` 开始，不要提扩展名列表”写入失败摘要：
+
+- reviewer 变成 **0 findings**；
+- 说明 prompt 过度约束会压制 finding，而不是提高定位。
+
+结论：
+
+> 对 NodeBB，reviewer 目前不能稳定从 assertion 生成 exact edit plan；人工 gold plan 能 pass，但这只是上限。
+
+需要一个确定性的 failure→plan 编译器：从 assertion 提取函数名，在 candidate/control 同函数中找 control-only 行，生成 current/required，而不是继续调 reviewer prompt。
