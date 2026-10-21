@@ -466,3 +466,12 @@ Updated multi-condition accounting:
 | Correct-patch verified false positives | 0 |
 
 Element-ecfd now has one of two mutated conditions verified; full two-condition recall is still incomplete.
+
+## Multi-condition repair A/B (element-web-4fec)
+
+| Arm | Result | Patch |
+|---|---|---:|
+| reviewed | **passed 77/48** | 38,945 B |
+| generic | **passed 77/48** | 38,945 B |
+
+Identical patch; no reviewer-only gain. Multi-condition repair now has two samples (tutanota, element) where both arms pass. Reviewer-only semantic repair remains webclients only.
