@@ -407,3 +407,31 @@ reviewed 补丁仍走 `getLocalImagePath`，没有使用 gold 的直接路径解
 |---|---:|
 | reviewer finding + 失败摘要 | 2/3 |
 | 函数体级 control-guided plan | **3/3** |
+
+## Reviewer plan 模式与 control-free plan
+
+尝试让 reviewer 直接输出函数体级 plan：
+
+- 加 `REVIEWER_PLAN=1` + assertion；
+- 结果 **0 findings**。
+
+改为 control-free plan：
+
+- 给 candidate 的 `getLocalAvatarPath` 函数体；
+- 给真实 assertion；
+- required 只写自然语言目标，不给 gold 代码。
+
+reviewed repair：
+
+| 设置 | 结果 | Patch |
+|---|---|---:|
+| control-free plan | **failed** | 25,300 B |
+| control-guided 函数体 plan | **passed 311/311** | 23,181 B |
+
+结论：
+
+- 模型能编辑，但不能从 assertion 推断出 `getPicturePath` 这种 exact required；
+- 只有给出 gold 函数体，NodeBB 才稳定通过；
+- 当前 reviewer 还不能替代 control-guided plan。
+
+这是本轮的重要负结果：自然样本的 plan-guided 3/3 依赖 gold/control，不是纯 reviewer 能力。
