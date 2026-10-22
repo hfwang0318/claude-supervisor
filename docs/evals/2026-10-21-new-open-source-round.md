@@ -645,3 +645,16 @@ NodeBB 自动 probe-plan 复测：
 原因：probe 只给出单行 `await deletePicture(uid, 'uploadedpicture')`，而 NodeBB 需要函数体级 plan（`getLocalAvatarPath` / `getPicturePath`）。
 
 结论：probe→plan 工具可用于单行修复，但 NodeBB 需要函数体扩展。
+
+## Probe-plan 函数体扩展失败
+
+给 `probe-plan.mjs` 加函数体提取后：
+
+- NodeBB：选中的 required 属于 `removeProfileImage`，不是根因 `getLocalAvatarPath`；
+- openlibrary：函数体 plan repair **failed**，补丁 3,667 B 未修改。
+
+结论：
+
+> probe 的 control-only 行只能证明“候选缺少这一行”，不能证明它属于失败根因；函数体扩展也无法修正这个语义错位。
+
+单行/函数体 probe-plan 仍不是可靠的 exact plan 生成器。自然样本保持 3 个。
