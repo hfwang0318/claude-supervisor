@@ -749,3 +749,31 @@ return manager.exec_module()
 - NodeBB：symbolic probe-plan。
 
 自然源码失败仍为 3 个。
+
+## 第 4 个自然源码失败：openlibrary-7cbfb
+
+从 hard51 批量抽样得到：
+
+| 项目 | 结果 |
+|---|---|
+| 模型补丁 | 18,778 B |
+| 官方 | failed，3 个 observations 测试失败 |
+| assertion | patron work 范围多写 genre/pace |
+| 自动摘要 | 成功，expected/actual + test setup |
+| reviewer | 1 finding |
+| verified | **1/1** |
+| 正确补丁 | **0 verified** |
+| reviewed repair | failed，8 个必需测试 |
+
+失败族：`Observations.persist_observations` 的 patron/work 作用域过滤。
+
+自然样本更新：
+
+| 任务 | reviewer verified | reviewer-only repair |
+|---|---:|---|
+| ansible-c1f2 | 1/1 | pass 6/6 |
+| openlibrary-0dc5b | 1/1（自动）/2（人工） | pass 65/61 |
+| NodeBB-8168 | 1/1 | fail（plan pass 311/311） |
+| openlibrary-7cbfb | 1/1 | fail |
+
+自然源码失败：**4 个**；reviewer task-level recall：**4/4**；正确补丁 verified 误报：**0**。
