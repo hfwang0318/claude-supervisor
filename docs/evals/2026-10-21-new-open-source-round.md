@@ -702,3 +702,9 @@ NodeBB reviewed repair：
 - NodeBB-8168：自动摘要 → symbolic probe-plan → pass 311/311。
 
 plan-guided fail→pass 现在 **3/3**，但 required 仍来自 control/gold，不是纯 reviewer 猜测。
+
+## flipt-2ca5：官方准备阶段再次超时
+
+20 分钟预算下，flipt hard 仍卡在 readiness/官方测试准备阶段，7 分钟以上未进入 agent，未产出补丁。停止并删除镜像。
+
+flipt 类任务不适合作为快速自然失败抽样来源。
