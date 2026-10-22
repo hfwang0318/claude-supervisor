@@ -534,3 +534,11 @@ openlibrary 自动摘要复测：
 结论：自动摘要与注释过滤已经可用，但“选中差异行 ≠ 根因行”仍是 precision 问题。
 
 下一步应要求 control-only 行与 assertion 中的实际值/变量名匹配，而不是只按 finding 文本打分。
+
+## 第五个 openlibrary hard51：再次 0 补丁超时
+
+`openlibrary-53d376` facts 臂 10 分钟超时，补丁 0 字节。没有源码改动，不能用于 reviewer/repair；已删除镜像。
+
+连续两个 openlibrary hard51 都出现 0 补丁超时，说明随机抽 hard51 的失败样本产出率很低。后续优先：
+- 复用已有失败补丁；
+- 或给 agent 更长预算后再筛选。
