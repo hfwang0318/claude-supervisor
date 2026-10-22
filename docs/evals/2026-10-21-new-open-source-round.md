@@ -563,3 +563,33 @@ openlibrary 自动摘要复测：
 | invalid | 0 |
 
 现在自动摘要能命中 `strip_foc` 根因行，而不是调用点或注释。限制：reviewer 输出的 `required` 仍是 candidate 风格，repair 需要额外的 probe→plan 转换。
+
+## Probe → Plan → Repair
+
+从 openlibrary 自动 verified probe 中提取：
+
+- candidate 行：`return remove_trailing_dot(' '.join(s.strip(STRIP_CHARS) ...))`
+- control 根因行：`name = ' '.join(strip_foc(s).strip(STRIP_CHARS) ...)`
+- assertion：expected 不含 `[from old catalog`，actual 含。
+
+生成 finding 后跑 reviewed repair：
+
+| 指标 | 结果 |
+|---|---|
+| repair | **passed 65/61** |
+| Patch | 3,695 B |
+| 耗时 | 214s |
+| 强制第二轮 | 否 |
+
+这完成了自动链路：
+
+> 自动失败摘要 → reviewer → verified probe 选根因行 → probe-derived plan → repair fail→pass
+
+限制：control 根因行仍来自 gold/control 对照，不是纯 reviewer 猜测；但它不再是人工手选的。
+
+自然 repair：
+
+| 设置 | reviewed fail→pass |
+|---|---:|
+| reviewer finding + 人工失败摘要 | 2/3 |
+| probe-derived plan | **3/3** |
