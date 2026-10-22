@@ -723,3 +723,29 @@ mm.get_manager = Mock(return_value=gm)
 自动摘要没有包含测试 setup，所以 reviewer 无法推断 `ModuleManager` 应委托 `get_manager`。
 
 结论：自动摘要需要“失败 assertion + 测试 setup 片段”，仅有 traceback 不足以覆盖 mock 型失败。
+
+## 自动摘要补测试 setup：ansible verified
+
+`failure-excerpt.mjs` 现在可从官方 `test_patch.patch` 提取失败测试函数体，作为 `testSetup`。
+
+ansible c1f2 自动摘要：
+
+- reviewer 1 finding；
+- gate verified **1/1**；
+- control 行：
+
+```python
+return manager.exec_module()
+```
+
+- 正确补丁：0 verified。
+
+这修复了仅给 traceback 时的 0 findings 问题：mock setup `mm.get_manager = Mock(...)` 现在会进入 reviewer 输入。
+
+自动链现在覆盖：
+
+- openlibrary：assertion 型；
+- ansible：traceback + mock setup 型；
+- NodeBB：symbolic probe-plan。
+
+自然源码失败仍为 3 个。
