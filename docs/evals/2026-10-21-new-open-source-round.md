@@ -492,3 +492,26 @@ NodeBB 正确补丁复测：
 `openlibrary-322d7a` facts 臂 10 分钟超时，模型补丁 0 字节，官方 failed。没有源码改动，不能用于 reviewer 分析；已删除该任务镜像。
 
 第 4 个自然源码失败仍未找到。下一步不再随机抽 hard51，而是优先自动提取 assertion / 从已有失败补丁扩展。
+
+## 自动失败摘要提取器
+
+新增 `eval/swe-pro/failure-excerpt.mjs`：
+
+- 读取 verifier 的 `output.json` + `run-script-stdout.txt`；
+- 提取 failed tests；
+- 对 pytest 保留 assertion 块，过滤 RERUN/PASSED 进度行；
+- 对 mocha JSON 提取 `err.message`/`err.stack`。
+
+openlibrary 自动摘要接入 reviewer：
+
+- 自动产出 1 条 finding，位置 `name_from_list`；
+- gate **1/1 verified**；
+- 但 verified 行是 `STRIP_CHARS` 注释，不是 `strip_foc` 根因。
+
+结论：
+
+- 自动提取失败测试与 assertion 已可用；
+- reviewer 能定位到正确函数；
+- control-only probe 仍可能选中非根因行，precision 不足。
+
+后续需要在 control-only probe 中优先选择与 assertion 文本/函数语义一致的行，而不是第一条/最高 token 匹配行。
