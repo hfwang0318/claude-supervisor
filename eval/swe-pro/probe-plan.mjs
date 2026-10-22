@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { readFileSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-const [resultsPath, outPath, candidatePath, controlPath] = process.argv.slice(2)
+const [resultsPath, outPath, candidatePath, controlPath, failurePath] = process.argv.slice(2)
 if (!resultsPath || !outPath) throw Error('usage: node probe-plan.mjs <results.json> <out.json>')
 const summary = JSON.parse(readFileSync(resolve(resultsPath), 'utf8'))
 const verified = (summary.results ?? []).filter(r => r.status === 'verified' && r.compiled?.command)
@@ -17,6 +17,8 @@ const parseGrep = command => {
     return { text: unquote(quoted), file: match[2] }
   }).filter(Boolean)
 }
+const failureText = failurePath ? readFileSync(resolve(failurePath), 'utf8') : ''
+const failureSymbol = (failureText.match(/User\.(\w+)\s*\(/) ?? failureText.match(/\b([a-zA-Z_]\w{5,})\s*\(/) ?? [])[1]
 const controlLines = controlPath ? readFileSync(resolve(controlPath), 'utf8').split('\n') : []
 const candidateLines = candidatePath ? readFileSync(resolve(candidatePath), 'utf8').split('\n') : []
 const functionAt = (lines, needle) => {
@@ -35,11 +37,11 @@ const findings = verified.map(r => {
   let current = greps.length > 1 ? greps[0].text : ''
   let required = greps.at(-1)?.text ?? ''
   if (controlLines.length) {
-    const ctrlBody = functionAt(controlLines, required)
+    const symbolBody = failureSymbol ? functionAt(controlLines, failureSymbol) : null
+    const ctrlBody = symbolBody ?? functionAt(controlLines, required)
     if (ctrlBody) required = ctrlBody
     if (candidateLines.length) {
-      const name = (required.match(/(?:function\s+|def\s+)(\w+)/) ?? [])[1]
-      const candBody = name ? functionAt(candidateLines, name) : null
+      const candBody = failureSymbol ? functionAt(candidateLines, failureSymbol) : null
       if (candBody) current = candBody
     }
   }

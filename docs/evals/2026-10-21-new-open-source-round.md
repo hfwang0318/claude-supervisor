@@ -671,3 +671,34 @@ NodeBB 自动 probe-plan 复测：
 - 最终官方 **passed**，patch 25,864 B。
 
 hard51 抽样继续呈现同一模式：模型编辑后通常通过；自然失败仍只有 3 个。已删除镜像。
+
+## 自动 symbolic probe-plan：NodeBB pass
+
+从失败摘要提取函数名：
+
+```text
+User.getLocalAvatarPath(...)
+```
+
+`probe-plan.mjs` 现在会：
+
+1. 从 assertion 提取 `getLocalAvatarPath`；
+2. 在 control/candidate 中抽取该函数的完整函数体；
+3. 生成 current/required plan。
+
+NodeBB reviewed repair：
+
+| 指标 | 结果 |
+|---|---|
+| repair | **passed 311/311** |
+| Patch | 23,572 B |
+| 第二轮 | 是 |
+| 耗时 | 247s |
+
+自然样本自动链：
+
+- ansible-c1f2：reviewer finding → pass 6/6；
+- openlibrary-0dc5b：自动摘要 → probe → probe-plan → pass 65/61；
+- NodeBB-8168：自动摘要 → symbolic probe-plan → pass 311/311。
+
+plan-guided fail→pass 现在 **3/3**，但 required 仍来自 control/gold，不是纯 reviewer 猜测。
