@@ -515,3 +515,22 @@ openlibrary 自动摘要接入 reviewer：
 - control-only probe 仍可能选中非根因行，precision 不足。
 
 后续需要在 control-only probe 中优先选择与 assertion 文本/函数语义一致的行，而不是第一条/最高 token 匹配行。
+
+## 自动摘要第二轮：comment-only 过滤
+
+patchDiffProbe 同步过滤：
+
+- 跳过注释差异（`#` / `//`）；
+- 按 finding 文本给 control-only 行打分；
+- location 支持 `path:symbol`。
+
+openlibrary 自动摘要复测：
+
+- reviewer 1 条 finding；
+- gate 1/1 verified；
+- 选中行从 `STRIP_CHARS` 注释变成 `name_from_list(...)` 调用点；
+- 仍不是 `strip_foc` 根因。
+
+结论：自动摘要与注释过滤已经可用，但“选中差异行 ≠ 根因行”仍是 precision 问题。
+
+下一步应要求 control-only 行与 assertion 中的实际值/变量名匹配，而不是只按 finding 文本打分。
