@@ -658,3 +658,9 @@ NodeBB 自动 probe-plan 复测：
 > probe 的 control-only 行只能证明“候选缺少这一行”，不能证明它属于失败根因；函数体扩展也无法修正这个语义错位。
 
 单行/函数体 probe-plan 仍不是可靠的 exact plan 生成器。自然样本保持 3 个。
+
+## teleport hard51：model/patch 错误
+
+`teleport-65438e6e` 两次 job 都是 `agent-or-model-error`，没有有效 patch。无法用于失败分析；已删除镜像。
+
+自然源码失败仍为 3 个。
