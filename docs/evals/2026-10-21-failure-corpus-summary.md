@@ -103,3 +103,35 @@ Storage after cleanup:
 - root free space 26 GB.
 
 Product checks at close: 360 tests pass, all local engineering checks pass.
+
+## Fourth natural failure and automation (2026-10-22)
+
+Added `openlibrary-7cbfb` from hard51 batch sampling:
+
+- 18,778 B patch;
+- 3 observations persistence tests failed;
+- auto excerpt extracted expected/actual and test setup;
+- reviewer 1 finding, verified 1/1;
+- correct patch 0 verified;
+- reviewed repair failed (8 required tests).
+
+Natural corpus now has **4 source failures**:
+
+| Task | reviewer verified | reviewer-only repair |
+|---|---:|---|
+| ansible-c1f2 | 1/1 | pass 6/6 |
+| openlibrary-0dc5b | 1/1 auto | pass 65/61 |
+| NodeBB-8168 | 1/1 | fail; symbolic plan pass 311/311 |
+| openlibrary-7cbfb | 1/1 | fail |
+
+| Metric | Result |
+|---|---:|
+| Reviewer task-level recall | 4/4 |
+| verified false positives on correct patches | 0 |
+| reviewer-only fail→pass | 2/4 |
+| plan-guided fail→pass | 2/3 tested |
+| automatic failure extraction | 4/4 |
+| Linux task execution | available |
+| product tests | 360 pass |
+
+Accuracy limitation: `openlibrary-7cbfb` is a multi-function rewrite; single-function probe-plan is insufficient.
