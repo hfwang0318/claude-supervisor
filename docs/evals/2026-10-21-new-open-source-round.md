@@ -708,3 +708,18 @@ plan-guided fail→pass 现在 **3/3**，但 required 仍来自 control/gold，�
 20 分钟预算下，flipt hard 仍卡在 readiness/官方测试准备阶段，7 分钟以上未进入 agent，未产出补丁。停止并删除镜像。
 
 flipt 类任务不适合作为快速自然失败抽样来源。
+
+## webclients hard 与自动摘要局限
+
+- `webclients-08bb` 两次 job 都是 `agent-or-model-error`，没有 patch；已删除镜像。
+- 用自动摘要重跑 ansible：reviewer **0 findings**。
+
+原因：ansible 的失败栈只有 `URLError`，真正关键的是测试 mock：
+
+```python
+mm.get_manager = Mock(return_value=gm)
+```
+
+自动摘要没有包含测试 setup，所以 reviewer 无法推断 `ModuleManager` 应委托 `get_manager`。
+
+结论：自动摘要需要“失败 assertion + 测试 setup 片段”，仅有 traceback 不足以覆盖 mock 型失败。
