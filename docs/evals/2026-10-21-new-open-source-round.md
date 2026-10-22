@@ -486,3 +486,9 @@ NodeBB 正确补丁复测：
 没有新增样本；自然源码失败仍为 3 个。
 
 这也说明 hard51 的另一类限制：不是模型不修，而是官方 verifier 对部分任务过慢，必须设置 per-task timeout 或改用已有失败样本分析。
+
+## 第四个 openlibrary hard51：0 补丁超时
+
+`openlibrary-322d7a` facts 臂 10 分钟超时，模型补丁 0 字节，官方 failed。没有源码改动，不能用于 reviewer 分析；已删除该任务镜像。
+
+第 4 个自然源码失败仍未找到。下一步不再随机抽 hard51，而是优先自动提取 assertion / 从已有失败补丁扩展。
