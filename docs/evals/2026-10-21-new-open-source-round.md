@@ -542,3 +542,24 @@ openlibrary 自动摘要复测：
 连续两个 openlibrary hard51 都出现 0 补丁超时，说明随机抽 hard51 的失败样本产出率很低。后续优先：
 - 复用已有失败补丁；
 - 或给 agent 更长预算后再筛选。
+
+## 自动摘要根因行修复
+
+问题：control-only 行按 finding JSON 全量 token 打分，选中调用点/无关行。
+
+改为：
+
+- 从 `finding.current` 提取代码 token；
+- 当前行 token 权重 ×3；
+- 不再用行号（hunk 偏移会误导）。
+
+openlibrary 自动摘要复测：
+
+| 指标 | 结果 |
+|---|---:|
+| control 行 | `name = ' '.join(strip_foc(s).strip(STRIP_CHARS) ...)` |
+| verified | **1/1** |
+| 正确补丁 | **0 verified，1 refuted** |
+| invalid | 0 |
+
+现在自动摘要能命中 `strip_foc` 根因行，而不是调用点或注释。限制：reviewer 输出的 `required` 仍是 candidate 风格，repair 需要额外的 probe→plan 转换。
