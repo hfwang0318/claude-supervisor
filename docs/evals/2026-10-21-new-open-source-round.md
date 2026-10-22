@@ -624,3 +624,24 @@ openlibrary 自动摘要复测：
 再次说明：hard51 中“模型会编辑”通常也会通过；自然失败不能靠随机抽 hard51 稳定获得。
 
 已删除镜像，自然源码失败仍为 3 个。
+
+## 自动 probe→plan 工具
+
+新增 `eval/swe-pro/probe-plan.mjs`：
+
+- 读取 verified probe results；
+- 解析 `grep -Fq` 的 current/required/file；
+- 生成 finding JSON。
+
+NodeBB 自动 probe-plan 复测：
+
+| 指标 | 结果 |
+|---|---|
+| repair | **failed** |
+| Patch | 23,880 B |
+| 第二轮 | 是 |
+| 官方 | 0/311 |
+
+原因：probe 只给出单行 `await deletePicture(uid, 'uploadedpicture')`，而 NodeBB 需要函数体级 plan（`getLocalAvatarPath` / `getPicturePath`）。
+
+结论：probe→plan 工具可用于单行修复，但 NodeBB 需要函数体扩展。
