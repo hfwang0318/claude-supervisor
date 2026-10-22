@@ -664,3 +664,10 @@ NodeBB 自动 probe-plan 复测：
 `teleport-65438e6e` 两次 job 都是 `agent-or-model-error`，没有有效 patch。无法用于失败分析；已删除镜像。
 
 自然源码失败仍为 3 个。
+
+## 第八个 hard51：openlibrary-630221 编辑后通过
+
+- 第 9 分钟出现 5 个源码修改；
+- 最终官方 **passed**，patch 25,864 B。
+
+hard51 抽样继续呈现同一模式：模型编辑后通常通过；自然失败仍只有 3 个。已删除镜像。
