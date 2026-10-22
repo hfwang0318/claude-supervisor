@@ -777,3 +777,24 @@ return manager.exec_module()
 | openlibrary-7cbfb | 1/1 | fail |
 
 自然源码失败：**4 个**；reviewer task-level recall：**4/4**；正确补丁 verified 误报：**0**。
+
+## 第 4 个样本 symbolic plan 仍失败
+
+openlibrary-7cbfb 的 gold 重写了 `observations.py` 多个函数（`get_key_value_pair`、`get_patron_observations`、`persist_observations` 等），不是单函数修补。
+
+自动 probe-plan：
+
+- 从 assertion 提取 `persist_observations`；
+- 但 gold 的改动是整段重写，probe 行不能定位根因；
+- review repair 仍 failed，8 个必需测试。
+
+结论：对“大段重写型”失败，单函数/单行 plan 不足；需要函数体或整文件级 plan，甚至无法自动生成。
+
+自然样本 repair：
+
+| 任务 | reviewer-only |
+|---|---|
+| ansible-c1f2 | pass 6/6 |
+| openlibrary-0dc5b | pass 65/61 |
+| NodeBB-8168 | fail（plan pass） |
+| openlibrary-7cbfb | fail |

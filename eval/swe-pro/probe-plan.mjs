@@ -18,7 +18,8 @@ const parseGrep = command => {
   }).filter(Boolean)
 }
 const failureText = failurePath ? readFileSync(resolve(failurePath), 'utf8') : ''
-const failureSymbol = (failureText.match(/User\.(\w+)\s*\(/) ?? failureText.match(/\b([a-zA-Z_]\w{5,})\s*\(/) ?? [])[1]
+const methodMatch = failureText.match(/[A-Z][A-Za-z0-9_]*\.(\w+)\s*\(/)
+const failureSymbol = (failureText.match(/User\.(\w+)\s*\(/) ?? methodMatch ?? failureText.match(/\b([a-zA-Z_]\w{5,})\s*\(/) ?? [])[1]
 const controlLines = controlPath ? readFileSync(resolve(controlPath), 'utf8').split('\n') : []
 const candidateLines = candidatePath ? readFileSync(resolve(candidatePath), 'utf8').split('\n') : []
 const functionAt = (lines, needle) => {
